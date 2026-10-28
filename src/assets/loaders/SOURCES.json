@@ -1,0 +1,9 @@
+{
+  "purpose": "Identify third-party Minecraft loaders in installation controls. Marks remain owned by their respective projects.",
+  "fabric.png": "https://github.com/FabricMC/fabricmc.net/blob/main/assets/logo.png",
+  "quilt.svg": "https://github.com/QuiltMC/quiltmc.org/blob/main/public/assets/img/logo.svg",
+  "forge.png": "https://files.minecraftforge.net/static/images/favicon-32x32.png",
+  "neoforge.png": "https://neoforged.net/img/authors/neoforged.png",
+  "optifine.png": "https://optifine.net/images/of16r.png",
+  "vanilla": "Independent code-native grass block illustration in LoaderIcon.tsx"
+}
