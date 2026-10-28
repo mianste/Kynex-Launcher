@@ -3,12 +3,13 @@
   <h1>Kynex Launcher</h1>
   <p>从版本管理到进入游戏，把你的 Minecraft 冒险放在同一个窗口。</p>
   <p>
-    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/updater-stable"><img alt="下载正式版 v1.1" src="https://img.shields.io/badge/Download-v1.1-3d7c88?style=for-the-badge"></a>
+    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/updater-stable"><img alt="下载正式版 v1.2.1" src="https://img.shields.io/badge/Download-v1.2.1-3d7c88?style=for-the-badge"></a>
     <img alt="Windows 10 / 11 x64" src="https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-517783?style=for-the-badge">
     <a href="LICENSE"><img alt="公开代码采用 MIT" src="https://img.shields.io/badge/Source-MIT-6f9f94?style=for-the-badge"></a>
   </p>
   <p>
-    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/updater-stable">下载正式版 v1.1</a> ·
+    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/updater-stable">下载正式版 v1.2.1</a> ·
+    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/updater-beta">下载预览版 beta 1.2.1</a> ·
     <a href="https://github.com/mianste/Kynex-Launcher/issues">反馈问题</a> ·
     <a href="https://afdian.com/a/keke_657">爱发电</a>
   </p>
@@ -50,7 +51,9 @@ Kynex Launcher，简称 **KXL**，把游戏启动、版本管理、整合包导�
 
 ## 下载与使用
 
-前往 **[Releases 下载正式版 v1.1](https://github.com/mianste/Kynex-Launcher/releases/tag/updater-stable)**，选择 `Kynex.Launcher.v1.1.Setup.exe`。安装包适用于 Windows 10 / 11（64 位）。
+前往 **[Releases 下载正式版 v1.2.1](https://github.com/mianste/Kynex-Launcher/releases/tag/updater-stable)**，选择 `Kynex.Launcher.v1.2.1.Setup.exe`。安装包适用于 Windows 10 / 11（64 位）。
+
+预览版请前往 [beta 1.2.1 发布页](https://github.com/mianste/Kynex-Launcher/releases/tag/updater-beta)，选择 `Kynex.Launcher.beta.1.2.1.Setup.exe`。已安装旧 v1.2.1 / beta 1.2.1 的用户请重新运行修订安装器，同版本不会再次自动提示更新。
 
 安装后，在「下载」中安装游戏版本，或导入已有整合包；随后添加账号，在「启动」页选择实例进入游戏。正版登录需要有效的 Minecraft Java 版所有权及官方服务授权。
 
