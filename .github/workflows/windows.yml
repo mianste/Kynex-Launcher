@@ -1,0 +1,27 @@
+name: Developer preview Windows build
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  beta:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: cargo test --locked --no-default-features --manifest-path src-tauri/Cargo.toml
+      - run: pnpm tauri build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KXL-Beta-Windows-x64
+          path: src-tauri/target/release/bundle/nsis/*
