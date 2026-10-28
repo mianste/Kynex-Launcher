@@ -1,0 +1,260 @@
+/* Independent fade/slide/ease-out implementation informed by PCL. */
+:root {
+  --motion-fast: 100ms;
+  --motion-normal: 200ms;
+  --motion-dialog: 240ms;
+  --motion-exit: 120ms;
+  --motion-fluent: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-back: cubic-bezier(0.22, 1, 0.36, 1);
+}
+button {
+  transition:
+    background-color var(--motion-fast),
+    color var(--motion-fast),
+    border-color var(--motion-fast),
+    box-shadow var(--motion-normal),
+    transform 300ms var(--motion-fluent),
+    filter var(--motion-fast);
+}
+button:not(:disabled):hover {
+  filter: brightness(1.07);
+}
+button:not(:disabled):active {
+  translate: none;
+  transform: scale(0.96);
+  transition-duration: 80ms;
+}
+.input,
+.search {
+  transition:
+    border-color var(--motion-fast),
+    box-shadow var(--motion-normal);
+}
+.switch i {
+  transition: transform var(--motion-normal) var(--motion-back);
+}
+.switch {
+  transition: background-color var(--motion-normal);
+}
+.page-content {
+  animation: none;
+}
+.page-content.page-entering {
+  animation: fluent-page-in var(--motion-normal) var(--motion-fluent) both;
+}
+.page-content.page-leaving {
+  animation: fluent-page-out 100ms ease-in both;
+  pointer-events: none;
+}
+.page-content .card,
+.resource-row,
+.version-card,
+.account-card,
+.instance-card,
+.skin-saved-entry {
+  animation: fluent-row-in var(--motion-normal) var(--motion-fluent) both;
+}
+.card:nth-child(2),
+.resource-row:nth-child(2),
+.skin-saved-entry:nth-child(2) {
+  animation-delay: 25ms;
+}
+.card:nth-child(3),
+.resource-row:nth-child(3),
+.skin-saved-entry:nth-child(3) {
+  animation-delay: 50ms;
+}
+.card:nth-child(n + 4),
+.resource-row:nth-child(n + 4),
+.skin-saved-entry:nth-child(n + 4) {
+  animation-delay: 75ms;
+}
+.motion-presence {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 80;
+}
+.motion-presence .overlay,
+.motion-presence .toast {
+  pointer-events: auto;
+}
+.motion-presence.is-exiting .overlay,
+.motion-presence.is-exiting .toast {
+  pointer-events: none;
+}
+.overlay {
+  animation: fluent-fade-in var(--motion-exit) ease-out both;
+}
+.modal {
+  animation: fluent-dialog-in var(--motion-dialog) var(--motion-back) both;
+  transform-origin: 50% 45%;
+}
+.is-exiting .overlay {
+  animation: fluent-fade-out var(--motion-exit) ease-in both;
+}
+.is-exiting .modal {
+  animation: fluent-dialog-out var(--motion-exit) ease-in both;
+}
+.toast-presence {
+  z-index: 120;
+}
+.toast {
+  animation: fluent-toast-in var(--motion-normal) var(--motion-fluent) both;
+}
+.is-exiting .toast {
+  animation: fluent-fade-out var(--motion-exit) ease-in both;
+}
+.disclosure-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  width: 100%;
+  padding: 8px 0;
+  font-size: 12px;
+  color: var(--text2);
+}
+.disclosure-toggle span {
+  display: inline-block;
+  font-size: 20px;
+  transition: transform var(--motion-normal) var(--motion-fluent);
+}
+.disclosure-toggle span.on {
+  transform: rotate(90deg);
+}
+.disclosure-height {
+  overflow: hidden;
+  transition: height var(--motion-normal) var(--motion-fluent);
+}
+.skin-card-description {
+  font-size: 11px;
+  margin: 7px 0 12px;
+}
+.skin-equipment {
+  margin: 12px 0;
+}
+.poetic-skin .namemc-options {
+  gap: 14px;
+}
+.poetic-skin .namemc-options .card > .input {
+  margin: 8px 0;
+}
+.poetic-skin .namemc-options .card > small {
+  display: block;
+  margin-top: 9px;
+  line-height: 1.7;
+}
+.poetic-skin .namemc-options .tabs {
+  margin-bottom: 10px;
+}
+.poetic-skin .namemc-options .tabs button {
+  padding: 8px 9px;
+  font-size: 11px;
+}
+.poetic-skin .namemc-preview {
+  align-self: start;
+}
+.skin-poem-help {
+  margin-top: 14px;
+  border: 0;
+  background: transparent;
+  padding: 16px 20px;
+}
+.skin-poem-help b {
+  display: block;
+  font-size: 12px;
+  margin: 9px 0 4px;
+}
+.skin-poem-help p {
+  font-size: 11px;
+}
+.skin-fidelity {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text2);
+  font-size: 11px;
+}
+.namemc-canvas canvas {
+  touch-action: none;
+}
+.skin-editor-model canvas,
+.skin-card-body canvas,
+.skin-flat-pair canvas {
+  image-rendering: pixelated;
+}
+@keyframes fluent-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes fluent-page-out {
+  to {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+}
+@keyframes fluent-row-in {
+  from {
+    opacity: 0;
+    translate: 0 5px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes fluent-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes fluent-dialog-out {
+  to {
+    opacity: 0;
+    transform: translateY(5px) scale(0.985);
+  }
+}
+@keyframes fluent-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes fluent-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes fluent-toast-in {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

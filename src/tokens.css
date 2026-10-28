@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+:root {
+  --bg: #000000;
+  --surface: #0a0a0b;
+  --elev: #141416;
+  --line: #2a2a2e;
+  --text: #f7f7f8;
+  --text2: #a8a8ad;
+  --text3: #7c7c83;
+  --accent: #6f9f94;
+  --cyan: #89b9c6;
+  --ok: #22c55e;
+  --warn: #f59e0b;
+  --bad: #ef4444;
+  --java: #7cb342;
+  --bedrock: #8d9ba8;
+  --dungeons: #7b4ba8;
+  --legends: #e08e45;
+  --white: #fff;
+  --black: #000;
+  --desktop: #000000;
+  --sun: #e08e45;
+  --brand-green: #9dffcd;
+  --brand-blue: #61cfff;
+  --brand-dark: #071c23;
+  --mountain: #262d36;
+  --accent-low: color-mix(in srgb, var(--accent) 17%, transparent);
+  --accent-mid: color-mix(in srgb, var(--accent) 44%, transparent);
+  --glass: color-mix(in srgb, var(--surface) 78%, transparent);
+  --glass-thin: color-mix(in srgb, #0b0b0d 55%, transparent);
+  --glass-medium: color-mix(in srgb, #0b0b0d 76%, transparent);
+  --glass-thick: color-mix(in srgb, #08080a 92%, transparent);
+  --glass-edge: color-mix(in srgb, #ffffff 11%, var(--line));
+  --glass-highlight: color-mix(in srgb, #ffffff 8%, transparent);
+  --glass-shadow: 0 18px 54px rgb(0 0 0 / 38%);
+  --glass-shadow-soft: 0 10px 30px rgb(0 0 0 / 22%);
+  --motion-spring: 420ms cubic-bezier(0.2, 0.85, 0.22, 1);
+  --motion-fast: 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --window-radius: 28px;
+  --r-lg: 18px;
+  --r-md: 13px;
+  --r-sm: 9px;
+  --mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+  --font:
+    "HarmonyOS Sans", "Segoe UI Variable", "Microsoft YaHei UI", system-ui,
+    sans-serif;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #e9eff4;
+  --surface: #f7fafc;
+  --elev: #e7eef5;
+  --line: #c6d2dd;
+  --text: #20323e;
+  --text2: #4e6371;
+  --text3: #5f7582;
+  --accent-low: color-mix(in srgb, var(--accent) 19%, transparent);
+  --accent-mid: color-mix(in srgb, var(--accent) 48%, transparent);
+  --glass: rgb(250 253 255 / 73%);
+  --glass-thin: rgb(250 253 255 / 54%);
+  --glass-medium: rgb(250 253 255 / 76%);
+  --glass-thick: rgb(247 250 253 / 95%);
+  --glass-edge: rgb(255 255 255 / 86%);
+  --glass-highlight: rgb(255 255 255 / 72%);
+  --glass-shadow: 0 18px 54px rgb(40 64 58 / 20%);
+  --glass-shadow-soft: 0 10px 28px rgb(40 64 58 / 12%);
+  --desktop: #d6e0dd;
+  --white: #fff;
+  --black: #000;
+}
+
+:root {
+  --skin-preview-bg: #e5e8eb;
+  --skin-preview-control: #f6f7f8;
+  --skin-preview-line: #cdd2d7;
+  --skin-preview-text: #3b444e;
+  --skin-preview-muted: #78838d;
+}
