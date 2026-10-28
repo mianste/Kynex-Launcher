@@ -36,3 +36,7 @@ pnpm tauri build
 公开源码采用 [MIT](LICENSE)，第三方依赖与素材保留各自权利，见 [第三方声明](docs/THIRD-PARTY-NOTICES.txt)。未公开模块不属于本仓库的许可范围。项目与 Mojang、Microsoft、PCL 无关联，请通过官方渠道购买 Minecraft。
 
 [爱发电](https://afdian.com/a/keke_657) · [GitHub](https://github.com/mianste/Kynex-Launcher)
+
+## 私密配置不公开
+
+源码不包含项目实际的 API Key、Microsoft Client ID、更新密钥配置、账号令牌或密码。微软登录请使用自己的 `KXL_MICROSOFT_CLIENT_ID` 环境变量或登录弹窗中的本地配置；CurseForge 请使用自己的 `KXL_CURSEFORGE_API_KEY` 环境变量。更新公钥配置留空，自动更新源默认关闭。不要把实际配置文件或环境变量内容提交到仓库。

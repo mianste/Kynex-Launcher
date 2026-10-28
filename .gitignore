@@ -8,3 +8,7 @@ src-tauri/target/
 *.pfx
 *.p12
 __pycache__/
+microsoft-client.json
+curseforge-key.json
+accounts.json
+credentials*.json
