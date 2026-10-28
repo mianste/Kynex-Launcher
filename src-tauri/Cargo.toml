@@ -1,0 +1,42 @@
+[package]
+name = "kynex-launcher"
+version = "1.0.0"
+edition = "2021"
+[lib]
+name = "kynex_core"
+crate-type = ["lib"]
+[features]
+default = ["desktop"]
+custom-protocol = ["desktop", "tauri/custom-protocol"]
+desktop = ["dep:tauri", "dep:tauri-plugin-dialog", "dep:tauri-plugin-updater", "dep:tauri-build", "dep:open"]
+[build-dependencies]
+tauri-build = { version = "2", optional = true , features = [] }
+[dependencies]
+tauri = { version = "2", optional = true , features = ["protocol-asset", "unstable"] }
+tauri-plugin-dialog = { version = "2", optional = true }
+tauri-plugin-updater = { version = "2", optional = true }
+open = { version = "5", optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots", "stream", "multipart"] }
+tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
+sha1 = "0.10"
+sha2 = "0.10"
+md5 = "0.7"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+base64 = "0.22"
+uuid = { version = "1", features = ["v4"] }
+dirs = "6"
+shell-words = "1"
+regex = "1"
+rayon = "1"
+keyring = { version = "3", features = ["windows-native", "apple-native", "linux-native"] }
+png = "0.18"
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi"] }
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release.package.kynex-launcher]
+codegen-units = 1
