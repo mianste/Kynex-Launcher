@@ -1,0 +1,17 @@
+{
+  "channel": "beta",
+  "version": "1.0.0-beta.1",
+  "displayVersion": "beta 1",
+  "label": "开发者预览版 beta 1",
+  "repositoryUrl": "https://github.com/mianste/Kynex-Launcher",
+  "supportUrl": "https://afdian.com/a/keke_657",
+  "changes": [
+    "新增版本更新与更新日志弹窗。",
+    "支持检查新版本、下载并校验更新包后自动安装。",
+    "移除全局和实例的额外 JVM 参数设置。",
+    "关于页面精简为版本、爱发电和 GitHub 仓库。"
+  ],
+  "productName": "Kynex Launcher Beta",
+  "identifier": "com.keke.kynex.beta",
+  "mainBinaryName": "Kynex Launcher Beta"
+}

@@ -1,0 +1,10 @@
+{
+  "beta": {
+    "version": "1.0.0-beta.1",
+    "displayVersion": "beta 1",
+    "label": "开发者预览版 beta 1",
+    "productName": "Kynex Launcher Beta",
+    "identifier": "com.keke.kynex.beta",
+    "mainBinaryName": "Kynex Launcher Beta"
+  }
+}
