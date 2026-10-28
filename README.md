@@ -1,7 +1,12 @@
 <div align="center">
   <img src="src/assets/kxl-icon.png" width="112" alt="Kynex Launcher 图标">
   <h1>Kynex Launcher</h1>
-  <p>一个面向 Windows 的 Minecraft 启动器。</p>
+  <p>从版本管理到进入游戏，把你的 Minecraft 冒险放在同一个窗口。</p>
+  <p>
+    <a href="https://github.com/mianste/Kynex-Launcher/releases/latest"><img alt="下载正式版" src="https://img.shields.io/github/v/release/mianste/Kynex-Launcher?style=for-the-badge&amp;label=Download&amp;color=3d7c88"></a>
+    <img alt="Windows 10 / 11 x64" src="https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-517783?style=for-the-badge">
+    <a href="LICENSE"><img alt="公开代码采用 MIT" src="https://img.shields.io/badge/Source-MIT-6f9f94?style=for-the-badge"></a>
+  </p>
   <p>
     <a href="https://github.com/mianste/Kynex-Launcher/releases/latest">下载正式版</a> ·
     <a href="https://github.com/mianste/Kynex-Launcher/issues">反馈问题</a> ·
@@ -14,6 +19,25 @@
 Kynex Launcher，简称 **KXL**，把游戏启动、版本管理、整合包导入、资源下载和账号皮肤管理放在同一个窗口中。你可以安装喜欢的 Minecraft Java 版与加载器，为不同玩法建立独立实例，再从首页选择账号与版本进入游戏。
 
 界面采用中文文案，保留自定义壁纸、浅色与深色主题，以及日常管理游戏所需的常用入口。
+
+## 界面一览
+
+### 你的游戏，从这里出发
+
+![KXL 首页：常用入口、最近实例与游戏启动](docs/images/home.png)
+
+<table>
+  <tr>
+    <td width="50%"><strong>版本与加载器</strong><br>选择游戏版本，管理加载器与资源下载。</td>
+    <td width="50%"><strong>皮肤工作台</strong><br>在三维视图中查看和管理你的皮肤。</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/download.png" alt="KXL 版本与加载器下载界面" width="100%"></td>
+    <td><img src="docs/images/skin.png" alt="KXL 三维皮肤工作台" width="100%"></td>
+  </tr>
+</table>
+
+<sub>截图来自完整发行版界面的网页预览，使用示例实例；公开源码范围见下文。</sub>
 
 ## 主要功能
 
