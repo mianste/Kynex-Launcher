@@ -1,0 +1,1 @@
+module.exports={content:['./index.html','./src/**/*.{ts,tsx}'],theme:{extend:{colors:{bg:'var(--bg)',surface:'var(--surface)',elev:'var(--elev)',line:'var(--line)',accent:'var(--accent)',cyan:'var(--cyan)',ok:'var(--ok)',warn:'var(--warn)',bad:'var(--bad)'},borderRadius:{lg:'20px',md:'14px',sm:'10px'}}},plugins:[]};
