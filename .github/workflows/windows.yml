@@ -1,10 +1,31 @@
 name: Developer preview Windows build
-on: [push, pull_request, workflow_dispatch]
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/images/**"
+      - "SOURCE-MANIFEST.json"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/images/**"
+      - "SOURCE-MANIFEST.json"
+  workflow_dispatch:
+
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   beta:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -15,13 +36,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
       - run: cargo test --locked --no-default-features --manifest-path src-tauri/Cargo.toml
-      - run: pnpm tauri build
-      - uses: actions/upload-artifact@v4
-        with:
-          name: KXL-Beta-Windows-x64
-          path: src-tauri/target/release/bundle/nsis/*
+      - name: Compile Windows desktop application
+        run: pnpm tauri build --no-bundle
