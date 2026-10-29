@@ -1,4 +1,18 @@
 /* White acrylic: content density, material weights, and unhidden home actions. */
+.app > .overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  background: rgb(10 18 25 / 40%);
+  backdrop-filter: blur(10px) saturate(92%);
+}
+:root[data-theme="light"] .app > .overlay {
+  background: rgb(224 234 242 / 34%);
+}
+.app > .overlay.is-exiting {
+  pointer-events: none;
+  animation: fluent-fade-out var(--motion-exit) ease-in both;
+}
 .app {
   width: calc(100% - 4px);
   height: calc(100% - 4px);

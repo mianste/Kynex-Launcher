@@ -4370,3 +4370,7 @@ body {
 .release-error { color:var(--red); font-size:12px; margin-top:16px; }
 .release-checking { position:fixed; bottom:44px; right:24px; display:flex; align-items:center; gap:8px; z-index:20; padding:10px 16px; border-radius:20px; background:var(--glass-medium); color:var(--text2); font-size:12px; }
 .about-links { display:flex; gap:12px; margin-top:24px; }
+
+.download-tasks{position:relative}.download-tasks>div{position:absolute;bottom:28px;left:0;min-width:320px;background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:14px;box-shadow:0 12px 36px #0003}.download-tasks section{display:flex;justify-content:space-between;gap:18px;padding:8px}
+
+.download-task-list{display:grid;gap:14px;max-height:430px;overflow:auto;padding:2px}.download-task-card{padding:20px;border:1px solid var(--line);background:var(--surface);border-radius:18px}.download-task-heading{display:flex;align-items:center;gap:12px;margin-bottom:16px}.download-task-heading>div{flex:1;min-width:0}.download-task-heading strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.download-task-heading small{display:block;margin-top:4px;color:var(--text2)}.download-task-card p{font-size:12px;overflow-wrap:anywhere;line-height:1.6}.download-task-error{color:var(--danger,#d34b4b)}
