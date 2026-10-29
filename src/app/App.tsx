@@ -1,3 +1,5 @@
+import { DownloadTasks } from "../features/download/DownloadTasks";
+import { progressBuffer } from "../lib/progressBuffer";
 import { RELEASE } from "../lib/release";
 import { ReleaseNotices } from "../features/updates/ReleaseNotices";
 import {
@@ -77,6 +79,7 @@ export function App() {
     !new URLSearchParams(location.search).has("nosplash"),
   );
   const [drag, D] = useState(false);
+  const [tasksOpen, TasksOpen] = useState(false);
   const depth = useRef(0);
   const appRoot = useRef<HTMLElement>(null);
   const navRoot = useRef<HTMLElement>(null);
@@ -127,6 +130,17 @@ export function App() {
     let cleanup: (() => void) | undefined;
     let completionTimer: ReturnType<typeof setTimeout> | undefined;
     let live = true;
+    const progress = progressBuffer((events) => {
+      if (!live) return;
+      const tasks = { ...useStore.getState().tasks };
+      for (const task of events) {
+        const id = task.taskId || "legacy";
+        tasks[id] = { ...tasks[id], ...task };
+        if (task.error) s.notify(task.error);
+      }
+      const active = Object.values(tasks).filter((t) => !t.finished && !t.error);
+      useStore.setState({ tasks, task: active.at(-1) || null });
+    });
     const image = new Image();
     image.src = brandIcon;
     Promise.all([
@@ -138,23 +152,7 @@ export function App() {
       if (live) R(true);
     });
     if (desktop) {
-      onProgress((task) => {
-        if (completionTimer) clearTimeout(completionTimer);
-        useStore.setState({ task });
-        if (task.error) s.notify(task.error);
-        else if (task.total > 0 && task.done >= task.total) {
-          completionTimer = setTimeout(() => {
-            const current = useStore.getState().task;
-            if (
-              current?.stage === task.stage &&
-              current.done >= current.total &&
-              !current.error
-            ) {
-              useStore.setState({ task: null });
-            }
-          }, 1200);
-        }
-      }).then((f) => {
+      onProgress(progress.push).then((f) => {
         if (live) cleanup = f;
         else f();
       });
@@ -169,6 +167,7 @@ export function App() {
     window.addEventListener("hashchange", change);
     return () => {
       live = false;
+      progress.dispose();
       if (completionTimer) clearTimeout(completionTimer);
       cleanup?.();
       window.removeEventListener("hashchange", change);
@@ -349,6 +348,7 @@ export function App() {
         </Suspense>
       </MotionPage>
 
+      {tasksOpen && <DownloadTasks onClose={() => TasksOpen(false)} />}
       <footer className="taskbar">
         <span className="status-dot" />
         <span className="task-stage" key={s.task?.stage ?? "ready"}>
@@ -359,10 +359,23 @@ export function App() {
             <ProgressBar done={s.task.done} total={s.task.total} />
             <code>{s.task.detail ?? `${s.task.done}/${s.task.total}`}</code>
             {s.task.done < s.task.total && !s.task.error && (
-              <button onClick={() => guarded(() => api("cancel"))}>取消</button>
+              <button
+                onClick={() =>
+                  guarded(() => api("cancel", { taskId: s.task?.taskId }))
+                }
+              >
+                取消
+              </button>
             )}
           </>
         )}
+        <button onClick={() => TasksOpen(true)}>
+          <Download size={13} />
+          下载任务
+          {Object.values(s.tasks).filter((t) => !t.finished).length
+            ? ` (${Object.values(s.tasks).filter((t) => !t.finished).length})`
+            : ""}
+        </button>
         <span className="grow" />
         <button onClick={() => guarded(importPack)}>
           <PackagePlus size={13} />

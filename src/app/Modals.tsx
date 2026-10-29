@@ -16,6 +16,7 @@ import {
 import { useStore, guarded, launch } from "../store";
 import { api, desktop, external, saveFile } from "../lib/bridge";
 import type {
+  Instance,
   Loader,
   InstanceSettings,
   PackInfo,
@@ -212,6 +213,7 @@ function Install({ version }: { version: string }) {
   const invalidAddon = !!addon && addonRelease?.forge !== lv;
   async function install(onlyVanilla = false) {
     I(true);
+    s.hide();
     try {
       await api("install", {
         version,
@@ -222,8 +224,6 @@ function Install({ version }: { version: string }) {
         settings: s.settings,
       });
       await s.refresh();
-      s.hide();
-      s.setPage("library");
       s.notify("实例安装完成");
     } finally {
       I(false);
@@ -990,15 +990,15 @@ function Pack({ path }: { path: string }) {
               guarded(async () => {
                 B(true);
                 try {
-                  await api("import_pack", {
+                  s.hide();
+                  const instance = await api<Instance>("import_pack", {
                     path,
                     name,
                     settings: s.settings,
                     curseforgeKey: s.settings.curseforgeKey,
                   });
                   await s.refresh();
-                  s.hide();
-                  s.setPage("library");
+                  useStore.setState({ selected: instance.id });
                   s.notify("整合包安装完成");
                 } finally {
                   B(false);
