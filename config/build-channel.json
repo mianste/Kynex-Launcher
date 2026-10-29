@@ -1,15 +1,16 @@
 {
   "channel": "beta",
-  "version": "1.0.0-beta.1",
-  "displayVersion": "beta 1",
-  "label": "开发者预览版 beta 1",
+  "version": "1.2.3-beta.1.2.3",
+  "displayVersion": "beta 1.2.3",
+  "label": "开发者预览版 beta 1.2.3",
   "repositoryUrl": "https://github.com/mianste/Kynex-Launcher",
   "supportUrl": "https://afdian.com/a/keke_657",
   "changes": [
-    "新增版本更新与更新日志弹窗。",
-    "支持检查新版本、下载并校验更新包后自动安装。",
-    "移除全局和实例的额外 JVM 参数设置。",
-    "关于页面精简为版本、爱发电和 GitHub 仓库。"
+    "修复 Forge / NeoForge 安装器及依赖下载失败，统一镜像回退与重试，适用于在线及导入整合包。",
+    "由启动器预先下载并校验客户端映射，避免 Java 安装器内部重复下载导致 TLS 握手失败。",
+    "修复正版及外置皮肤、披风预览读取失败与错误解码提示。",
+    "新增皮肤图片本地缓存、请求复用与披风预加载，加快显示和切换披风、鞘翅。",
+    "保留凭据安全存储、多任务下载与独立整合包实例安装。"
   ],
   "productName": "Kynex Launcher Beta",
   "identifier": "com.keke.kynex.beta",
