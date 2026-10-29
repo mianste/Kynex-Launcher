@@ -1,4 +1,5 @@
 import {
+  createContext,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -6,6 +7,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+export const MotionExitContext = createContext(false);
 export function MotionPresence({
   children,
   toast = false,
@@ -29,11 +31,13 @@ export function MotionPresence({
     return () => clearTimeout(t);
   }, [children]);
   return shown ? (
+    <MotionExitContext.Provider value={leaving}>
     <div
       className={`motion-presence ${toast ? "toast-presence" : ""} ${leaving ? "is-exiting" : ""}`}
     >
       {shown}
     </div>
+    </MotionExitContext.Provider>
   ) : null;
 }
 export function MotionPage({

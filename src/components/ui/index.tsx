@@ -2,6 +2,7 @@ import { ChoiceSelect } from "./ChoiceSelect";
 export { ChoiceSelect } from "./ChoiceSelect";
 import {
   useEffect,
+  useContext,
   useRef,
   useId,
   useState,
@@ -10,9 +11,10 @@ import {
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
 } from "react";
+import { createPortal } from "react-dom";
 import { X, Search, LoaderCircle, Check, ChevronDown } from "lucide-react";
 import { useStore } from "../../store";
-import { MotionPresence } from "./Motion";
+import { MotionExitContext, MotionPresence } from "./Motion";
 export function Button({
   children,
   primary = false,
@@ -306,6 +308,7 @@ export function Modal({
   onClose?: () => void;
 }) {
   const hide = useStore((s) => s.hide);
+  const exiting = useContext(MotionExitContext);
   const close = onClose ?? hide;
   const ref = useRef<HTMLDivElement>(null);
   const id = useId();
@@ -335,9 +338,9 @@ export function Modal({
       before?.focus();
     };
   }, [close]);
-  return (
+  return createPortal(
     <div
-      className="overlay"
+        className={`overlay ${exiting ? "is-exiting" : ""}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) close();
       }}
@@ -358,7 +361,8 @@ export function Modal({
         <div className="modal-body">{children}</div>
         {footer && <footer>{footer}</footer>}
       </div>
-    </div>
+      </div>,
+      document.querySelector(".app") ?? document.body
   );
 }
 export function Toast() {
