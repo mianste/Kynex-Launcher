@@ -531,9 +531,9 @@ export function Settings() {
               </Row>
               <Row
                 title="CurseForge 来源"
-                hint="公开源码不内置项目 API Key，可通过 KXL_CURSEFORGE_API_KEY 环境变量配置。"
+                hint="已内置官方 API Key，无需用户配置；下载页可直接搜索和安装 CurseForge 资源。"
               >
-                <Badge>自行配置</Badge>
+                <Badge tone="ok">已内置</Badge>
               </Row>
               <Row title="恢复界面与全局默认设置" hint="不会删除实例和账号。">
                 <Button
