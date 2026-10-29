@@ -1,16 +1,15 @@
 {
   "channel": "beta",
-  "version": "1.2.3-beta.1.2.3",
-  "displayVersion": "beta 1.2.3",
-  "label": "开发者预览版 beta 1.2.3",
+  "version": "1.2.4-beta.1.2.4",
+  "displayVersion": "beta 1.2.4",
+  "label": "开发者预览版 beta 1.2.4",
   "repositoryUrl": "https://github.com/mianste/Kynex-Launcher",
   "supportUrl": "https://afdian.com/a/keke_657",
   "changes": [
-    "修复 Forge / NeoForge 安装器及依赖下载失败，统一镜像回退与重试，适用于在线及导入整合包。",
-    "由启动器预先下载并校验客户端映射，避免 Java 安装器内部重复下载导致 TLS 握手失败。",
-    "修复正版及外置皮肤、披风预览读取失败与错误解码提示。",
-    "新增皮肤图片本地缓存、请求复用与披风预加载，加快显示和切换披风、鞘翅。",
-    "保留凭据安全存储、多任务下载与独立整合包实例安装。"
+    "统一检查在线安装、本地整合包导入及在线整合包下载的 Java 与依赖配置。",
+    "按游戏版本自动匹配 Java 8 / 17 / 21 / 25，修复高版本 Java 不兼容导致的启动失败。",
+    "修复 Forge、NeoForge、Fabric、Quilt 等加载器合并依赖时平台条目互相覆盖。",
+    "启动已有实例时自动补回缺失的平台依赖，修复 Windows LWJGL 缺库等问题，保留模组与存档。"
   ],
   "productName": "Kynex Launcher Beta",
   "identifier": "com.keke.kynex.beta",

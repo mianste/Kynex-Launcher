@@ -684,7 +684,7 @@ pub fn merge(mut base: Value, overlay: Value) -> Value {
         for (k, v) in m {
             if k == "libraries" {
                 let a = base[k].as_array().cloned().unwrap_or_default();
-                let mut libs: BTreeMap<String, Value> = BTreeMap::new();
+                let mut libs: BTreeMap<(String, String, String), Value> = BTreeMap::new();
                 for lib in a
                     .into_iter()
                     .chain(v.as_array().cloned().unwrap_or_default())
@@ -696,6 +696,8 @@ pub fn merge(mut base: Value, overlay: Value) -> Value {
                     } else {
                         parts.iter().take(2).copied().collect::<Vec<_>>().join(":")
                     };
+                    // Platform variants share Maven coordinates but must not overwrite one another.
+                    let key = (key, lib["rules"].to_string(), lib["natives"].to_string());
                     libs.insert(key, lib);
                 }
                 base[k] = json!(libs.into_values().collect::<Vec<_>>());
@@ -866,7 +868,8 @@ fn assets_ready(core: &Core, dir: &Path, version: &Value) -> bool {
             if !path.is_file() {
                 return false;
             }
-        } else if let Some(name) = lib["name"].as_str() {
+        } else if needs_legacy_artifact(lib) {
+            let Some(name) = lib["name"].as_str() else { return false; };
             let Ok(path) = lib_path(name) else {
                 return false;
             };
@@ -1100,21 +1103,51 @@ async fn java_package(core: &Core, major: u64) -> Result<(String, String)> {
     }
     Ok((string(package, "link")?.to_string(), hash))
 }
+fn java_compatible(version: &Value, major: u64) -> bool {
+    // Use the runtime generation supplied by Minecraft metadata; newer Java is
+    // not necessarily compatible with a game's loader and bundled libraries.
+    let required = version["javaVersion"]["majorVersion"].as_u64().unwrap_or(8);
+    downloadable_java(required) == Some(major)
+}
+fn library_family(name: &str) -> String {
+    let parts: Vec<_> = name.split(':').collect();
+    match parts.as_slice() {
+        [group, artifact, _, classifier] => format!("{group}:{artifact}:{classifier}"),
+        [group, artifact, _] => format!("{group}:{artifact}"),
+        _ => name.to_string(),
+    }
+}
+fn restore_platform_libraries(version: &mut Value, base: &Value) -> bool {
+    let Some(libraries) = version["libraries"].as_array_mut() else { return false; };
+    let mut changed = false;
+    for lib in base["libraries"].as_array().into_iter().flatten() {
+        let name = lib["name"].as_str().unwrap_or("");
+        if !allowed(lib) { continue; }
+        let coordinate = library_family(name);
+        if !libraries.iter().any(|existing| {
+            allowed(existing) && existing["natives"] == lib["natives"]
+                && existing["name"].as_str().is_some_and(|n| library_family(n) == coordinate)
+        }) {
+            libraries.push(lib.clone());
+            changed = true;
+        }
+    }
+    changed
+}
 fn choose_java(core: &Core, version: &Value, settings: &Value) -> Result<String> {
     let required = version["javaVersion"]["majorVersion"].as_u64().unwrap_or(8);
     let custom = settings["java"].as_str().unwrap_or("");
     if !custom.is_empty() {
-        let (major, _) = java_version(custom).ok_or("指定的 Java 无法执行")?;
-        if major < required {
-            return Err(format!("此版本至少需要 Java {required}"));
+        if java_version(custom).is_some_and(|(major, _)| java_compatible(version, major)) {
+            return Ok(custom.into());
         }
-        return Ok(custom.into());
+        core.stage(&format!("指定的 Java 与此版本不匹配，正在选择 Java {}", downloadable_java(required).unwrap_or(required)), 0, 1);
     }
     let list = java_list_at(core)?;
     let candidates = list.as_array().unwrap();
     let chosen = candidates
         .iter()
-        .filter(|v| v["major"].as_u64().unwrap_or(0) >= required)
+        .filter(|v| java_compatible(version, v["major"].as_u64().unwrap_or(0)))
         .min_by_key(|v| v["major"].as_u64().unwrap_or(999));
     chosen
         .and_then(|v| v["path"].as_str())
@@ -1178,12 +1211,24 @@ pub fn substitute(s: &str, vars: &BTreeMap<String, String>) -> String {
     }
     out
 }
+fn legacy_arguments(template: &str, vars: &BTreeMap<String, String>) -> Result<Vec<String>> {
+    // Split the template before substitution so Windows backslashes and spaces
+    // in paths/player names are never interpreted as shell syntax.
+    Ok(shell_words::split(template).map_err(err)?.into_iter()
+        .map(|argument| substitute(&argument, vars)).collect())
+}
 pub async fn launch(core: &Core, p: &Value) -> Result<Value> {
     core.stage("检查账号与 Java", 0, 4);
     let id = string(p, "id")?;
     let dir = core.instance(id)?;
     let mut instance = read_json(&dir.join("kxl.json"))?;
-    let version = read_json(&dir.join("version.json"))?;
+    let mut version = read_json(&dir.join("version.json"))?;
+    // All install/import routes use the same launch-time repair for older manifests.
+    let game = string(&instance, "version")?;
+    let base = metadata(core, game).await?;
+    if restore_platform_libraries(&mut version, &base) {
+        write_json(&dir.join("version.json"), &version)?;
+    }
     let settings = instance
         .get("settings")
         .filter(|v| v.is_object())
@@ -1332,7 +1377,7 @@ pub async fn launch(core: &Core, p: &Value) -> Result<Value> {
         }
     }
     if let Some(s) = version["minecraftArguments"].as_str() {
-        args.extend(shell_words::split(&substitute(s, &vars)).map_err(err)?)
+        args.extend(legacy_arguments(s, &vars)?)
     } else {
         args.extend(argument_list(&version["arguments"]["game"], &vars));
     }
@@ -1704,6 +1749,78 @@ mod tests {
         );
         assert_eq!(v["arguments"]["game"], json!(["a", "b"]));
         assert_eq!(v["libraries"].as_array().unwrap().len(), 1);
+    }
+    #[test]
+    fn legacy_launchwrapper_requires_java_eight() {
+        let legacy = json!({"mainClass":"net.minecraft.launchwrapper.Launch","javaVersion":{"majorVersion":8}});
+        assert!(java_compatible(&legacy, 8));
+        for major in [7, 9, 17, 21, 25] { assert!(!java_compatible(&legacy, major)); }
+        let modern = json!({"mainClass":"net.minecraft.client.main.Main","javaVersion":{"majorVersion":17}});
+        assert!(!java_compatible(&modern, 8));
+        assert!(java_compatible(&modern, 17));
+        assert!(!java_compatible(&modern, 21));
+        let optifine = json!({"mainClass":"net.minecraft.launchwrapper.Launch","javaVersion":{"majorVersion":17}});
+        assert!(java_compatible(&optifine, 17));
+        assert!(!java_compatible(&optifine, 8));
+    }
+    #[test]
+    fn merge_preserves_legacy_platform_variants_and_repairs_old_instances() {
+        let windows = json!({"name":"org.lwjgl.lwjgl:lwjgl:2.9.4","rules":[{"action":"allow"},{"action":"disallow","os":{"name":"osx"}}]});
+        let mac = json!({"name":"org.lwjgl.lwjgl:lwjgl:2.9.2","rules":[{"action":"allow","os":{"name":"osx"}}]});
+        let base = json!({"libraries":[windows.clone(),mac.clone()]});
+        let merged = merge(base.clone(), json!({"libraries":[{"name":"net.minecraftforge:forge:test"}]}));
+        assert!(merged["libraries"].as_array().unwrap().contains(&windows));
+        assert!(merged["libraries"].as_array().unwrap().contains(&mac));
+        let other = if allowed(&windows) { mac } else { windows };
+        let mut broken = json!({"libraries":[other]});
+        assert!(restore_platform_libraries(&mut broken, &base));
+        assert!(!restore_platform_libraries(&mut broken, &base));
+        assert_eq!(broken["libraries"].as_array().unwrap().len(), 2);
+    }
+    #[test]
+    fn runtime_matrix_and_all_loader_overlays_preserve_platform_dependencies() {
+        for (required, expected) in [(8,8),(16,17),(17,17),(21,21),(25,25)] {
+            for loader in ["vanilla", "forge", "neoforge", "fabric", "quilt", "optifine"] {
+                let base = json!({"javaVersion":{"majorVersion":required},"libraries":[
+                    {"name":"g:a:windows","rules":[{"action":"allow"},{"action":"disallow","os":{"name":"osx"}}]},
+                    {"name":"g:a:mac","rules":[{"action":"allow","os":{"name":"osx"}}]},
+                    {"name":"g:n:1:natives-windows"},{"name":"g:n:1:natives-linux"}
+                ]});
+                let overlay = json!({"mainClass":format!("{loader}.Main"),"libraries":[{"name":format!("loader:{loader}:1")} ]});
+                let version = merge(base.clone(), overlay);
+                assert_eq!(version["libraries"].as_array().unwrap().len(), 5, "{loader}");
+                for major in [8,17,21,25] { assert_eq!(java_compatible(&version,major),major==expected,"{loader}: required={required}, major={major}"); }
+                let mut serialized: Value = serde_json::from_str(&serde_json::to_string(&version).unwrap()).unwrap();
+                assert!(!restore_platform_libraries(&mut serialized,&base));
+            }
+        }
+    }
+    #[test]
+    fn actual_minecraft_metadata_survives_all_loader_merges_and_old_manifest_repairs() {
+        let fixtures: Value = serde_json::from_str(include_str!("../tests/fixtures/platform-versions.json")).unwrap();
+        for base in fixtures.as_array().unwrap() {
+            for loader in ["forge", "neoforge", "fabric", "quilt", "optifine"] {
+                let merged = merge(base.clone(), json!({"libraries":[{"name":format!("loader:{loader}:1")}]}));
+                let mut broken = base.clone();
+                let mut old: BTreeMap<String,Value> = BTreeMap::new();
+                for lib in base["libraries"].as_array().unwrap() { old.insert(library_family(lib["name"].as_str().unwrap()),lib.clone()); }
+                broken["libraries"] = json!(old.into_values().collect::<Vec<_>>());
+                restore_platform_libraries(&mut broken,base);
+                for lib in base["libraries"].as_array().unwrap().iter().filter(|lib| allowed(lib)) {
+                    assert!(merged["libraries"].as_array().unwrap().contains(lib), "{} {loader}: {}",base["id"],lib["name"]);
+                    assert!(broken["libraries"].as_array().unwrap().contains(lib), "{} repair: {}",base["id"],lib["name"]);
+                }
+                assert!(!restore_platform_libraries(&mut broken,base), "repair must be idempotent");
+            }
+        }
+    }
+    #[test]
+    fn legacy_launch_arguments_preserve_windows_paths_spaces_and_unicode() {
+        let mut vars = BTreeMap::new();
+        vars.insert("game_directory".into(), r"C:\Users\测试 User\游戏".into());
+        vars.insert("auth_player_name".into(), "Player Name".into());
+        let args = legacy_arguments("--gameDir ${game_directory} --username ${auth_player_name}",&vars).unwrap();
+        assert_eq!(args, vec!["--gameDir",r"C:\Users\测试 User\游戏","--username","Player Name"]);
     }
     #[test]
     fn preserves_native_classifiers() {

@@ -3,13 +3,13 @@
   <h1>Kynex Launcher</h1>
   <p>从版本管理到进入游戏，把你的 Minecraft 冒险放在同一个窗口。</p>
   <p>
-    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/updater-stable"><img alt="下载正式版 v1.2.3" src="https://img.shields.io/badge/Download-v1.2.3-3d7c88?style=for-the-badge"></a>
+    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/updater-stable"><img alt="下载正式版 v1.2.4" src="https://img.shields.io/badge/Download-v1.2.4-3d7c88?style=for-the-badge"></a>
     <img alt="Windows 10 / 11 x64" src="https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-517783?style=for-the-badge">
     <a href="LICENSE"><img alt="公开代码采用 MIT" src="https://img.shields.io/badge/Source-MIT-6f9f94?style=for-the-badge"></a>
   </p>
   <p>
-    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/updater-stable">下载正式版 v1.2.3</a> ·
-    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/updater-beta">下载预览版 beta 1.2.3</a> ·
+    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/updater-stable">下载正式版 v1.2.4</a> ·
+    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/updater-beta">下载预览版 beta 1.2.4</a> ·
     <a href="https://github.com/mianste/Kynex-Launcher/issues">反馈问题</a> ·
     <a href="https://afdian.com/a/keke_657">爱发电</a>
   </p>
@@ -51,9 +51,9 @@ Kynex Launcher，简称 **KXL**，把游戏启动、版本管理、整合包导�
 
 ## 下载与使用
 
-前往 **[Releases 下载正式版 v1.2.3](https://github.com/mianste/Kynex-Launcher/releases/tag/updater-stable)**，选择 `Kynex.Launcher.v1.2.3.Setup.exe`。安装包适用于 Windows 10 / 11（64 位）。
+前往 **[Releases 下载正式版 v1.2.4](https://github.com/mianste/Kynex-Launcher/releases/tag/updater-stable)**，选择 `Kynex.Launcher.v1.2.4.Setup.exe`。安装包适用于 Windows 10 / 11（64 位）。
 
-预览版请前往 [beta 1.2.3 发布页](https://github.com/mianste/Kynex-Launcher/releases/tag/updater-beta)，选择 `Kynex.Launcher.beta.1.2.3.Setup.exe`。已安装旧版本的用户可在启动器中检查更新，正式版与预览版分别使用各自更新通道。
+预览版请前往 [beta 1.2.4 发布页](https://github.com/mianste/Kynex-Launcher/releases/tag/updater-beta)，选择 `Kynex.Launcher.beta.1.2.4.Setup.exe`。已安装旧版本的用户可在启动器中检查更新，正式版与预览版分别使用各自更新通道。
 
 安装后，在「下载」中安装游戏版本，或导入已有整合包；随后添加账号，在「启动」页选择实例进入游戏。正版登录需要有效的 Minecraft Java 版所有权及官方服务授权。
 
@@ -65,7 +65,7 @@ Kynex Launcher，简称 **KXL**，把游戏启动、版本管理、整合包导�
 
 ## 关于源代码
 
-这里公开的是 **开发者预览版 beta 1.2.3 的公开源代码**，包括界面、Java 版安装与启动、资源下载、实例管理、账号、皮肤及诊断等模块。
+这里公开的是 **开发者预览版 beta 1.2.4 的公开源代码**，包括界面、Java 版安装与启动、资源下载、实例管理、账号、皮肤及诊断等模块。
 
 以下内容不在公开仓库中：音乐模块；一键进服／进入存档；基岩版、地下城 1／2、传奇的本地检测与启动模块；项目实际的 API Key、Microsoft Client ID、密钥及账号凭据。
 
@@ -84,7 +84,7 @@ cargo test --locked --no-default-features --manifest-path src-tauri/Cargo.toml
 pnpm tauri build
 ```
 
-自行构建的版本对应 beta 1.2.3 的公开部分。安装器输出在 `src-tauri/target/release/bundle/nsis/`；更新签名私钥和发布者证书不随源码提供。
+自行构建的版本对应 beta 1.2.4 的公开部分。安装器输出在 `src-tauri/target/release/bundle/nsis/`；更新签名私钥和发布者证书不随源码提供。
 
 ## 许可
 
