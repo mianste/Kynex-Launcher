@@ -28,6 +28,7 @@ interface State {
   accountId: string;
   settings: Settings;
   task: Task | null;
+  tasks: Record<string, Task>;
   message: string;
   busy: boolean;
   modal: { kind: string; data?: string } | null;
@@ -70,6 +71,7 @@ export const useStore = create<State>()(
       accountId: "",
       settings: initialSettings,
       task: null,
+      tasks: {},
       message: "",
       busy: false,
       modal: null,
@@ -152,7 +154,6 @@ export async function guarded(fn: () => Promise<unknown>) {
   try {
     await fn();
   } catch (e) {
-    useStore.setState({ task: null });
     useStore.getState().notify(String(e).replace(/^Error: /, ""));
   }
 }
