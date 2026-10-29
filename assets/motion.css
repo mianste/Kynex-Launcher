@@ -1,0 +1,44 @@
+/* Quiet sequential dissolve: no directional slide, zoom, or overlapping text. */
+@view-transition{navigation:auto}
+:root{--motion-arrive:cubic-bezier(.22,1,.36,1)}
+html{background:var(--bg)}
+.header{view-transition-name:site-header}
+.page-main{view-transition-name:page-content;animation:page-dissolve-in 180ms ease-out both}
+html.native-route .page-main,html.home-entry .page-main{animation:none}
+::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}
+::view-transition-group(site-header){z-index:5;animation:none}
+::view-transition-old(site-header){display:none}
+::view-transition-new(site-header){animation:none}
+::view-transition-group(page-content){animation:none}
+::view-transition-old(page-content){animation:page-dissolve-out 90ms ease-out both;mix-blend-mode:normal}
+::view-transition-new(page-content){animation:page-dissolve-in 170ms 90ms ease-out both;mix-blend-mode:normal}
+::view-transition-group(*){pointer-events:none}
+@keyframes page-dissolve-in{from{opacity:0}to{opacity:1}}
+@keyframes page-dissolve-out{from{opacity:1}to{opacity:0}}
+/* Replay component entrances on every homepage arrival. */
+html.home-entry .hero .release{animation:hero-arrive 440ms var(--motion-arrive) both}
+html.home-entry .hero h1{animation:hero-arrive 560ms 45ms var(--motion-arrive) both}
+html.home-entry .hero-copy{animation:hero-arrive 520ms 100ms var(--motion-arrive) both}
+html.home-entry .hero-buttons{animation:hero-arrive 500ms 150ms var(--motion-arrive) both}
+html.home-entry .visual{animation:product-arrive 640ms 70ms var(--motion-arrive) both;transform-origin:50% 70%}
+@keyframes hero-arrive{from{opacity:0;transform:translate3d(0,18px,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+@keyframes product-arrive{from{opacity:0;transform:perspective(1000px) translate3d(0,22px,0) rotateX(4deg) scale(.97)}to{opacity:1;transform:perspective(1000px) translate3d(0,0,0) rotateX(0) scale(1)}}
+.nav-links a{position:relative;padding-block:8px}
+.nav-links a:after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;border-radius:2px;background:linear-gradient(90deg,var(--blue),var(--purple));transform:scaleX(0);transform-origin:50%;opacity:0;transition:transform 200ms var(--motion-arrive),opacity 140ms linear}
+.nav-links a[aria-current=page]:after{transform:scaleX(1);opacity:1}
+.button,.icon-button{transition:transform 180ms var(--motion-arrive),background 180ms ease-out,box-shadow 180ms ease-out}
+.button:active,.icon-button:active{transform:scale(.97);transition:transform 80ms ease-out}
+.screen-card img{transition:transform 240ms var(--motion-arrive)}
+@media(hover:hover) and (pointer:fine){.screen-card:hover img{transform:translateY(-3px) scale(1.008)}.nav-links a:hover:after{transform:scaleX(1);opacity:.5}}
+/* Keep tap devices free of sticky hover movement. */
+@media(hover:none){.feature:hover,.home-link:hover,.button:hover{transform:none}}
+@media(prefers-reduced-motion:reduce){
+ .page-main,html.home-entry .hero .release,html.home-entry .hero h1,html.home-entry .hero-copy,html.home-entry .hero-buttons,html.home-entry .visual{animation:none!important}
+ ::view-transition-old(page-content){animation:page-dissolve-out 70ms linear both!important}
+ ::view-transition-new(page-content){animation:page-dissolve-in 80ms 70ms linear both!important}
+ ::view-transition-group(*){animation-duration:0s!important}
+ .button,.icon-button,.nav-links a:after{transition:opacity 100ms linear,background-color 100ms linear!important}
+ .button:active,.icon-button:active,.screen-card:hover img{transform:none!important}
+}
+.nav-links a{display:inline-block}
+::view-transition{pointer-events:none}
