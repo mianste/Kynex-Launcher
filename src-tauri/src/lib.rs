@@ -1,4 +1,8 @@
+mod jobs;
+mod asset_download;
 pub mod auth;
+mod credentials;
+mod appearance;
 pub mod curseforge;
 pub mod engine;
 mod metadata;
@@ -30,6 +34,7 @@ pub struct Core {
     pub progress: Progress,
     pub cancel: Arc<AtomicBool>,
     pub busy: Arc<AtomicBool>,
+    pub jobs: Arc<jobs::Jobs>,
     pub mirror_failed_until: Arc<std::sync::Mutex<std::time::Instant>>,
     pub download_source: Arc<std::sync::RwLock<String>>,
     pub auth_sessions:
@@ -57,13 +62,14 @@ impl Core {
             progress,
             cancel: Arc::new(AtomicBool::new(false)),
             busy: Arc::new(AtomicBool::new(false)),
+            jobs: Arc::new(jobs::Jobs::default()),
             mirror_failed_until: Arc::new(std::sync::Mutex::new(std::time::Instant::now())),
             download_source: Arc::new(std::sync::RwLock::new(source)),
             auth_sessions: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         })
     }
     pub fn stage(&self, stage: &str, done: usize, total: usize) {
-        (self.progress)(json!({"stage":stage,"done":done,"total":total}));
+        (self.progress)(json!({"stage":stage,"done":done,"total":total,"detail":null}));
     }
     pub async fn get(&self, url: &str) -> Result<Value> {
         https(url)?;
@@ -146,40 +152,50 @@ impl Core {
             "loaders" => engine::loaders(self, string(&p, "game")?, string(&p, "loader")?).await,
             "optifine_versions" => optifine::releases(self, string(&p, "game")?).await,
             "install" | "launch" | "import_pack" | "install_project" | "install_java" => {
-                if self
-                    .busy
-                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                    .is_err()
-                {
-                    return Err("另一个安装或启动任务正在执行".into());
-                }
-                self.cancel.store(false, Ordering::SeqCst);
+                let job = self.jobs.start(action, &p);
+                (self.progress)(json!({"taskId":job.id,"stage":"排队等待","done":0,"total":1,"action":action,"payload":p}));
+                let progress = self.progress.clone();
+                let task_id = job.id.clone();
+                let task_name = p["name"].as_str().or(p["project"].as_str()).or(p["id"].as_str()).unwrap_or(match action {"install_project" => "安装资源", "import_pack" => "导入整合包", "install_java" => "安装 Java", "launch" => "启动游戏", _ => "安装游戏"}).to_string();
+                let task = Core {
+                    cancel: job.cancel.clone(),
+                    progress: Arc::new(move |mut value| {
+                        value["taskId"] = json!(task_id);
+                        value["name"] = json!(task_name);
+                        progress(value);
+                    }),
+                    ..self.clone()
+                };
+                task.stage("排队等待", 0, 1);
+                let result = async {
+                    let _target = jobs::wait(&task, job.target.lock()).await?;
+                    let _slot = job.acquire(&task).await?;
+                    task.stopped()?;
+                    task.stage(match action {"install_project" => "获取资源下载信息", "import_pack" => "读取整合包清单", "install_java" => "准备 Java 环境", "launch" => "检查启动环境", _ => "读取游戏版本配置"}, 0, 1);
                 let result = match action {
-                    "install" => engine::install(self, &p).await,
+                    "install" => engine::install(&task, &p).await,
                     "install_java" => {
-                        engine::install_java(self, p["major"].as_u64().unwrap_or(0)).await
+                        engine::install_java(&task, p["major"].as_u64().unwrap_or(0)).await
                     }
-                    "launch" => engine::launch(self, &p).await,
-                    "import_pack" => packs::import(self, &p).await,
+                    "launch" => engine::launch(&task, &p).await,
+                    "import_pack" => packs::import(&task, &p).await,
+                    "install_project" if p["kind"].as_str() == Some("modpacks") && p["source"].as_str() != Some("curseforge") => packs::install_modrinth(&task, &p).await,
                     "install_project" if p["source"].as_str() == Some("curseforge") => {
                         if p["kind"].as_str() == Some("modpacks") {
-                            curseforge::install_modpack(self, &p).await
+                            curseforge::install_modpack(&task, &p).await
                         } else {
-                            curseforge::install_project(self, &p).await
+                            curseforge::install_project(&task, &p).await
                         }
                     }
-                    _ => engine::install_project(self, &p).await,
+                    _ => engine::install_project(&task, &p).await,
                 };
-                self.busy.store(false, Ordering::SeqCst);
-                if let Err(ref e) = result {
-                    (self.progress)(json!({"stage":"任务结束","done":0,"total":1,"error":e}));
-                } else {
-                    self.stage("完成", 1, 1)
-                }
+                    result
+                }.await;
+                (task.progress)(json!({"stage":if result.is_ok(){"完成"}else{"任务失败"},"done":1,"total":1,"finished":true,"error":result.as_ref().err()}));
                 result
             }
             "cancel" => {
-                self.cancel.store(true, Ordering::Relaxed);
+                self.jobs.cancel(p["taskId"].as_str());
                 Ok(json!(true))
             }
             "save_instance" => {
@@ -267,6 +283,9 @@ impl Core {
             "delete_account" => auth::remove(self, string(&p, "id")?),
             "apply_skin" => auth::apply_skin(self, &p).await,
             "skin_import" => skins::import(&p).await,
+            "skin_texture" => skins::texture(self,&p).await,
+            "sync_appearance" => appearance::sync(self, string(&p,"accountId")?).await,
+            "apply_cape" => appearance::apply_cape(self, &p).await,
             "stage_pack" => {
                 use base64::Engine;
                 let name = safe_name(string(&p, "name")?)?;

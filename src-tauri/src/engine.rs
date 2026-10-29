@@ -97,6 +97,18 @@ struct FileTask {
     path: PathBuf,
     hash: String,
 }
+pub(crate) async fn cached_file_valid(path: &Path, hash: &str) -> Result<bool> {
+    if hash.is_empty() { return Ok(false); }
+    let bytes = match tokio::fs::read(path).await {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(err(error)),
+    };
+    let digest = if hash.len() == 64 {
+        format!("{:x}", sha2::Sha256::digest(&bytes))
+    } else { format!("{:x}", Sha1::digest(&bytes)) };
+    Ok(digest == hash.to_ascii_lowercase())
+}
 async fn wait_download<T>(
     core: &Core,
     future: impl std::future::Future<Output = Result<T>>,
@@ -108,22 +120,21 @@ async fn wait_download<T>(
     }
 }
 pub async fn download(core: &Core, url: &str, path: &Path, hash: &str) -> Result<()> {
-    https(url)?;
+    // Forge's installer extracts bundled Maven artifacts and records an empty
+    // URL for them. They are local-only files, verified by the supplied hash.
+    // Continue rejecting non-HTTPS network URLs even when a cache file exists.
+    if !url.is_empty() {
+        https(url)?;
+    }
+    let file_lock = core.jobs.file_lock(path);
+    let _file_guard = wait_download(core, async { Ok(file_lock.lock().await) }).await?;
     core.stopped()?;
-    let check = |bytes: &[u8]| -> bool {
-        hash.is_empty()
-            || if hash.len() == 64 {
-                use sha2::Sha256;
-                format!("{:x}", Sha256::digest(bytes)) == hash.to_lowercase()
-            } else {
-                format!("{:x}", Sha1::digest(bytes)) == hash.to_lowercase()
-            }
-    };
-    if path.exists() && !hash.is_empty() {
-        let data = tokio::fs::read(path).await.map_err(err)?;
-        if check(&data) {
-            return Ok(());
-        }
+    if cached_file_valid(path, hash).await? { return Ok(()); }
+    if url.is_empty() {
+        return Err(format!(
+            "加载器内置文件缺失或校验失败：{}。请重新安装对应加载器以修复此文件",
+            path.file_name().unwrap_or_default().to_string_lossy()
+        ));
     }
     if let Some(p) = path.parent() {
         tokio::fs::create_dir_all(p).await.map_err(err)?;
@@ -131,13 +142,14 @@ pub async fn download(core: &Core, url: &str, path: &Path, hash: &str) -> Result
     let mut last = String::new();
     let source = core.download_source.read().map_err(err)?.clone();
     let candidates = crate::mirrors::active_candidates(core, url, &source);
-    let client_progress = path.file_name().and_then(|v| v.to_str()) == Some("client.jar");
-    for attempt in 0..3 {
+    let pack_progress = path.starts_with(core.root.join("imports"));
+    let client_progress = path.file_name().and_then(|v| v.to_str()) == Some("client.jar") || pack_progress;
+    for attempt in 0..(candidates.len() * 2).max(3) {
         core.stopped()?;
-        let actual_url = &candidates[attempt.min(candidates.len() - 1)];
+        let actual_url = &candidates[attempt % candidates.len()];
         let outcome = async {
             let mut request = core.http.get(actual_url);
-            if actual_url.contains("forgecdn.net") {
+            if crate::curseforge::is_cdn_url(actual_url) {
                 if let Some(key) = crate::curseforge::configured_key(core, "") {
                     request = request.header("x-api-key", key);
                 }
@@ -178,7 +190,7 @@ pub async fn download(core: &Core, url: &str, path: &Path, hash: &str) -> Result
                     file.write_all(&b).await.map_err(err)?;
                     if client_progress && update.elapsed() >= std::time::Duration::from_millis(150) {
                         let detail = if expected > 0 {format!("{:.1} / {:.1} MB",received as f64/1048576.,expected as f64/1048576.)} else {format!("已下载 {:.1} MB",received as f64/1048576.)};
-                        (core.progress)(json!({"stage":"下载游戏客户端","done":if expected>0{received.min(expected.saturating_sub(1))}else{0},"total":expected.max(1),"detail":detail})); update=std::time::Instant::now();
+                        (core.progress)(json!({"stage":if pack_progress {"下载整合包文件"} else {"下载游戏客户端"},"done":if expected>0{received.min(expected.saturating_sub(1))}else{0},"total":expected.max(1),"detail":detail})); update=std::time::Instant::now();
                     }
                 }
                 file.flush().await.map_err(err)?;
@@ -209,27 +221,100 @@ pub async fn download(core: &Core, url: &str, path: &Path, hash: &str) -> Result
                 if actual_url.as_str() != url {
                     crate::mirrors::mark_failed(core);
                 }
-                last = e;
+                last = format!("{}：{e}",path.file_name().unwrap_or_default().to_string_lossy());
             }
         }
     }
-    Err(last)
+    Err(format!("文件下载失败，已尝试 {} 个下载入口：{last}",candidates.len()))
 }
 async fn tasks(core: &Core, files: Vec<FileTask>, stage: &str, concurrency: usize) -> Result<()> {
     let total = files.len();
     let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let update = Arc::new(std::sync::Mutex::new(std::time::Instant::now()));
+    core.stage(stage, 0, total);
     stream::iter(files.into_iter().map(|f| {
         let n = count.clone();
+        let update = update.clone();
         async move {
             download(core, &f.url, &f.path, &f.hash).await?;
             let done = n.fetch_add(1, Ordering::Relaxed) + 1;
-            core.stage(stage, done, total);
+            let mut update = update.lock().map_err(err)?;
+            if done == total || update.elapsed() >= std::time::Duration::from_millis(150) {
+                core.stage(stage, done, total);
+                *update = std::time::Instant::now();
+            }
             Ok::<_, String>(())
         }
     }))
     .buffer_unordered(concurrency)
     .try_collect::<Vec<_>>()
     .await?;
+    Ok(())
+}
+
+async fn asset_tasks(core: &Core, files: Vec<FileTask>) -> Result<()> {
+    let total = files.len();
+    let mut missing = vec![];
+    let mut checked = 0;
+    let mut ticker = tokio::time::interval(std::time::Duration::from_millis(150));
+    let checks = stream::iter(files.into_iter().map(|file| async move {
+        let lock = core.jobs.file_lock(&file.path);
+        let _guard = crate::jobs::wait(core, lock.lock()).await?;
+        let valid = cached_file_valid(&file.path, &file.hash).await?;
+        Ok::<_, String>((file, valid))
+    })).buffer_unordered(12);
+    tokio::pin!(checks);
+    loop {
+        tokio::select! {
+            result = checks.next() => match result {
+                Some(result) => {
+                    let (file, valid) = result?;
+                    checked += 1;
+                    if !valid { missing.push(file); }
+                },
+                None => break,
+            },
+            _ = ticker.tick() => {
+                core.stopped()?;
+                core.stage("校验本地游戏资源", checked, total);
+            }
+        }
+    }
+    core.stage("校验本地游戏资源", total, total);
+    let total = missing.len();
+    if total == 0 { return Ok(()); }
+    let received = std::sync::atomic::AtomicUsize::new(0);
+    let bytes = |size| { received.fetch_add(size, Ordering::Relaxed); };
+    let downloads = stream::iter(missing.into_iter().map(|file| {
+        let bytes = &bytes;
+        async move { crate::asset_download::download(core, &file.url, &file.path, &file.hash, bytes).await }
+    })).buffer_unordered(16);
+    tokio::pin!(downloads);
+    let mut done = 0;
+    let mut previous = 0;
+    let mut sampled = std::time::Instant::now();
+    let mut speed = 0.;
+    core.stage("下载缺失游戏资源", 0, total);
+    loop {
+        tokio::select! {
+            result = downloads.next() => match result {
+                Some(result) => { result?; done += 1; },
+                None => break,
+            },
+            _ = ticker.tick() => {
+                core.stopped()?;
+                let bytes = received.load(Ordering::Relaxed);
+                if sampled.elapsed().as_secs_f64() >= 1. {
+                    speed = (bytes - previous) as f64 / sampled.elapsed().as_secs_f64();
+                    previous = bytes; sampled = std::time::Instant::now();
+                }
+                (core.progress)(json!({"stage":"下载缺失游戏资源","done":done,"total":total,
+                    "detail":format!("{done} / {total} · 已接收 {:.1} MB · {:.0} KB/s",bytes as f64/1048576.,speed/1024.)}));
+            }
+        }
+    }
+    // Explicitly clear the byte detail when the next stage starts.
+    (core.progress)(json!({"stage":"下载缺失游戏资源","done":total,"total":total,"detail":null}));
     Ok(())
 }
 pub async fn loaders(core: &Core, game: &str, loader: &str) -> Result<Value> {
@@ -270,7 +355,7 @@ pub async fn loaders(core: &Core, game: &str, loader: &str) -> Result<Value> {
                 .collect::<Vec<_>>()))
         }
         "neoforge" => {
-            let response=core.http.get("https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml").send().await.map_err(err)?.error_for_status().map_err(err)?.text().await.map_err(err)?;
+            let response=crate::mirrors::text(core,"https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml").await?;
             let parts: Vec<_> = game.split('.').collect();
             let prefix = if parts.len() >= 3 {
                 format!("{}.{}.", parts[1], parts[2])
@@ -318,15 +403,105 @@ pub(crate) async fn run_installer(
     })
     .await?;
     if !output.status.success() {
+        let details = format!("{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        let log_dir = core.root.join("logs/installers");
+        let _ = std::fs::create_dir_all(&log_dir);
+        let log_path = log_dir.join(format!("{}.log", uuid::Uuid::new_v4()));
+        let _ = std::fs::write(&log_path, &details);
         return Err(format!(
-            "{label}失败：{}",
-            String::from_utf8_lossy(&output.stderr)
-                .chars()
-                .take(1600)
-                .collect::<String>()
+            "{label}失败（退出状态 {}）：{}。日志：{}",
+            output.status,
+            details.chars().rev().take(1600).collect::<String>().chars().rev().collect::<String>().trim(),
+            log_path.display()
         ));
     }
     Ok(())
+}
+fn loader_library_plan(core: &Core, installer: &Path) -> Result<Vec<FileTask>> {
+    use std::io::Read;
+    let mut archive = zip::ZipArchive::new(std::fs::File::open(installer).map_err(err)?).map_err(err)?;
+    let mut libraries = vec![];
+    for name in ["install_profile.json", "version.json"] {
+        if let Ok(mut entry) = archive.by_name(name) {
+            let mut text = String::new();
+            entry.read_to_string(&mut text).map_err(err)?;
+            let value: Value = serde_json::from_str(&text).map_err(err)?;
+            for list in [&value["libraries"], &value["versionInfo"]["libraries"]] {
+                libraries.extend(list.as_array().into_iter().flatten().cloned());
+            }
+        }
+    }
+    let mut plan = BTreeMap::new();
+    for library in libraries.iter().filter(|library| allowed(library)) {
+        let artifact = &library["downloads"]["artifact"];
+        let (path, url) = if artifact.is_object() {
+            let Some(url) = artifact["url"].as_str().filter(|url| !url.is_empty()) else { continue };
+            (string(artifact, "path")?.to_string(), url.to_string())
+        } else if needs_legacy_artifact(library) {
+            let path = lib_path(string(library, "name")?)?;
+            let url = format!("{}/{}", library["url"].as_str().unwrap_or("https://libraries.minecraft.net").trim_end_matches('/'), path);
+            (path, url)
+        } else { continue };
+        let target = under(&core.root.join("libraries"), &path)?;
+        // Bundled Forge artifacts are extracted by its installer itself.
+        if archive.by_name(&format!("maven/{path}")).is_ok() { continue; }
+        let hash = artifact["sha1"].as_str().or_else(|| library["checksums"].as_array()?.first()?.as_str()).unwrap_or("").to_string();
+        if target.exists() && hash.is_empty() { continue; }
+        plan.insert(path, FileTask {url, path: target, hash});
+    }
+    Ok(plan.into_values().collect())
+}
+async fn prefetch_loader_libraries(core: &Core, installer: &Path) -> Result<()> {
+    let plan = loader_library_plan(core, installer)?;
+    core.stage("下载加载器依赖", 0, plan.len());
+    tasks(core, plan, "下载加载器依赖", 8).await
+}
+// Prepare only the declared mapping download processors. Java's implementation
+// deletes a pre-existing file and downloads it again, so prefetching alone is insufficient.
+async fn offline_mapping_installer(core: &Core, installer: &Path, base: &Value) -> Result<PathBuf> {
+    use std::io::{Read,Write};
+    let mut profile:Value={
+        let mut zip=zip::ZipArchive::new(std::fs::File::open(installer).map_err(err)?).map_err(err)?;
+        let Ok(mut entry)=zip.by_name("install_profile.json") else{return Ok(installer.into())};
+        let mut bytes=vec![];entry.read_to_end(&mut bytes).map_err(err)?;serde_json::from_slice(&bytes).map_err(err)?
+    };
+    let mut remove=vec![];
+    for (index,processor) in profile["processors"].as_array().into_iter().flatten().enumerate() {
+        if processor["sides"].as_array().is_some_and(|v|!v.iter().any(|v|v=="client")){continue}
+        let args:Vec<_>=processor["args"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+        let arg=|key:&str|args.windows(2).find(|v|v[0]==key).map(|v|v[1]);
+        if arg("--task")!=Some("DOWNLOAD_MOJMAPS") {continue}
+        if arg("--version")!=base["id"].as_str() || !matches!(arg("--side"),Some("client"|"{SIDE}")) {continue}
+        let Some(output)=arg("--output") else {continue};
+        let coordinate=if output.starts_with('{')&&output.ends_with('}') {
+            profile["data"][&output[1..output.len()-1]]["client"].as_str().unwrap_or("")
+        } else {output};
+        let Some(coordinate)=coordinate.strip_prefix('[').and_then(|v|v.strip_suffix(']')) else {continue};
+        let path=under(&core.root.join("libraries"),&lib_path(coordinate)?)?;
+        let mapping=&base["downloads"]["client_mappings"];
+        let hash=string(mapping,"sha1")?;
+        if hash.len()!=40 || !hash.bytes().all(|b|b.is_ascii_hexdigit()){return Err("官方映射校验值无效".into())}
+        core.stage("下载并校验加载器所需映射",0,1);
+        download(core,string(mapping,"url")?,&path,hash).await?;
+        remove.push(index);
+    }
+    if remove.is_empty(){return Ok(installer.into())}
+    let processors=profile["processors"].as_array_mut().ok_or("加载器处理步骤无效")?;
+    for index in remove.into_iter().rev(){processors.remove(index);}
+    let target=installer.with_extension("offline-mappings.jar");
+    let mut original=zip::ZipArchive::new(std::fs::File::open(installer).map_err(err)?).map_err(err)?;
+    if original.file_names().any(|n|n.starts_with("META-INF/")&&(n.ends_with(".SF")||n.ends_with(".RSA")||n.ends_with(".DSA"))){return Err("此加载器使用签名安装器，不能重写离线处理清单".into())}
+    let mut writer=zip::ZipWriter::new(std::fs::File::create(&target).map_err(err)?);
+    for i in 0..original.len(){
+        let mut entry=original.by_index(i).map_err(err)?;
+        let options=zip::write::SimpleFileOptions::default().compression_method(entry.compression());
+        if entry.is_dir(){writer.add_directory(entry.name(),options).map_err(err)?;continue}
+        writer.start_file(entry.name(),options).map_err(err)?;
+        if entry.name()=="install_profile.json"{writer.write_all(&serde_json::to_vec(&profile).map_err(err)?).map_err(err)?;}
+        else {std::io::copy(&mut entry,&mut writer).map_err(err)?;}
+    }
+    writer.finish().map_err(err)?;
+    Ok(target)
 }
 fn reusable_loader(
     core: &Core,
@@ -427,9 +602,11 @@ pub async fn install(core: &Core, p: &Value) -> Result<Value> {
                 version=merge(base.clone(),overlay);
             },
             "forge" | "neoforge" => {
+                let loader_lock = core.jobs.file_lock(&core.root.join("loader-installer"));
+                let _loader_guard = crate::jobs::wait(core, loader_lock.lock()).await?;
                 let lv=string(p,"loaderVersion")?;safe_name(lv)?;
-                // The official installer requires a complete vanilla version in this game root.
-                prepare(core,&dir,&base).await?;
+                // The installer needs the vanilla client/libraries, not thousands of sounds/textures.
+                prepare_libraries(core,&dir,&base).await?;
                 let vanilla_dir=core.root.join("versions").join(game);
                 std::fs::create_dir_all(&vanilla_dir).map_err(err)?;
                 write_json(&vanilla_dir.join(format!("{game}.json")),&base)?;
@@ -445,12 +622,15 @@ pub async fn install(core: &Core, p: &Value) -> Result<Value> {
                     core.stage("复用已校验的加载器",1,1);
                     version=merge(base.clone(),cached);
                 } else {
+                prefetch_loader_libraries(core,&installer).await?;
                 let java=ensure_java(core,&base,&settings).await?;
                 let profiles=core.root.join("launcher_profiles.json");
                 if !profiles.exists(){write_json(&profiles,&json!({"profiles":{}}))?;}
                 core.stage("执行加载器安装器",0,1);
                 let mut command=tokio::process::Command::new(java);
-                command.arg("-jar").arg(&installer).arg("--installClient").arg(&core.root);
+                command.current_dir(&core.root);
+                let prepared_installer=offline_mapping_installer(core,&installer,&base).await?;
+                command.arg("-jar").arg(&prepared_installer).arg("--installClient").arg(&core.root);
                 run_installer(core,&mut command,"加载器安装").await?;
                 let mut found=None;
                 for entry in std::fs::read_dir(core.root.join("versions")).map_err(err)?.flatten(){
@@ -532,7 +712,7 @@ pub fn merge(mut base: Value, overlay: Value) -> Value {
     }
     base
 }
-async fn prepare(core: &Core, dir: &Path, version: &Value) -> Result<()> {
+async fn prepare_libraries(core: &Core, dir: &Path, version: &Value) -> Result<()> {
     let client = &version["downloads"]["client"];
     core.stage("准备游戏客户端", 0, 1);
     let hash = client["sha1"].as_str().unwrap_or("");
@@ -573,7 +753,8 @@ async fn prepare(core: &Core, dir: &Path, version: &Value) -> Result<()> {
                 path: under(&core.root.join("libraries"), string(&a, "path")?)?,
                 hash: a["sha1"].as_str().unwrap_or("").into(),
             });
-        } else if let Some(name) = lib["name"].as_str() {
+        } else if needs_legacy_artifact(lib) {
+            let name = string(lib, "name")?;
             let path = lib_path(name)?;
             files.push(FileTask {
                 url: format!(
@@ -607,6 +788,10 @@ async fn prepare(core: &Core, dir: &Path, version: &Value) -> Result<()> {
         }
     }
     tasks(core, files, "校验与下载依赖库", 12).await?;
+    Ok(())
+}
+async fn prepare(core: &Core, dir: &Path, version: &Value) -> Result<()> {
+    prepare_libraries(core, dir, version).await?;
     if version["assetIndex"].is_object() {
         let a = &version["assetIndex"];
         let id = string(a, "id")?;
@@ -620,13 +805,13 @@ async fn prepare(core: &Core, dir: &Path, version: &Value) -> Result<()> {
         )
         .await?;
         let index = read_json(&path)?;
-        let mut files = vec![];
+        let mut files = BTreeMap::new();
         for v in index["objects"].as_object().ok_or("资源索引无效")?.values() {
             let hash = string(v, "hash")?;
             if hash.len() != 40 || !hash.bytes().all(|c| c.is_ascii_hexdigit()) {
                 return Err("资源 SHA1 无效".into());
             }
-            files.push(FileTask {
+            files.entry(hash.to_string()).or_insert_with(|| FileTask {
                 url: format!(
                     "https://resources.download.minecraft.net/{}/{}",
                     &hash[..2],
@@ -636,7 +821,7 @@ async fn prepare(core: &Core, dir: &Path, version: &Value) -> Result<()> {
                 hash: hash.into(),
             });
         }
-        tasks(core, files, "校验与下载游戏资源", 24).await?;
+        asset_tasks(core, files.into_values().collect()).await?;
         if index["virtual"] == true || index["map_to_resources"] == true {
             let mapped = if index["map_to_resources"] == true {
                 dir.join("resources")
@@ -829,6 +1014,8 @@ pub async fn install_java(core: &Core, major: u64) -> Result<Value> {
         return Err("请选择受支持的 Java 版本".into());
     }
     let destination = core.root.join("runtimes").join(format!("temurin-{major}"));
+    let runtime_lock = core.jobs.file_lock(&destination);
+    let _runtime_guard = crate::jobs::wait(core, runtime_lock.lock()).await?;
     if let Some(p) = runtime_java_paths(&destination).first() {
         return Ok(json!({"path":p}));
     }
@@ -1447,6 +1634,36 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
 mod tests {
     use super::*;
     #[tokio::test]
+    #[ignore = "requires copied real asset indexes and cache in an isolated QA directory"]
+    async fn cached_asset_two_pack_benchmark() {
+        use std::sync::atomic::AtomicUsize;
+        let root = PathBuf::from(std::env::var("KXL_ASSET_TEST_ROOT").unwrap());
+        assert!(root.components().any(|part| part.as_os_str() == ".update-qa"));
+        let events = Arc::new(AtomicUsize::new(0));
+        let counter = events.clone();
+        let core = Core::new(root.clone(), Arc::new(move |_| { counter.fetch_add(1, Ordering::Relaxed); })).unwrap();
+        let client = b"asset-benchmark-client";
+        let client_hash = format!("{:x}", Sha1::digest(client));
+        let client_dir = root.join("cache/game-clients").join(&client_hash);
+        std::fs::create_dir_all(&client_dir).unwrap();
+        std::fs::write(client_dir.join("client.jar"), client).unwrap();
+        let mut versions = vec![];
+        for index in ["1.12", "32"] {
+            let bytes = std::fs::read(root.join("assets/indexes").join(format!("{index}.json"))).unwrap();
+            versions.push(json!({"libraries":[],"downloads":{"client":{"url":"https://example.invalid/client.jar","sha1":client_hash}},"assetIndex":{"id":index,"url":"https://example.invalid/assets.json","sha1":format!("{:x}",Sha1::digest(bytes))}}));
+        }
+        let first = core.instance("asset-first").unwrap();
+        let second = core.instance("asset-second").unwrap();
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        let started = std::time::Instant::now();
+        let (a,b) = tokio::join!(prepare(&core,&first,&versions[0]),prepare(&core,&second,&versions[1]));
+        a.unwrap(); b.unwrap();
+        let result = json!({"elapsedMs":started.elapsed().as_millis(),"progressEvents":events.load(Ordering::Relaxed),"indexes":["1.12","32"]});
+        println!("{result}");
+        write_json(&root.join(std::env::var("KXL_ASSET_RESULT_NAME").unwrap_or("result.json".into())), &result).unwrap();
+    }
+    #[tokio::test]
     async fn pending_download_can_be_cancelled_without_waiting_for_network() {
         let directory = tempfile::tempdir().unwrap();
         let core = Core::new(directory.path().into(), Arc::new(|_| {})).unwrap();
@@ -1495,5 +1712,129 @@ mod tests {
             json!({"libraries":[{"name":"net.fabricmc:fabric-loader:0.16.14"}]}),
         );
         assert_eq!(v["libraries"].as_array().unwrap().len(), 4);
+    }
+}
+
+fn needs_legacy_artifact(lib: &Value) -> bool { !lib["downloads"].is_object() }
+#[cfg(test)]
+mod legacy_library_tests {
+    use super::*;
+    #[tokio::test]
+    async fn forge_local_artifact_is_hash_verified_before_its_empty_url_is_used() {
+        let temp = tempfile::tempdir().unwrap();
+        let core = Core::new(temp.path().join("game"), Arc::new(|_| {})).unwrap();
+        let client = b"fixture-client";
+        let client_hash = format!("{:x}", Sha1::digest(client));
+        let client_dir = core.root.join("cache/game-clients").join(&client_hash);
+        std::fs::create_dir_all(&client_dir).unwrap();
+        std::fs::write(client_dir.join("client.jar"), client).unwrap();
+        let artifact = b"installer-extracted-forge";
+        let artifact_hash = format!("{:x}", Sha1::digest(artifact));
+        let relative = "net/minecraftforge/forge/1.12.2-test/forge-1.12.2-test.jar";
+        let target = core.root.join("libraries").join(relative);
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::write(&target, artifact).unwrap();
+        let version = json!({
+            "libraries":[{"name":"net.minecraftforge:forge:1.12.2-test", "downloads":{"artifact":{"path":relative,"url":"","sha1":artifact_hash}}}],
+            "downloads":{"client":{"url":"https://example.com/client.jar","sha1":client_hash}}
+        });
+        let instance = core.instance("pack-fixture").unwrap();
+        std::fs::create_dir_all(&instance).unwrap();
+        prepare(&core, &instance, &version).await.unwrap();
+        assert_eq!(std::fs::read(&target).unwrap(), artifact);
+        // Local-only artifacts must never silently accept corrupted or missing bytes.
+        std::fs::write(&target, b"corrupted").unwrap();
+        let error = prepare(&core, &instance, &version).await.unwrap_err();
+        assert!(error.contains("forge-1.12.2-test.jar"));
+        assert!(error.contains("校验失败"));
+        std::fs::remove_file(&target).unwrap();
+        assert!(download(&core, "", &target, &artifact_hash).await.is_err());
+        std::fs::write(&target, artifact).unwrap();
+        assert!(download(&core, "http://example.com/forge.jar", &target, &artifact_hash).await.is_err());
+        assert!(download(&core, "", &target, "").await.is_err());
+    }
+    #[test]
+    fn classifier_only_jinput_has_no_plain_jar() {
+        let lib=json!({"name":"net.java.jinput:jinput-platform:2.0.5","downloads":{"classifiers":{"natives-windows":{"path":"jinput-platform-2.0.5-natives-windows.jar"}}}});
+        assert!(!needs_legacy_artifact(&lib));
+        assert!(needs_legacy_artifact(&json!({"name":"example:legacy:1"})));
+    }
+    #[test]
+    fn legacy_forge_dependencies_enter_the_launchers_download_plan() {
+        use std::io::Write;
+        let temp = tempfile::tempdir().unwrap();
+        let core = Core::new(temp.path().join("game"), Arc::new(|_| {})).unwrap();
+        let installer = temp.path().join("installer.jar");
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(&installer).unwrap());
+        zip.start_file("install_profile.json", zip::write::SimpleFileOptions::default()).unwrap();
+        zip.write_all(serde_json::to_string(&json!({"versionInfo":{"libraries":[{"name":"org.ow2.asm:asm-debug-all:5.2","url":"https://maven.minecraftforge.net/","checksums":["0123456789012345678901234567890123456789"]}]}})).unwrap().as_bytes()).unwrap();
+        zip.finish().unwrap();
+        let plan = loader_library_plan(&core, &installer).unwrap();
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].url, "https://maven.minecraftforge.net/org/ow2/asm/asm-debug-all/5.2/asm-debug-all-5.2.jar");
+        assert_eq!(plan[0].hash, "0123456789012345678901234567890123456789");
+    }
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn installer_failure_preserves_stdout_and_exit_status() {
+        let temp = tempfile::tempdir().unwrap();
+        let core = Core::new(temp.path().to_path_buf(), Arc::new(|_| {})).unwrap();
+        let mut command = tokio::process::Command::new("cmd");
+        command.args(["/D", "/C", "echo dependency-download-failed & exit /b 7"]);
+        let error = run_installer(&core, &mut command, "测试安装").await.unwrap_err();
+        assert!(error.contains("dependency-download-failed"));
+        assert!(error.contains('7'));
+        assert_eq!(std::fs::read_dir(temp.path().join("logs/installers")).unwrap().count(), 1);
+    }
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn mapping_prefetch_only_replaces_verified_client_download_step() {
+        use std::io::Write;
+        let temp=tempfile::tempdir().unwrap();let c=Core::new(temp.path().into(),Arc::new(|_|{})).unwrap();
+        let installer=temp.path().join("original.jar");
+        let coordinate="net.minecraft:client:1.21.1-test:mappings@txt";
+        let path=under(&c.root.join("libraries"),&lib_path(coordinate).unwrap()).unwrap();std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let data=b"verified mapping";std::fs::write(&path,data).unwrap();
+        let profile=json!({"data":{"MOJMAPS":{"client":format!("[{coordinate}]")}},"processors":[{"args":["--task","DOWNLOAD_MOJMAPS","--version","1.21.1","--side","{SIDE}","--output","{MOJMAPS}"]},{"args":["--task","PATCH"]}]});
+        let mut zip=zip::ZipWriter::new(std::fs::File::create(&installer).unwrap());zip.start_file("install_profile.json",zip::write::SimpleFileOptions::default()).unwrap();zip.write_all(&serde_json::to_vec(&profile).unwrap()).unwrap();zip.finish().unwrap();
+        let original=std::fs::read(&installer).unwrap();
+        let base=json!({"id":"1.21.1","downloads":{"client_mappings":{"url":"https://example.invalid/mappings","sha1":format!("{:x}",Sha1::digest(data))}}});
+        let prepared=offline_mapping_installer(&c,&installer,&base).await.unwrap();assert_ne!(prepared,installer);assert_eq!(std::fs::read(&installer).unwrap(),original);
+        let mut z=zip::ZipArchive::new(std::fs::File::open(prepared).unwrap()).unwrap();let parsed:Value=serde_json::from_reader(z.by_name("install_profile.json").unwrap()).unwrap();assert_eq!(parsed["processors"].as_array().unwrap().len(),1);assert_eq!(parsed["processors"][0]["args"][1],"PATCH");
+    }
+    #[tokio::test]
+    #[ignore = "downloads real loader installers and dependency using shared downloader"]
+    async fn live_maven_downloads() {
+        let root=PathBuf::from(std::env::var("KXL_MAVEN_TEST_ROOT").unwrap());
+        assert!(root.components().any(|p|p.as_os_str()==".update-qa"));
+        let c=Core::new(root.clone(),Arc::new(|_|{})).unwrap();
+        crate::mirrors::mark_failed(&c);
+        let mut results=vec![];
+        for (name,url) in [
+            ("neoforge.jar","https://maven.neoforged.net/releases/net/neoforged/neoforge/21.1.259/neoforge-21.1.259-installer.jar"),
+            ("forge.jar","https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.1-47.4.0/forge-1.20.1-47.4.0-installer.jar"),
+            ("dependency.jar","https://maven.neoforged.net/releases/org/ow2/asm/asm/9.8/asm-9.8.jar")
+        ] {
+            let path=root.join(name);download(&c,url,&path,"").await.unwrap();
+            let bytes=std::fs::read(&path).unwrap();assert!(bytes.starts_with(b"PK"));
+            let zip=zip::ZipArchive::new(std::fs::File::open(&path).unwrap()).unwrap();assert!(zip.len()>0);
+            results.push(json!({"file":name,"bytes":bytes.len(),"sha256":format!("{:x}",sha2::Sha256::digest(&bytes)),"zipValid":true}));
+            println!("verified {name}: {} bytes",bytes.len());
+        }
+        write_json(&root.join("result.json"),&json!(results)).unwrap();
+    }
+    #[tokio::test]
+    #[ignore = "requires official Forge archive, Java, vanilla fixture and network"]
+    async fn live_legacy_forge_installer() {
+        let root = PathBuf::from(std::env::var("KXL_FORGE_TEST_ROOT").unwrap());
+        let installer = PathBuf::from(std::env::var("KXL_FORGE_INSTALLER").unwrap());
+        let java = std::env::var("KXL_FORGE_JAVA").unwrap();
+        let core = Core::new(root.clone(), Arc::new(|event| println!("{event}"))).unwrap();
+        prefetch_loader_libraries(&core, &installer).await.unwrap();
+        write_json(&root.join("launcher_profiles.json"), &json!({"profiles":{}})).unwrap();
+        let mut command = tokio::process::Command::new(java);
+        command.current_dir(&root).arg("-jar").arg(installer).arg("--installClient").arg(&root);
+        run_installer(&core, &mut command, "Forge 安装").await.unwrap();
+        assert!(std::fs::read_dir(root.join("versions")).unwrap().flatten().any(|entry| entry.file_name().to_string_lossy().contains("forge")));
     }
 }

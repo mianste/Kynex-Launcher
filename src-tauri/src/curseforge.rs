@@ -52,7 +52,23 @@ fn endpoint(key: Option<&str>) -> &'static str {
 }
 
 async fn get(core: &Core, url: &str, key: Option<&str>) -> Result<Value> {
-    get_with_timeout(core, url, key, std::time::Duration::from_secs(30)).await
+    let primary = get_with_timeout(core, url, key, std::time::Duration::from_secs(10));
+    let Some(path) = url.strip_prefix(API_OFFICIAL) else {
+        return crate::jobs::wait(core, primary).await?;
+    };
+    let mirror_url = format!("{API_MIRROR}{path}");
+    let mirror = async {
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        get_with_timeout(core, &mirror_url, key, std::time::Duration::from_secs(10)).await
+    };
+    tokio::pin!(primary);
+    tokio::pin!(mirror);
+    crate::jobs::wait(core, async {
+        tokio::select! {
+            first = &mut primary => match first { Ok(value) => Ok(value), Err(_) => mirror.await },
+            second = &mut mirror => match second { Ok(value) => Ok(value), Err(_) => primary.await },
+        }
+    }).await?
 }
 
 async fn get_with_timeout(
@@ -243,6 +259,10 @@ async fn files(
 }
 
 fn compatible(file: &Value, game: Option<&str>, loader: Option<&str>) -> bool {
+    // A dedicated server archive is not an installable client modpack.
+    if file["isServerPack"] == true {
+        return false;
+    }
     let versions: Vec<&str> = file["gameVersions"]
         .as_array()
         .map(|a| a.iter().filter_map(Value::as_str).collect())
@@ -336,22 +356,38 @@ pub(crate) fn file_hash(file: &Value) -> String {
 pub(crate) fn download_url(file: &Value) -> Result<String> {
     if let Some(url) = file["downloadUrl"].as_str().filter(|url| !url.is_empty()) {
         https(url)?;
-        return Ok(url.to_string());
+        return Ok(download_entry(url).unwrap_or_else(|| url.to_string()));
     }
     let id = file["id"]
         .as_u64()
         .ok_or("CurseForge 文件缺少 ID 与下载地址")?;
     let name = file_name(file)?;
     let mut url = reqwest::Url::parse(&format!(
-        "https://mediafilez.forgecdn.net/files/{:04}",
+        "https://edge.forgecdn.net/files/{}",
         id / 1000
     ))
     .map_err(err)?;
     url.path_segments_mut()
         .map_err(|_| "无法构造 CurseForge 下载地址")?
-        .push(&format!("{:03}", id % 1000))
+        .push(&(id % 1000).to_string())
         .push(name);
     Ok(url.to_string())
+}
+
+pub(crate) fn is_cdn_url(url: &str) -> bool {
+    reqwest::Url::parse(url).ok().is_some_and(|url| {
+        url.scheme() == "https" && url.host_str().is_some_and(|host|
+            host == "forgecdn.net" || host.ends_with(".forgecdn.net"))
+    })
+}
+
+/// The official entry resolves file IDs and the actual storage path. Legacy
+/// pack URLs may contain padded ID segments that the storage CDN rejects.
+pub(crate) fn download_entry(url: &str) -> Option<String> {
+    if !is_cdn_url(url) { return None; }
+    let mut parsed = reqwest::Url::parse(url).ok()?;
+    parsed.set_host(Some("edge.forgecdn.net")).ok()?;
+    Some(parsed.into())
 }
 
 fn dependency_ids(file: &Value) -> Vec<u64> {
@@ -428,6 +464,7 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
     let mut selected: Vec<(u64, Value)> = vec![];
     while let Some(mod_id) = pending.pop_front() {
         core.stopped()?;
+        core.stage("解析资源及必需依赖", selected.len(), selected.len() + pending.len() + 1);
         if !seen.insert(mod_id) {
             continue;
         }
@@ -466,6 +503,7 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
         })
         .collect::<Result<Vec<_>>>()?;
     let total = plan.len();
+    core.stage("下载资源文件", 0, total);
     let count = Arc::new(AtomicUsize::new(0));
     let results = stream::iter(plan.into_iter().map(|(mod_id, name, url, hash, version)| {
         let count = count.clone();
@@ -514,9 +552,10 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
 }
 
 pub async fn install_modpack(core: &Core, p: &Value) -> Result<Value> {
+    core.stage("获取 CurseForge 整合包版本", 0, 1);
     let project = project_id(&p["project"])?;
     let cf_key = configured_key(core, p["curseforgeKey"].as_str().unwrap_or(""));
-    let file = best_file(core, project, p["game"].as_str(), None, cf_key.as_deref()).await?;
+    let file = best_file(core, project, p["game"].as_str(), p["loader"].as_str(), cf_key.as_deref()).await?;
     let download = download_url(&file)?;
     let file_name = file_name(&file).unwrap_or("modpack.zip").to_string();
     let dir = core
@@ -525,6 +564,7 @@ pub async fn install_modpack(core: &Core, p: &Value) -> Result<Value> {
         .join(uuid::Uuid::new_v4().to_string());
     std::fs::create_dir_all(&dir).map_err(err)?;
     let path = dir.join(safe_name(&file_name)?);
+    core.stage("下载整合包文件", 0, 1);
     crate::engine::download(core, &download, &path, &file_hash(&file)).await?;
     let info = crate::packs::inspect(&path)?;
     let name = p["name"]
@@ -551,8 +591,71 @@ mod tests {
         let file = json!({"id": 9298209u64, "fileName": "jei-test.jar"});
         assert_eq!(
             download_url(&file).unwrap(),
-            "https://mediafilez.forgecdn.net/files/9298/209/jei-test.jar"
+            "https://edge.forgecdn.net/files/9298/209/jei-test.jar"
         );
+    }
+    #[test]
+    fn file_ids_are_not_zero_padded_and_official_storage_urls_use_the_entry() {
+        let file = json!({"id":8925075u64,"fileName":"notenoughanimations-neoforge-1.12.6-mc1.21.1.jar"});
+        let url = download_url(&file).unwrap();
+        assert!(url.contains("edge.forgecdn.net/files/8925/75/"));
+        assert!(!url.contains("/075/"));
+        assert_eq!(download_url(&json!({"downloadUrl":"https://mediafilez.forgecdn.net/files/8925/075/a%20b.jar"})).unwrap(),
+            "https://edge.forgecdn.net/files/8925/075/a%20b.jar");
+        assert_eq!(download_url(&json!({"id":1005u64,"fileName":"a + 中文.jar"})).unwrap(),
+            "https://edge.forgecdn.net/files/1/5/a%20+%20%E4%B8%AD%E6%96%87.jar");
+        for hostile in ["https://forgecdn.net.evil.invalid/a.jar","https://evil.invalid/?source=forgecdn.net", "https://edge.forgecdn.net@evil.invalid/a.jar"] {
+            assert!(!is_cdn_url(hostile));
+            assert!(download_entry(hostile).is_none());
+        }
+    }
+    #[tokio::test]
+    #[ignore = "downloads the actual reported file over HTTPS into an isolated QA root"]
+    async fn live_reported_atm10_file_uses_official_redirect_and_verified_cache() {
+        let root = PathBuf::from(std::env::var("KXL_CF_TEST_ROOT").expect("isolated QA root required"));
+        assert!(root.components().any(|part| part.as_os_str() == ".update-qa"));
+        let core = Core::new(root.clone(),Arc::new(|_| {})).unwrap();
+        let key = configured_key(&core, "");
+        let file = file_by_id(&core,433760,8925075,key.as_deref()).await.unwrap();
+        let name = file_name(&file).unwrap();
+        let hash = file_hash(&file);
+        assert_eq!(hash,"2098ae4965ebefb2dc8d5aec42a7d5282414fddc");
+        let legacy = format!("https://mediafilez.forgecdn.net/files/8925/075/{name}");
+        let target = root.join("mods").join(name);
+        crate::mirrors::mark_failed(&core);
+        let start = std::time::Instant::now();
+        crate::engine::download(&core,&legacy,&target,&hash).await.unwrap();
+        assert!(crate::engine::cached_file_valid(&target,&hash).await.unwrap());
+        let report = json!({"success":true,"fileId":8925075,"bytes":std::fs::metadata(&target).unwrap().len(),
+            "sha1":hash,"elapsedMs":start.elapsed().as_millis(),"legacyUrlResolved":true,"unrelatedMirrorFailureDoesNotDisableEntry":true});
+        write_json(&root.join("result.json"),&report).unwrap();
+        println!("{report}");
+    }
+    #[tokio::test]
+    #[ignore = "downloads real files from multiple projects through the shared downloader"]
+    async fn live_shared_curseforge_downloads_across_projects() {
+        let root = PathBuf::from(std::env::var("KXL_CF_TEST_ROOT").expect("isolated QA root required"));
+        assert!(root.components().any(|part| part.as_os_str() == ".update-qa"));
+        let core = Core::new(root.clone(),Arc::new(|_| {})).unwrap();
+        let key = configured_key(&core, "");
+        let mut results = vec![];
+        for project_id in [306612,238222,285109] {
+            let project = project_info(&core,project_id,key.as_deref()).await.unwrap();
+            let file = project["latestFiles"].as_array().unwrap().iter()
+                .find(|file| file["isServerPack"] != true && file["isAvailable"] != false).unwrap();
+            let file = file_by_id(&core,project_id,file["id"].as_u64().unwrap(),key.as_deref()).await.unwrap();
+            let name = file_name(&file).unwrap();
+            let hash = file_hash(&file);
+            assert_eq!(hash.len(),40);
+            let url = download_url(&file).unwrap();
+            assert!(url.starts_with("https://edge.forgecdn.net/"));
+            let target = root.join("cross-project").join(project_id.to_string()).join(name);
+            crate::engine::download(&core,&url,&target,&hash).await.unwrap();
+            assert!(crate::engine::cached_file_valid(&target,&hash).await.unwrap());
+            results.push(json!({"projectId":project_id,"projectName":project["name"],"fileId":file["id"],"fileName":name,"sha1Verified":true}));
+        }
+        write_json(&root.join("cross-project-result.json"),&json!({"success":true,"files":results})).unwrap();
+        println!("{}",json!({"success":true,"files":results}));
     }
     #[test]
     fn compatible_versions() {
@@ -560,5 +663,39 @@ mod tests {
         assert!(compatible(&file, Some("1.20.1"), Some("forge")));
         assert!(!compatible(&file, Some("1.21.1"), Some("forge")));
         assert!(!compatible(&file, Some("1.20.1"), Some("fabric")));
+        assert!(!compatible(&json!({"isServerPack":true,"gameVersions":["1.20.1","Forge"]}), Some("1.20.1"), Some("forge")));
+    }
+
+    #[tokio::test]
+    #[ignore = "downloads and installs the full public RLCraft pack into an isolated QA directory"]
+    async fn live_rlcraft_independent_install() {
+        let root = PathBuf::from(std::env::var("KXL_PACK_TEST_ROOT").unwrap());
+        assert!(root.components().any(|part| part.as_os_str() == ".update-qa"));
+        let last = std::sync::Mutex::new((String::new(), 0u64));
+        let core = Core::new(root.clone(), Arc::new(move |event| {
+            let stage = event["stage"].as_str().unwrap_or("");
+            let done = event["done"].as_u64().unwrap_or(0);
+            let total = event["total"].as_u64().unwrap_or(1).max(1);
+            let percent = done.saturating_mul(100) / total;
+            let mut last = last.lock().unwrap();
+            if stage != last.0 || percent / 10 != last.1 / 10 {
+                println!("{stage}: {done}/{total}");
+                *last = (stage.to_string(), percent);
+            }
+        })).unwrap();
+        let existing = core.instance("existing").unwrap();
+        write_json(&existing.join("kxl.json"), &json!({"id":"existing","name":"已有实例"})).unwrap();
+        std::fs::write(existing.join("keep.txt"), b"untouched").unwrap();
+        let result = install_modpack(&core, &json!({"project":285109,"name":"RLCraft 验证","id":"existing"})).await.unwrap();
+        let instance = core.instance(result["id"].as_str().unwrap()).unwrap();
+        assert_ne!(result["id"], "existing");
+        assert_eq!(result["settings"]["isolation"], "all");
+        assert_eq!(result["loader"], "forge");
+        assert!(instance.join("client.jar").is_file());
+        assert!(instance.join("config").is_dir());
+        assert!(std::fs::read_dir(instance.join("mods")).unwrap().count() > 100);
+        assert_eq!(std::fs::read(existing.join("keep.txt")).unwrap(), b"untouched");
+        write_json(&root.join("rlcraft-install-result.json"), &result).unwrap();
+        println!("RLCraft installed successfully into a new instance; existing instance unchanged.");
     }
 }

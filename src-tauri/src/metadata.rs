@@ -70,12 +70,17 @@ fn urls(core: &Core, url: &str) -> Result<Vec<String>> {
 pub async fn manifest(core: &Core, force: bool) -> Result<Value> {
     let cache = core.root.join("cache/version-manifest.json");
     let cached = read_json(&cache).ok().filter(valid_manifest);
-    let fresh = std::fs::metadata(&cache)
-        .and_then(|m| m.modified())
-        .and_then(|t| t.elapsed().map_err(std::io::Error::other))
-        .is_ok_and(|age| age < Duration::from_secs(900));
-    if !force && fresh {
+    if !force {
         if let Some(value) = &cached {
+            let background = core.clone();
+            tokio::spawn(async move {
+                let Ok(sources) = urls(&background, engine::MANIFEST) else { return; };
+                if let Ok(bytes) = fetch(&background, sources, "").await {
+                    if let Ok(value) = serde_json::from_slice::<Value>(&bytes) {
+                        if valid_manifest(&value) { let _=write_json(&background.root.join("cache/version-manifest.json"), &value); }
+                    }
+                }
+            });
             return Ok(value.clone());
         }
     }

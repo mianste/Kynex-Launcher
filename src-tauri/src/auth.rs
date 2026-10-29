@@ -12,34 +12,20 @@ pub fn list(c: &Core) -> Result<Value> {
     }
     read_json(&account_path(c))
 }
-fn save(c: &Core, v: &Value) -> Result<Value> {
+pub(crate) fn save(c: &Core, v: &Value) -> Result<Value> {
     let mut a = list(c)?.as_array().cloned().ok_or("账号数据损坏")?;
     a.retain(|x| x["id"] != v["id"]);
     a.push(v.clone());
     write_json(&account_path(c), &json!(a))?;
     Ok(v.clone())
 }
-fn credential(id: &str) -> Result<keyring::Entry> {
-    keyring::Entry::new("Kynex Launcher", id).map_err(err)
-}
-fn store_secret(id: &str, v: &Value) -> Result<()> {
-    credential(id)?
-        .set_password(&v.to_string())
-        .map_err(|e| format!("无法存入系统凭据库：{e}。账号凭据不会以明文落盘。"))
-}
-fn secret(id: &str) -> Result<Value> {
-    serde_json::from_str(
-        &credential(id)?
-            .get_password()
-            .map_err(|_| "无法读取登录凭据，请重新登录".to_string())?,
-    )
-    .map_err(err)
-}
+fn store_secret(id: &str, v: &Value) -> Result<()> { crate::credentials::store(id,v) }
+fn secret(id: &str) -> Result<Value> { crate::credentials::load(id) }
 pub fn remove(c: &Core, id: &str) -> Result<Value> {
     let mut a = list(c)?.as_array().cloned().ok_or("账号数据损坏")?;
     a.retain(|x| x["id"] != id);
     write_json(&account_path(c), &json!(a))?;
-    let _ = credential(id)?.delete_credential();
+    crate::credentials::remove(id)?;
     Ok(json!(true))
 }
 pub fn offline(c: &Core, name: &str) -> Result<Value> {
@@ -67,11 +53,16 @@ async fn send_json_retry(
     for attempt in 0..3 {
         let current = request
             .try_clone()
-            .ok_or_else(|| format!("无法重试 {service} 请求"))?;
+            .ok_or_else(|| format!("无法重试 {service} 请求"))?
+            .header("Accept", "application/json")
+            .timeout(std::time::Duration::from_secs(25));
         match tokio::time::timeout(std::time::Duration::from_secs(25), current.send()).await {
             Ok(Ok(response)) => {
                 let status = response.status();
-                let text = response.text().await.map_err(err)?;
+                let text = match response.text().await {
+                    Ok(text) => text,
+                    Err(_) => { last = "读取服务响应超时或连接中断".into(); continue; },
+                };
                 let value = serde_json::from_str(&text).unwrap_or_else(
                     |_| json!({"error_description":text.chars().take(240).collect::<String>()}),
                 );
@@ -143,17 +134,12 @@ async fn exchange(c: &Core, access: &str) -> Result<(Value, String)> {
         "Minecraft 所有权验证",
     )
     .await?;
-    if !entitlement_status.is_success()
-        || entitlements["items"]
-            .as_array()
-            .map(Vec::is_empty)
-            .unwrap_or(true)
-    {
-        return Err(
-            "该 Microsoft 账号没有可用的 Minecraft Java 版所有权。请确认已购买游戏或订阅仍有效。"
-                .into(),
-        );
+    if !entitlement_status.is_success() {
+        return Err(format!("Minecraft 所有权服务暂时无法验证（HTTP {}），请重新登录后重试。", entitlement_status.as_u16()));
     }
+    // A valid Java profile is the authoritative result; an empty store item list
+    // alone must not reject a working subscription account.
+    let _ = entitlements;
     let (profile_status, profile) = send_json_retry(
         c.http
             .get("https://api.minecraftservices.com/minecraft/profile")
@@ -194,10 +180,10 @@ fn minecraft_login_error(status: u16, body: &Value) -> String {
         .to_ascii_lowercase()
         .contains("invalid app registration")
     {
-        return "微软与 Xbox 登录已成功，但 KXL 的 Client ID 尚未通过 Minecraft Services 白名单审核。请提交 App ID 审核并等待批准后再试。".into();
+        return format!("微软与 Xbox 登录成功，但 Minecraft 服务仍返回“应用注册无效”（HTTP {status} / Invalid app registration）。如果已收到审批通过邮件，请核对获批 App ID 是否为 {}，并重新授权；若仍失败，请向审核方核实该 App ID 的服务访问状态。", embedded_client().ok().flatten().unwrap_or_else(|| KXL_OFFICIAL_MICROSOFT_CLIENT_ID.into()));
     }
     if status == 401 || status == 403 {
-        return "Minecraft 服务拒绝了 Xbox 身份。请确认账号已创建 Xbox 档案，并使用拥有 Minecraft Java 版的账号登录。".into();
+        return format!("Minecraft 服务拒绝了本次 Xbox 登录令牌（HTTP {status}），请重新授权后重试。此状态本身不能确定是应用审核或游戏所有权问题。");
     }
     format!("Minecraft 登录失败（HTTP {status}），请稍后重试。")
 }
@@ -404,7 +390,7 @@ pub async fn microsoft_poll(c: &Core, id: &str) -> Result<Value> {
             }
             return Ok(status);
         }
-        let (profile, token) = exchange(c, string(&response, "access_token")?).await?;
+        let (profile, _token) = exchange(c, string(&response, "access_token")?).await?;
         if flow.cancelled.load(Ordering::SeqCst) {
             return Err("登录已取消".into());
         }
@@ -412,11 +398,11 @@ pub async fn microsoft_poll(c: &Core, id: &str) -> Result<Value> {
         let account_id = format!("microsoft-{uuid}");
         store_secret(
             &account_id,
-            &json!({"refresh":response["refresh_token"],"token":token,"clientId":flow.client}),
+            &json!({"refresh":response["refresh_token"],"clientId":flow.client}),
         )?;
         let account = save(
             c,
-            &json!({"id":account_id,"uuid":uuid,"name":profile["name"],"kind":"microsoft"}),
+            &appearance::microsoft_account(json!({"id":account_id,"uuid":uuid,"name":profile["name"],"kind":"microsoft"}), &profile)?,
         )?;
         c.auth_sessions.lock().map_err(err)?.remove(id);
         Ok(json!({"status":"success","account":account}))
@@ -458,13 +444,11 @@ pub async fn external(c: &Core, p: &Value) -> Result<Value> {
         &id,
         &json!({"token":response["accessToken"],"clientToken":response["clientToken"]}),
     )?;
-    save(
-        c,
-        &json!({"id":id,"uuid":uuid,"name":profile["name"],"kind":"external","server":server}),
-    )
+    let a = json!({"id":id,"uuid":uuid,"name":profile["name"],"kind":"external","server":server});
+    let a = appearance::external_profile(c,&a).await.unwrap_or(a);
+    save(c,&a)
 }
 pub async fn apply_skin(c: &Core, p: &Value) -> Result<Value> {
-    use base64::Engine;
     let id = string(p, "accountId")?;
     let accounts = list(c)?;
     let mut account = accounts
@@ -477,48 +461,30 @@ pub async fn apply_skin(c: &Core, p: &Value) -> Result<Value> {
         return Err("皮肤模型无效".into());
     }
     let texture = string(p, "texture")?;
-    let encoded = texture
-        .strip_prefix("data:image/png;base64,")
-        .ok_or("请选择 PNG 皮肤")?;
-    if encoded.len() > 2 * 1024 * 1024 {
-        return Err("皮肤文件过大".into());
+    let bytes = appearance::image_data(texture,false)?;
+    let info = png::Decoder::new(std::io::Cursor::new(&bytes)).read_info().map_err(err)?;
+    let remote = account["kind"] != "offline";
+    if account["kind"] == "microsoft" {
+        if info.info().width != 64 { return Err("正版账号皮肤必须为 64×64 或 64×32 PNG".into()) }
+        let login = session(c,id,"").await?;
+        let form = reqwest::multipart::Form::new().text("variant",if model=="Slim"{"slim"}else{"classic"})
+            .part("file",reqwest::multipart::Part::bytes(bytes).file_name("skin.png").mime_str("image/png").map_err(err)?);
+        let response = c.http.post("https://api.minecraftservices.com/minecraft/profile/skins").bearer_auth(&login.token).multipart(form)
+            .timeout(std::time::Duration::from_secs(30)).send().await.map_err(|_|"无法连接正版皮肤服务")?;
+        if !response.status().is_success() { return Err(format!("更新正版皮肤失败（HTTP {}）",response.status().as_u16())) }
+        account = appearance::microsoft_profile(c,&account,&login.token).await.map_err(|e|format!("皮肤已提交，但重新同步失败：{e}"))?;
+    } else if account["kind"] == "external" {
+        account = appearance::external_profile(c,&account).await?;
+        let login = session(c,id,"").await?;
+        appearance::upload_external(c,&account,&login.token,"skin",Some(bytes),model).await?;
+        account = appearance::external_profile(c,&account).await.map_err(|e|format!("皮肤已提交，但重新同步失败：{e}"))?;
+    } else {
+        account["skin"] = json!(texture); account["skinModel"] = json!(model);
     }
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(encoded)
-        .map_err(err)?;
-    let info = png::Decoder::new(std::io::Cursor::new(&bytes))
-        .read_info()
-        .map_err(err)?;
-    if info.info().width != 64 || ![32, 64].contains(&info.info().height) {
-        return Err("皮肤必须为 64×64 或 64×32 PNG".into());
-    }
-    let remote = account["kind"] == "microsoft";
-    if remote {
-        let login = session(c, id, "").await?;
-        let form = reqwest::multipart::Form::new()
-            .text("variant", if model == "Slim" { "slim" } else { "classic" })
-            .part(
-                "file",
-                reqwest::multipart::Part::bytes(bytes)
-                    .file_name("skin.png")
-                    .mime_str("image/png")
-                    .map_err(err)?,
-            );
-        c.http
-            .post("https://api.minecraftservices.com/minecraft/profile/skins")
-            .bearer_auth(&login.token)
-            .multipart(form)
-            .send()
-            .await
-            .map_err(err)?
-            .error_for_status()
-            .map_err(|_| "更新正版皮肤失败，请检查账号登录状态与网络".to_string())?;
-    }
-    account["skin"] = json!(texture);
-    account["skinModel"] = json!(model);
-    save(c, &account)?;
+    save(c,&account)?;
     Ok(json!({"remote":remote,"account":account}))
 }
+
 async fn refresh_session(c: &Core, client: &str, refresh: &str) -> Result<Value> {
     let mut last = String::new();
     for endpoint in [TOKEN, TOKEN_LIVE] {
@@ -579,10 +545,12 @@ pub async fn session(c: &Core, id: &str, client: &str) -> Result<Session> {
             return Err("刷新后账号身份发生变化，请重新登录".into());
         }
         token = t;
+        let appearance = appearance::microsoft_account(a.clone(),&profile)?;
         store_secret(
             id,
-            &json!({"refresh":response["refresh_token"].as_str().unwrap_or(string(&old,"refresh")?),"token":token,"clientId":client}),
+            &json!({"refresh":response["refresh_token"].as_str().unwrap_or(string(&old,"refresh")?),"clientId":client}),
         )?;
+        save(c,&appearance)?;
     } else if kind == "external" {
         let old = secret(id)?;
         let url = string(a, "server")?;
@@ -603,6 +571,36 @@ pub async fn session(c: &Core, id: &str, client: &str) -> Result<Session> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    #[ignore = "interactive Microsoft login; only writes a credential-free QA result"]
+    async fn live_official_client_login() {
+        let root = PathBuf::from(std::env::var("KXL_AUTH_TEST_ROOT").expect("isolated QA root required"));
+        assert!(root.components().any(|part| part.as_os_str() == ".update-qa"));
+        let c = Core::new(root.clone(), Arc::new(|_| {})).unwrap();
+        let start = microsoft_start(&c, "").await.unwrap();
+        println!("LOGIN {} {}", start["verificationUri"].as_str().unwrap(), start["userCode"].as_str().unwrap());
+        let id = start["flowId"].as_str().unwrap();
+        let flow = c.auth_sessions.lock().unwrap().get(id).unwrap().clone();
+        let result = loop {
+            tokio::time::sleep(std::time::Duration::from_secs(flow.interval.load(Ordering::Relaxed))).await;
+            if std::time::Instant::now() >= flow.expires { break Err("授权过期".into()); }
+            let (_, response) = send_json_retry(c.http.post(TOKEN).form(&[
+                ("client_id",flow.client.as_str()),("grant_type","urn:ietf:params:oauth:grant-type:device_code"),
+                ("device_code",flow.device.as_str()),("scope","XboxLive.signin offline_access")]),"Microsoft 令牌服务").await.unwrap();
+            if let Some(error) = response["error"].as_str() {
+                if error == "authorization_pending" {continue;}
+                if error == "slow_down" {flow.interval.fetch_add(5,Ordering::Relaxed);continue;}
+                break Err(format!("Microsoft 授权未完成：{error}"));
+            }
+            break exchange(&c,string(&response,"access_token").unwrap()).await.map(|_| ());
+        };
+        let report = match result {
+            Ok(()) => json!({"success":true,"clientId":flow.client,"profileAvailable":true}),
+            Err(error) => json!({"success":false,"clientId":flow.client,"error":error}),
+        };
+        write_json(&root.join("result.json"),&report).unwrap();
+        println!("{report}");
+    }
     #[test]
     fn offline_id() {
         let tmp = tempfile::tempdir().unwrap();
@@ -643,14 +641,23 @@ mod tests {
         assert_eq!(poll_status("access_denied", 5)["status"], "denied");
         assert_eq!(poll_status("expired_token", 5)["status"], "expired");
     }
+
     #[test]
     fn invalid_app_registration_has_actionable_message() {
         let message = minecraft_login_error(
             403,
             &json!({"errorMessage":"Invalid app registration, see https://aka.ms/AppRegInfo"}),
         );
-        assert!(message.contains("白名单审核"));
-        assert!(message.contains("Client ID"));
+        assert!(message.contains("应用注册无效"));
+        assert!(message.contains(KXL_OFFICIAL_MICROSOFT_CLIENT_ID));
+        assert!(!message.contains("尚未通过"));
+    }
+    #[test]
+    fn other_forbidden_responses_do_not_claim_an_application_review_failed() {
+        let message = minecraft_login_error(403, &json!({"errorMessage":"Forbidden"}));
+        assert!(message.contains("HTTP 403"));
+        assert!(!message.contains("尚未通过"));
+        assert!(!message.contains("没有 Java"));
     }
     #[test]
     fn cancellation_is_scoped() {

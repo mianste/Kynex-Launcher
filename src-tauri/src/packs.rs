@@ -1,6 +1,40 @@
 use crate::*;
-use std::collections::HashMap;
 use std::io::{Read, Write};
+use std::sync::atomic::AtomicUsize;
+use futures_util::{stream, StreamExt, TryStreamExt};
+
+// Downloading a catalogue pack and importing a local archive share the exact
+// same independent-instance installer below.
+pub async fn install_modrinth(core: &Core, p: &Value) -> Result<Value> {
+    let project = string(p, "project")?;
+    safe_name(project)?;
+    core.stage("获取 Modrinth 整合包版本", 0, 1);
+    let mut url = reqwest::Url::parse(&format!("https://api.modrinth.com/v2/project/{project}/version")).map_err(err)?;
+    if let Some(game) = p["game"].as_str().filter(|game| !game.is_empty()) {
+        url.query_pairs_mut().append_pair("game_versions", &json!([game]).to_string());
+    }
+    if let Some(loader) = p["loader"].as_str().filter(|loader| !loader.is_empty()) {
+        url.query_pairs_mut().append_pair("loaders", &json!([loader]).to_string());
+    }
+    let versions = crate::jobs::wait(core, core.get(url.as_str())).await??;
+    let rows = versions.as_array().ok_or("整合包版本清单无效")?;
+    let version = rows.iter().find(|v| v["version_type"] == "release").or(rows.first()).ok_or("没有可安装的整合包版本")?;
+    let files = version["files"].as_array().ok_or("整合包缺少文件")?;
+    let file = files.iter().filter(|file| file["filename"].as_str().is_some_and(|name| name.ends_with(".mrpack"))).find(|file| file["primary"] == true)
+        .or_else(|| files.iter().find(|file| file["filename"].as_str().is_some_and(|name| name.ends_with(".mrpack")))).ok_or("整合包没有 MRPACK 文件")?;
+    let hash = string(&file["hashes"], "sha1")?;
+    if hash.len() != 40 { return Err("整合包缺少有效的文件校验".into()); }
+    let dir = core.root.join("imports").join(uuid::Uuid::new_v4().to_string());
+    std::fs::create_dir_all(&dir).map_err(err)?;
+    let path = dir.join(safe_name(string(file, "filename")?)?);
+    let result = async {
+        core.stage("下载整合包文件", 0, 1);
+        crate::engine::download(core, string(file, "url")?, &path, hash).await?;
+        import(core, &json!({"path":path,"name":p["name"],"settings":p["settings"]})).await
+    }.await;
+    let _ = std::fs::remove_dir_all(&dir);
+    result
+}
 
 fn curse_loader(manifest: &Value) -> (String, String) {
     let id = manifest["minecraft"]["modLoaders"]
@@ -263,6 +297,7 @@ pub(crate) fn safe_extract(
     Ok(())
 }
 pub async fn import(c: &Core, p: &Value) -> Result<Value> {
+    c.stage("读取整合包清单", 0, 1);
     let path = Path::new(string(p, "path")?);
     let info = inspect(path)?;
     let mut z = archive(path)?;
@@ -311,12 +346,16 @@ pub async fn import(c: &Core, p: &Value) -> Result<Value> {
     let result = async {
         if let Some(index) = modrinth {
             let files = index["files"].as_array().ok_or("包文件清单无效")?;
-            for (i, f) in files.iter().enumerate() {
+            let count = Arc::new(AtomicUsize::new(0));
+            let total = files.iter().filter(|f| f["env"]["client"] != "unsupported").count();
+            c.stage("下载整合包资源", 0, total);
+            stream::iter(files.clone().into_iter().filter(|f| f["env"]["client"] != "unsupported").map(|f| {
+                let count = count.clone();
+                let dir = dir.clone();
+                let c = c.clone();
+                async move {
                 c.stopped()?;
-                if f["env"]["client"] == "unsupported" {
-                    continue;
-                }
-                let path = Path::new(string(f, "path")?);
+                let path = Path::new(string(&f, "path")?);
                 if path.is_absolute()
                     || path
                         .components()
@@ -352,17 +391,26 @@ pub async fn import(c: &Core, p: &Value) -> Result<Value> {
                 let hash = f["hashes"]["sha1"]
                     .as_str()
                     .ok_or("包文件缺少 SHA-1 校验")?;
-                crate::engine::download(c, url, &dir.join(path), hash).await?;
-                c.stage("安装整合包资源", i + 1, files.len());
-            }
+                crate::engine::download(&c, url, &dir.join(path), hash).await?;
+                c.stage("安装整合包资源", count.fetch_add(1, Ordering::Relaxed) + 1, total);
+                Ok::<_, String>(())
+                }
+            })).buffer_unordered(8).try_collect::<Vec<_>>().await?;
             safe_extract(&mut z, &dir, Some(&format!("{base}overrides")))?;
             safe_extract(&mut z, &dir, Some(&format!("{base}client-overrides")))?;
         } else if let Some(manifest) = curse {
             let files = manifest["files"]
                 .as_array()
                 .ok_or("CurseForge 文件清单无效")?;
-            let mut classes: HashMap<u64, &'static str> = HashMap::new();
-            for (i, f) in files.iter().enumerate() {
+            let count = Arc::new(AtomicUsize::new(0));
+            let total = files.len();
+            c.stage("获取整合包资源与下载文件", 0, total);
+            stream::iter(files.clone().into_iter().map(|f| {
+                let count = count.clone();
+                let dir = dir.clone();
+                let c = c.clone();
+                let cf_key = cf_key.clone();
+                async move {
                 c.stopped()?;
                 let project_id = f["projectID"]
                     .as_u64()
@@ -372,18 +420,15 @@ pub async fn import(c: &Core, p: &Value) -> Result<Value> {
                     .as_u64()
                     .or_else(|| f["fileID"].as_str().and_then(|v| v.parse().ok()))
                     .ok_or("CurseForge 清单缺少文件 ID")?;
-                let file = crate::curseforge::file_by_id(c, project_id, file_id, cf_key.as_deref())
+                let file = crate::curseforge::file_by_id(&c, project_id, file_id, cf_key.as_deref())
                     .await?;
                 let name = crate::curseforge::file_name(&file)?.to_string();
                 let url = crate::curseforge::download_url(&file)?;
                 let hash = crate::curseforge::file_hash(&file);
-                let kind = if let Some(kind) = classes.get(&project_id) {
-                    *kind
-                } else {
-                    let kind = if name.to_ascii_lowercase().ends_with(".jar") {
+                let kind = if name.to_ascii_lowercase().ends_with(".jar") {
                         "mods"
                     } else {
-                        match crate::curseforge::project_info(c, project_id, cf_key.as_deref())
+                        match crate::curseforge::project_info(&c, project_id, cf_key.as_deref())
                             .await
                         {
                             Ok(project) => match project["classId"].as_u64() {
@@ -394,17 +439,16 @@ pub async fn import(c: &Core, p: &Value) -> Result<Value> {
                             },
                             Err(_) => "mods",
                         }
-                    };
-                    classes.insert(project_id, kind);
-                    kind
                 };
                 if kind == "saves" {
-                    continue;
+                    return Ok::<_, String>(());
                 }
                 let target = dir.join(kind).join(safe_name(&name)?);
-                crate::engine::download(c, &url, &target, &hash).await?;
-                c.stage("安装 CurseForge 整合包资源", i + 1, files.len());
-            }
+                crate::engine::download(&c, &url, &target, &hash).await?;
+                c.stage("安装 CurseForge 整合包资源", count.fetch_add(1, Ordering::Relaxed) + 1, total);
+                Ok::<_, String>(())
+                }
+            })).buffer_unordered(8).try_collect::<Vec<_>>().await?;
             let overrides = manifest["overrides"].as_str().unwrap_or("overrides");
             safe_extract(&mut z, &dir, Some(&format!("{base}{overrides}")))?;
             if let Some(extra) = manifest["clientOverrides"]
@@ -659,6 +703,48 @@ fn write_curse_manifest(w: &mut zip::ZipWriter<std::fs::File>, info: &Value) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn local_pack_imports_create_independent_instances_from_the_manifest() {
+        use sha1::{Digest, Sha1};
+        let temp = tempfile::tempdir().unwrap();
+        let core = Core::new(temp.path().join("game"), Arc::new(|_| {})).unwrap();
+        let client = b"fixture-client";
+        let client_hash = format!("{:x}", Sha1::digest(client));
+        let version = json!({"id":"fixture-game","libraries":[],"downloads":{"client":{"url":"https://example.com/client.jar","sha1":client_hash}}});
+        let bytes = serde_json::to_vec(&version).unwrap();
+        let meta_hash = format!("{:x}", Sha1::digest(&bytes));
+        write_json(&core.root.join("cache/version-manifest.json"), &json!({"versions":[{"id":"fixture-game","url":"https://example.com/version.json","sha1":meta_hash}]})).unwrap();
+        let version_dir = core.root.join("versions/fixture-game");
+        std::fs::create_dir_all(&version_dir).unwrap();
+        std::fs::write(version_dir.join("fixture-game.json"), bytes).unwrap();
+        let client_dir = core.root.join("cache/game-clients").join(&client_hash);
+        std::fs::create_dir_all(&client_dir).unwrap();
+        std::fs::write(client_dir.join("client.jar"), client).unwrap();
+        let existing = core.instance("existing").unwrap();
+        write_json(&existing.join("kxl.json"), &json!({"id":"existing","name":"已有实例"})).unwrap();
+        std::fs::write(existing.join("keep.txt"), b"untouched").unwrap();
+        for format in ["modrinth", "curseforge"] {
+            let path = temp.path().join(format!("{format}.zip"));
+            let mut zip = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
+            let (entry, value) = if format == "modrinth" {
+                ("modrinth.index.json", json!({"name":"测试整合包","dependencies":{"minecraft":"fixture-game"},"files":[]}))
+            } else {
+                ("manifest.json", json!({"name":"测试整合包","minecraft":{"version":"fixture-game","modLoaders":[]},"files":[],"overrides":"overrides"}))
+            };
+            zip.start_file(entry, zip::write::SimpleFileOptions::default()).unwrap();
+            zip.write_all(serde_json::to_string(&value).unwrap().as_bytes()).unwrap();
+            zip.start_file("overrides/config/pack.txt", zip::write::SimpleFileOptions::default()).unwrap();
+            zip.write_all(b"pack-config").unwrap();
+            zip.finish().unwrap();
+            let installed = import(&core, &json!({"path":path,"id":"existing","name":format,"settings":{"isolation":"shared"}})).await.unwrap();
+            assert_ne!(installed["id"], "existing");
+            assert_eq!(installed["version"], "fixture-game");
+            assert_eq!(installed["settings"]["isolation"], "all");
+            assert_eq!(std::fs::read(core.instance(installed["id"].as_str().unwrap()).unwrap().join("config/pack.txt")).unwrap(), b"pack-config");
+            assert_eq!(std::fs::read(existing.join("keep.txt")).unwrap(), b"untouched");
+        }
+        assert_eq!(core.instances().unwrap().as_array().unwrap().len(), 3);
+    }
     #[test]
     fn export_standard_formats_roundtrip() {
         let tmp = tempfile::tempdir().unwrap();

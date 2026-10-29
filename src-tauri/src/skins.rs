@@ -4,7 +4,7 @@ use futures_util::StreamExt;
 use std::time::Duration;
 const MAX_BYTES: usize = 5 * 1024 * 1024;
 
-fn public_url(text: &str) -> Result<reqwest::Url> {
+pub(crate) fn public_url(text: &str) -> Result<reqwest::Url> {
     let url = reqwest::Url::parse(text).map_err(|_| "请输入有效的 HTTPS 图片直链")?;
     if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
         return Err("只允许无账号密码的 HTTPS 图片直链".into());
@@ -89,6 +89,25 @@ fn validate_png(data: &[u8]) -> Result<()> {
         return Err("皮肤须为标准布局或不超过 1024 的等比例高清 PNG".into());
     }
     Ok(())
+}
+pub async fn texture(c: &Core, p: &Value) -> Result<Value> {
+    use sha2::{Digest,Sha256};
+    let url=public_url(string(p,"url")?)?;
+    let dir=c.root.join("cache/appearance");
+    let path=dir.join(format!("{:x}.png",Sha256::digest(url.as_str().as_bytes())));
+    let data=if let Ok(data)=tokio::fs::read(&path).await { data } else {
+        let data=bytes(&c.http,url.as_str(),MAX_BYTES).await?;
+        let check=format!("data:image/png;base64,{}",base64::engine::general_purpose::STANDARD.encode(&data));
+        crate::appearance::image_data(&check,p["cape"]==true)?;
+        tokio::fs::create_dir_all(&dir).await.map_err(err)?;
+        let tmp=dir.join(format!("{}.part",uuid::Uuid::new_v4()));
+        tokio::fs::write(&tmp,&data).await.map_err(err)?;
+        if tokio::fs::rename(&tmp,&path).await.is_err() { let _=tokio::fs::remove_file(&tmp).await; }
+        data
+    };
+    let encoded = format!("data:image/png;base64,{}",base64::engine::general_purpose::STANDARD.encode(data));
+    crate::appearance::image_data(&encoded,p["cape"]==true)?;
+    Ok(json!(encoded))
 }
 pub async fn import(p: &Value) -> Result<Value> {
     let kind = string(p, "kind")?;
