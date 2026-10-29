@@ -40,6 +40,10 @@ export interface Account {
   server?: string;
   skin?: string;
   skinModel?: "Classic" | "Slim";
+  cape?: string;
+  capeId?: string;
+  capes?: { id: string; name: string; texture: string; active: boolean }[];
+  uploadableTextures?: ("skin" | "cape")[];
 }
 export interface GameVersion {
   id: string;
@@ -67,6 +71,11 @@ export interface Settings extends InstanceSettings {
   downloadSource: "official" | "bmclapi";
 }
 export interface Task {
+  taskId?: string;
+  name?: string;
+  action?: string;
+  payload?: Record<string, unknown>;
+  finished?: boolean;
   stage: string;
   done: number;
   total: number;
