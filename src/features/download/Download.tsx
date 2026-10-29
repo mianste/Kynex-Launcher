@@ -86,7 +86,16 @@ export function Download() {
   const [source, Src] = useState<"all" | "modrinth" | "curseforge">("all");
   const [gameFilter, GameFilter] = useState("");
   const [loaderFilter, LoaderFilter] = useState("");
-  const [versions, V] = useState<GameVersion[]>(desktop ? [] : previewVersions);
+  const [versions, V] = useState<GameVersion[]>(() => {
+    if (!desktop) return previewVersions;
+    try {
+      return JSON.parse(
+        localStorage.getItem("kynex-version-catalogue") || "[]",
+      );
+    } catch {
+      return [];
+    }
+  });
   const [projects, P] = useState<Project[]>([]);
   const [page, Page] = useState(0);
   const [total, Total] = useState(0);
@@ -111,7 +120,10 @@ export function Download() {
     ManifestBusy(true);
     E("");
     api<GameVersion[]>("manifest", { force })
-      .then(V)
+      .then((value) => {
+        V(value);
+        localStorage.setItem("kynex-version-catalogue", JSON.stringify(value));
+      })
       .catch((e) => E(String(e)))
       .finally(() => ManifestBusy(false));
   }
@@ -120,9 +132,9 @@ export function Download() {
     Page(0);
   }, [kind, q, source, gameFilter, loaderFilter]);
   useEffect(() => {
-    GameFilter(target?.version ?? "");
-    LoaderFilter(target?.loader === "vanilla" ? "" : (target?.loader ?? ""));
-  }, [target?.id]);
+    GameFilter(kind === "整合包" ? "" : (target?.version ?? ""));
+    LoaderFilter(kind === "整合包" || target?.loader === "vanilla" ? "" : (target?.loader ?? ""));
+  }, [target?.id, kind]);
   useEffect(() => {
     const serial = ++request.current;
     const meta = projectKinds[kind];
@@ -275,24 +287,23 @@ export function Download() {
         Installing(false);
       }
     }
-    Installing(true);
+    Installing(false);
+    Pending(null);
     try {
-      if (kind === "整合包" && projectSource === "modrinth") {
-        await external(`https://modrinth.com/modpack/${p.slug}`);
-        s.notify("下载 .mrpack 后拖入窗口安装");
-        return;
-      }
       if (kind === "整合包") {
-        await api("install_project", {
+        const instance = await api<Instance>("install_project", {
           project: p.project_id,
+          name: p.title,
+          game: gameFilter || undefined,
+          loader: loaderFilter || undefined,
           kind: "modpacks",
           source: projectSource,
           settings: s.settings,
           curseforgeKey: s.settings.curseforgeKey,
         });
         await s.refresh();
+        useStore.setState({ selected: instance.id });
         Pending(null);
-        s.setPage("library");
         s.notify("整合包安装完成");
         return;
       }
@@ -300,6 +311,7 @@ export function Download() {
       await api("install_project", {
         id: s.selected,
         project: p.project_id,
+        name: p.title,
         iconUrl: p.icon_url,
         kind: projectKinds[kind].install,
         source: projectSource,
@@ -381,6 +393,7 @@ export function Download() {
           <Badge tone="ok">资源：Modrinth</Badge>
           <Badge tone="warn">资源：CurseForge</Badge>
           <p>下载文件校验哈希，失败会重试。</p>
+          {kind !== "整合包" && <>
           <h4>目标实例</h4>
           <InstanceSelect
             instances={s.instances}
@@ -392,6 +405,7 @@ export function Download() {
               ? `将安装到 ${target.name} · ${target.version} · ${target.loader}`
               : "先安装或选择一个 Java 实例，资源会按该实例的版本与加载器匹配。"}
           </p>
+          </>}
           <h4>运行环境</h4>
           <p>启动时自动识别 Java 要求；本机缺失时会自动下载并补齐。</p>
         </aside>
