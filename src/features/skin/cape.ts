@@ -26,3 +26,13 @@ export async function decodeCape(file: File) {
     URL.revokeObjectURL(url);
   }
 }
+
+// Decode native-downloaded bytes without fetch(data:), which packaged CSP blocks.
+export function capeFileFromData(texture: string): File {
+  const prefix = "data:image/png;base64,";
+  if (!texture.startsWith(prefix)) throw new Error("披风图片格式无效");
+  const bytes = Uint8Array.from(atob(texture.slice(prefix.length)), (c) =>
+    c.charCodeAt(0),
+  );
+  return new File([bytes], "cape.png", { type: "image/png" });
+}

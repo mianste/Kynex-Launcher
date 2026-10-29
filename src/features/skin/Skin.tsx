@@ -30,7 +30,9 @@ import { SkinSprite } from "./SkinSprite";
 import { SkinImport } from "./SkinImport";
 import { useWardrobe } from "./useWardrobe";
 import { decodeCape } from "./cape";
+import { cachedCape, loadCape } from "./textureCache";
 import { sameAppearance } from "./wardrobeState";
+import type { Account } from "../../lib/types";
 import type { LocalSkin } from "./library";
 export { defaultSkin } from "./textures";
 export function Skin() {
@@ -48,6 +50,65 @@ export function Skin() {
   const [capeOn, CapeOn] = useState(false),
     [customCape, CustomCape] = useState<HTMLCanvasElement | null>(null),
     [equipment, Equipment] = useState<"cape" | "elytra">("cape");
+  const [capeChoice, CapeChoice] = useState("");
+  const [capeTexture, CapeTexture] = useState("");
+  const [capeBusy, CapeBusy] = useState(false);
+  const [capeError, CapeError] = useState("");
+  const official = w.account?.kind === "microsoft";
+  const external = w.account?.kind === "external";
+  const capeWritable =
+    !external || w.account?.uploadableTextures?.includes("cape");
+  useEffect(() => {
+    CapeChoice(w.account?.capeId || "");
+    CapeTexture("");
+    CapeOn(!!w.account?.cape);
+    CustomCape(null);
+    CapeError("");
+  }, [w.account?.id, w.account?.cape, w.account?.capeId]);
+  const capeSource =
+    capeTexture ||
+    (official
+      ? w.account?.capes?.find((v) => v.id === capeChoice)?.texture
+      : w.account?.cape) ||
+    "";
+  useEffect(() => {
+    let active=true;
+    if(!capeSource){CustomCape(null);return;}
+    const ready=cachedCape(capeSource);
+    if(ready){CustomCape(ready);CapeError("");return;}
+    void loadCape(capeSource).then(canvas=>{if(active){CustomCape(canvas);CapeError("");}}).catch(e=>{if(active)CapeError(String(e));});
+    return ()=>{active=false;};
+  },[capeSource]);
+  useEffect(()=>{
+    let active=true; const sources=(w.account?.capes || []).map(v=>v.texture);let index=0;
+    const worker=async()=>{while(active&&index<sources.length){const source=sources[index++];await loadCape(source).catch(()=>{});}};
+    void Promise.all([worker(),worker()]);return ()=>{active=false;};
+  },[w.account?.id,w.account?.capes]);
+  const capeDirty = official
+    ? (capeOn ? capeChoice : "") !== (w.account?.capeId || "")
+    : !!capeTexture || (!capeOn && !!w.account?.cape);
+  async function applyCape() {
+    const accountId = w.account?.id;
+    if (!accountId || capeBusy) return;
+    CapeBusy(true);
+    CapeError("");
+    try {
+      const result = await api<{ account: Account; remote: boolean }>(
+        "apply_cape",
+        {
+          accountId,
+          capeId: capeOn ? capeChoice : "",
+          ...(capeOn && capeTexture ? { texture: capeTexture } : {}),
+        },
+      );
+      w.updateAccount(result.account);
+      CapeTexture("");
+    } catch (e) {
+      CapeError(String(e).replace(/^Error: /, ""));
+    } finally {
+      CapeBusy(false);
+    }
+  }
   const [importOpen, ImportOpen] = useState(false),
     [dropped, Dropped] = useState<File>(),
     [drag, Drag] = useState(false),
@@ -107,7 +168,10 @@ export function Skin() {
       Unavailable(true);
       Mode("2D");
     }, []),
-    ready = useCallback(() => Loaded(true), []),
+    ready = useCallback(() => {
+      Loaded(true);
+      RenderError("");
+    }, []),
     imageError = useCallback((s: string) => RenderError(s), []);
   const entries = [defaultEntry, ...w.skins].filter((e) =>
     e.name.toLowerCase().includes(query.toLowerCase()),
@@ -124,7 +188,11 @@ export function Skin() {
   }
   async function capeFile(file: File) {
     try {
-      CustomCape(await decodeCape(file));
+      await decodeCape(file);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let binary = "";
+      for (const byte of bytes) binary += String.fromCharCode(byte);
+      CapeTexture("data:image/png;base64," + btoa(binary));
       CapeOn(true);
       RenderError("");
     } catch (e) {
@@ -159,10 +227,22 @@ export function Skin() {
           <h1>皮肤</h1>
           <p>查看、导入和管理你的 Minecraft 皮肤。</p>
         </div>
-        <Button primary onClick={openImport}>
-          <Plus size={16} />
-          导入皮肤
-        </Button>
+        <div className="row">
+          {w.account?.kind !== "offline" && w.account && (
+            <Button
+              busy={w.syncing}
+              disabled={w.applying || capeBusy}
+              onClick={() => void w.sync()}
+            >
+              <RotateCcw size={15} />
+              同步账号外观
+            </Button>
+          )}
+          <Button primary onClick={openImport}>
+            <Plus size={16} />
+            导入皮肤
+          </Button>
+        </div>
       </div>
       <section className="wardrobe-studio">
         <div className="wardrobe-stage-wrap">
@@ -307,7 +387,11 @@ export function Skin() {
             </p>
             <span className="wardrobe-account">
               {w.account?.name ?? "本地预览"}
-              {w.account?.kind === "microsoft" ? " · 正版账号" : " · 本地皮肤"}
+              {official
+                ? " · 正版账号"
+                : external
+                  ? " · 外置账号"
+                  : " · 本地皮肤"}
             </span>
           </div>
           <div className="wardrobe-settings">
@@ -349,15 +433,46 @@ export function Skin() {
               )}
               {section === "披风" && (
                 <>
+                  <h3>
+                    {official ? "正版披风" : external ? "外置披风" : "本地披风"}
+                  </h3>
+                  {official && (
+                    <ChoiceSelect
+                      aria-label="账号拥有的披风"
+                      value={capeChoice}
+                      disabled={capeBusy || w.syncing}
+                      onValueChange={(value) => {
+                        CapeChoice(value);
+                        CapeOn(!!value);
+                      }}
+                    >
+                      <option value="">不佩戴披风</option>
+                      {(w.account?.capes || []).map((cape) => (
+                        <option key={cape.id} value={cape.id}>
+                          {cape.name}
+                        </option>
+                      ))}
+                    </ChoiceSelect>
+                  )}
+                  {official && !w.account?.capes?.length && (
+                    <p>当前正版账号没有可用披风。</p>
+                  )}
                   <div className="wardrobe-setting-row">
                     <span>
-                      显示披风<small>仅用于本地预览</small>
+                      显示披风
+                      <small>
+                        {official
+                          ? "应用后同步正版档案"
+                          : external
+                            ? "应用后同步认证服务器"
+                            : "本地预览"}
+                      </small>
                     </span>
                     <Switch
                       label="显示披风"
                       on={capeOn}
                       change={(on) => {
-                        if (on && !customCape) {
+                        if (on && !capeSource && !official) {
                           chooseCape();
                           return;
                         }
@@ -372,13 +487,32 @@ export function Skin() {
                       Equipment(v === "披风" ? "cape" : "elytra")
                     }
                   />
-                  <p>
-                    {customCape
-                      ? "已加载你导入的披风"
-                      : "未导入披风。请选择披风 PNG 文件。"}
-                  </p>
-                  <Button onClick={chooseCape}>导入披风 PNG</Button>
-                  <small>披风和鞘翅使用同一张贴图，仅用于本地预览。</small>
+                  {!official && (
+                    <Button
+                      disabled={!capeWritable || capeBusy || w.syncing}
+                      onClick={chooseCape}
+                    >
+                      导入披风 PNG
+                    </Button>
+                  )}
+                  {external && !capeWritable && (
+                    <small>此皮肤站未开放披风修改权限。</small>
+                  )}
+                  <Button
+                    primary
+                    busy={capeBusy}
+                    disabled={
+                      !capeDirty ||
+                      !w.account ||
+                      !capeWritable ||
+                      w.syncing ||
+                      w.applying
+                    }
+                    onClick={() => void applyCape()}
+                  >
+                    应用披风
+                  </Button>
+                  {capeError && <p role="alert">{capeError}</p>}
                 </>
               )}
               {section === "动画" && (
@@ -394,7 +528,9 @@ export function Skin() {
                       className="input"
                       aria-label="预览动作"
                       value={motion}
-                      onValueChange={(selectedValue) => Motion(selectedValue as SkinMotion)}
+                      onValueChange={(selectedValue) =>
+                        Motion(selectedValue as SkinMotion)
+                      }
                     >
                       {["站立", "行走", "奔跑", "飞行", "静止"].map((n) => (
                         <option key={n} value={n}>
@@ -413,13 +549,20 @@ export function Skin() {
           <div className="wardrobe-apply">
             <p>
               {w.account?.kind === "microsoft"
-                ? "标准皮肤可更新正版档案；HD 仅本地预览。"
-                : "应用到本地预览；正版换肤需使用微软账号。"}
+                ? "应用后同步更新正版账号皮肤。"
+                : external
+                  ? "应用后同步更新外置账号皮肤。"
+                  : "应用到当前离线角色。"}
             </p>
             <Button
               primary
               busy={w.applying}
-              disabled={!w.dirty}
+              disabled={
+                !w.dirty ||
+                w.syncing ||
+                capeBusy ||
+                (external && !w.account?.uploadableTextures?.includes("skin"))
+              }
               onClick={() => void w.apply()}
             >
               <Check size={16} />
