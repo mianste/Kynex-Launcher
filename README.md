@@ -3,13 +3,13 @@
   <h1>Kynex Launcher</h1>
   <p>从版本管理到进入游戏，把你的 Minecraft 冒险放在同一个窗口。</p>
   <p>
-    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/updater-stable"><img alt="下载正式版 v1.2.4" src="https://img.shields.io/badge/Download-v1.2.4-3d7c88?style=for-the-badge"></a>
+    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/v1.3.2"><img alt="下载正式版 v1.3.2" src="https://img.shields.io/badge/Download-v1.3.2-3d7c88?style=for-the-badge"></a>
     <img alt="Windows 10 / 11 x64" src="https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-517783?style=for-the-badge">
     <a href="LICENSE"><img alt="公开代码采用 MIT" src="https://img.shields.io/badge/Source-MIT-6f9f94?style=for-the-badge"></a>
   </p>
   <p>
-    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/updater-stable">下载正式版 v1.2.4</a> ·
-    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/updater-beta">下载预览版 beta 1.2.4</a> ·
+    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/v1.3.2">下载正式版 v1.3.2</a> ·
+    <a href="https://github.com/mianste/Kynex-Launcher/releases/tag/updater-beta">下载预览版 beta 1.2.5</a> ·
     <a href="https://github.com/mianste/Kynex-Launcher/issues">反馈问题</a> ·
     <a href="https://afdian.com/a/keke_657">爱发电</a>
   </p>
@@ -51,7 +51,7 @@ Kynex Launcher，简称 **KXL**，把游戏启动、版本管理、整合包导�
 
 ## 下载与使用
 
-前往 **[Releases 下载正式版 v1.2.4](https://github.com/mianste/Kynex-Launcher/releases/tag/updater-stable)**，选择 `Kynex.Launcher.v1.2.4.Setup.exe`。安装包适用于 Windows 10 / 11（64 位）。
+前往 **[Releases 下载正式版 v1.3.2](https://github.com/mianste/Kynex-Launcher/releases/tag/v1.3.2)**，选择 `Kynex.Launcher.v1.3.2.Setup.exe`。安装包适用于 Windows 10 / 11（64 位）。
 
 预览版请前往 [beta 1.2.4 发布页](https://github.com/mianste/Kynex-Launcher/releases/tag/updater-beta)，选择 `Kynex.Launcher.beta.1.2.4.Setup.exe`。已安装旧版本的用户可在启动器中检查更新，正式版与预览版分别使用各自更新通道。
 
@@ -59,7 +59,7 @@ Kynex Launcher，简称 **KXL**，把游戏启动、版本管理、整合包导�
 
 ## 相关资源
 
-- [程序下载](https://github.com/mianste/Kynex-Launcher/releases/tag/updater-stable)：获取已发布的安装包。
+- [程序下载](https://github.com/mianste/Kynex-Launcher/releases/tag/v1.3.2)：获取已发布的安装包。
 - [问题反馈](https://github.com/mianste/Kynex-Launcher/issues)：报告问题或提出建议。
 - [支持开发](https://afdian.com/a/keke_657)：通过爱发电支持 KXL。
 
@@ -91,3 +91,9 @@ pnpm tauri build
 公开源码采用 [MIT License](LICENSE)。第三方依赖与素材保留各自权利，详见 [第三方许可声明](docs/THIRD-PARTY-NOTICES.txt)。未公开模块不属于本仓库的许可范围。
 
 本项目与 Mojang、Microsoft、PCL 无关联。请通过官方渠道购买 Minecraft。
+
+## 正式版 v1.3.2（2026-11-09）
+
+[完整更新日志](CHANGELOG.md)。旧更新私钥已丢失，经确认启用新的更新签名；旧版用户请手动覆盖安装 v1.3.2 一次，之后继续自动更新。
+
+新版正式更新源：[stable-v2.json](https://github.com/mianste/Kynex-Launcher/releases/download/updater-stable/stable-v2.json)。旧 stable.json 保留原内容。公开源码仍保持上述公开范围，不包含私有模块或任何私钥。
