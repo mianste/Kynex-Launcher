@@ -14,7 +14,9 @@ import {
   Empty,
 } from "../components/ui";
 import { useStore, guarded, launch } from "../store";
-import { api, desktop, external, saveFile } from "../lib/bridge";
+import { api, desktop, external, pickFile } from "../lib/bridge";
+import { parseInstallTarget } from "../lib/installTarget";
+import { ExportPack } from "../features/library/ExportPack";
 import type {
   Instance,
   Loader,
@@ -28,7 +30,11 @@ import { defaultSkin } from "../features/skin/textures";
 import { SkinSprite } from "../features/skin/SkinSprite";
 import { useMicrosoftLogin } from "../features/account/useMicrosoftLogin";
 import { MotionPresence } from "../components/ui/Motion";
-import { LoaderIcon, loaderLabels } from "../components/ui/LoaderIcon";
+import {
+  LoaderIcon,
+  loaderLabels,
+  InstanceIcon,
+} from "../components/ui/LoaderIcon";
 const loaderNames: Loader[] = [
   "vanilla",
   "fabric",
@@ -56,8 +62,13 @@ function ModalContent({ kind, data }: { kind: string; data?: string }) {
   switch (kind) {
     case "versions":
       return <Versions />;
-    case "install":
-      return <Install version={data ?? "1.20.1"} />;
+    case "install": {
+      // 下载页可以直接把「游戏版本|加载器」带进安装窗口，省去再选一次。
+      const { version, preset } = parseInstallTarget(data);
+      return (
+        <Install version={version} preset={preset as Loader | undefined} />
+      );
+    }
     case "login":
       return <Login />;
     case "instance-settings":
@@ -65,7 +76,7 @@ function ModalContent({ kind, data }: { kind: string; data?: string }) {
     case "pack":
       return <Pack path={data ?? ""} />;
     case "export":
-      return <Export id={data} />;
+      return <ExportPack id={data} />;
     case "remove-account":
       return <RemoveAccount id={data ?? ""} />;
     case "remove-instance":
@@ -107,7 +118,7 @@ function Versions() {
               className={i.id === selected ? "on" : ""}
               onClick={() => S(i.id)}
             >
-              <div className="mini-cube" />
+              <InstanceIcon instance={i} className="instance-picker-icon" />
               <div className="grow">
                 <b>{i.name}</b>
                 <small className="mono">
@@ -140,19 +151,61 @@ type OptiFineRelease = {
   patch: string;
   forge: string | null;
 };
-function Install({ version }: { version: string }) {
+function Install({ version, preset }: { version: string; preset?: Loader }) {
   const s = useStore();
-  const [loader, L] = useState<Loader>("vanilla");
+  const [loader, L] = useState<Loader>(preset ?? "vanilla");
   const [versions, V] = useState<string[]>([]);
   const [lv, LV] = useState("");
   const [name, N] = useState(`${version}-Vanilla`);
   const [error, E] = useState("");
   const [loading, B] = useState(false);
   const [installing, I] = useState(false);
+  const [loaderVersions, LoaderVersions] = useState<
+    Partial<Record<Loader, { rows?: string[]; error?: string }>>
+  >({});
+  const [loaderRetry, LoaderRetry] = useState(0);
   const [optifine, setOptifine] = useState<OptiFineRelease[]>([]);
   const [optifineLoading, setOptifineLoading] = useState(false);
   const [optifineError, setOptifineError] = useState("");
   const [addon, setAddon] = useState("");
+  useEffect(() => {
+    L(preset ?? "vanilla");
+    LoaderVersions({});
+  }, [version, preset]);
+  useEffect(() => {
+    // 打开安装窗口时先预热各加载器目录，缩短首次查询等待。
+    if (desktop) void api("warm_loader_catalogs").catch(() => {});
+  }, []);
+  useEffect(() => {
+    let active = true;
+    if (desktop)
+      for (const kind of ["fabric", "quilt", "forge", "neoforge"] as const) {
+        void api<string[]>("loaders", {
+          game: version,
+          loader: kind,
+          force: loaderRetry > 0,
+        })
+          .then((rows) => {
+            if (active)
+              LoaderVersions((before) => ({
+                ...before,
+                [kind]: Array.isArray(rows)
+                  ? { rows }
+                  : { error: "版本列表无效" },
+              }));
+          })
+          .catch(() => {
+            if (active)
+              LoaderVersions((before) => ({
+                ...before,
+                [kind]: { error: "暂时无法查询" },
+              }));
+          });
+      }
+    return () => {
+      active = false;
+    };
+  }, [version, loaderRetry]);
   useEffect(() => {
     let active = true;
     setOptifine([]);
@@ -173,7 +226,7 @@ function Install({ version }: { version: string }) {
     return () => {
       active = false;
     };
-  }, [version]);
+  }, [version, loaderRetry]);
   useEffect(() => {
     N(
       `${version}-${loader === "vanilla" ? "Vanilla" : loader[0].toUpperCase() + loader.slice(1)}`,
@@ -182,27 +235,19 @@ function Install({ version }: { version: string }) {
     LV("");
     E("");
     setAddon("");
+  }, [loader, version]);
+  useEffect(() => {
+    E("");
     B(false);
     if (loader === "vanilla" || loader === "optifine" || !desktop) return;
-    let active = true;
-    B(true);
-    api<string[]>("loaders", { game: version, loader })
-      .then((v) => {
-        if (active) {
-          V(v);
-          LV(v[0] ?? "");
-        }
-      })
-      .catch((e) => {
-        if (active) E(String(e));
-      })
-      .finally(() => {
-        if (active) B(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [loader, version]);
+    const result = loaderVersions[loader];
+    B(!result);
+    V(result?.rows ?? []);
+    LV((before) =>
+      result?.rows?.includes(before) ? before : (result?.rows?.[0] ?? ""),
+    );
+    if (result?.error) E("暂时无法查询此加载器的版本，请重新检测。");
+  }, [loader, version, loaderVersions[loader]]);
   useEffect(() => {
     if (loader === "optifine") LV(optifine[0]?.value ?? "");
   }, [loader, optifine]);
@@ -267,6 +312,13 @@ function Install({ version }: { version: string }) {
             key={l}
             title={loaderLabels[l]}
             aria-label={loaderLabels[l]}
+            disabled={
+              installing ||
+              (l !== "vanilla" &&
+                (l === "optifine"
+                  ? optifineLoading || !optifine.length
+                  : !loaderVersions[l]?.rows?.length))
+            }
             onClick={() => L(l)}
             className={loader === l ? "on" : ""}
           >
@@ -283,10 +335,36 @@ function Install({ version }: { version: string }) {
                 }[l]
               }
             </span>
+            {l !== "vanilla" && (
+              <small className="loader-availability">
+                {l === "optifine"
+                  ? optifineLoading
+                    ? "查询中…"
+                    : optifineError
+                      ? "查询失败"
+                      : optifine.length
+                        ? "可用"
+                        : "无兼容版本"
+                  : loaderVersions[l]?.error
+                    ? "查询失败"
+                    : !loaderVersions[l]
+                      ? "查询中…"
+                      : loaderVersions[l]?.rows?.length
+                        ? "可用"
+                        : "无兼容版本"}
+              </small>
+            )}
             {loader === l && <Check size={14} />}
           </button>
         ))}
       </div>
+      {(Object.values(loaderVersions).some((value) => value?.error) ||
+        optifineError) && (
+        <div className="loader-query-retry">
+          <span>部分加载器查询失败，原版安装仍可使用。</span>
+          <Button onClick={() => LoaderRetry((n) => n + 1)}>重新检测</Button>
+        </div>
+      )}
       {loader === "optifine" ? (
         <Field
           label="OptiFine 版本"
@@ -419,7 +497,7 @@ function Install({ version }: { version: string }) {
       )}
       {installing && (
         <div className="notice">
-          正在安装，请留意窗口底部的真实任务进度。
+          正在安装，可在窗口底部查看进度。
           <Button onClick={() => guarded(() => api("cancel"))}>取消任务</Button>
         </div>
       )}
@@ -429,9 +507,11 @@ function Install({ version }: { version: string }) {
 export function SettingsFields({
   value,
   change,
+  allowCustom = false,
 }: {
   value: InstanceSettings;
   change: (v: InstanceSettings) => void;
+  allowCustom?: boolean;
 }) {
   const set = (v: Partial<InstanceSettings>) => change({ ...value, ...v });
   return (
@@ -479,8 +559,31 @@ export function SettingsFields({
           <option value="all">全部独立</option>
           <option value="modded">仅模组实例独立</option>
           <option value="shared">共享目录</option>
+          {allowCustom && <option value="custom">自定义运行目录</option>}
         </ChoiceSelect>
       </Field>
+      {allowCustom && value.isolation === "custom" && (
+        <Field label="运行目录">
+          <div className="actions">
+            <Input
+              aria-label="版本运行目录"
+              value={value.gameDirectory || ""}
+              placeholder="存档、模组和配置所在的文件夹"
+              onChange={(e) => set({ gameDirectory: e.target.value })}
+            />
+            <Button
+              onClick={() =>
+                void guarded(async () => {
+                  const path = await pickFile([], true);
+                  if (path) set({ gameDirectory: path });
+                })
+              }
+            >
+              浏览…
+            </Button>
+          </div>
+        </Field>
+      )}
     </div>
   );
 }
@@ -524,9 +627,9 @@ function VersionSettings({ id }: { id?: string }) {
         </>
       }
     >
-      <SettingsFields value={value} change={V} />
+      <SettingsFields value={value} change={V} allowCustom />
       <div className="notice">
-        仅对此版本生效。共享目录中的文件会被使用同一共享目录的版本共同读取。
+        仅对此版本生效。更改目录后使用新位置的文件，原目录中的存档和模组会保留。
       </div>
     </Modal>
   );
@@ -989,18 +1092,21 @@ function Pack({ path }: { path: string }) {
             onClick={() =>
               guarded(async () => {
                 B(true);
+                s.hide();
                 try {
-                  s.hide();
                   const instance = await api<Instance>("import_pack", {
                     path,
                     name,
                     settings: s.settings,
                     curseforgeKey: s.settings.curseforgeKey,
                   });
-                  await s.refresh();
                   useStore.setState({ selected: instance.id });
                   s.notify("整合包安装完成");
+                  s.setPage("library");
                 } finally {
+                  // 即使资源下载阶段失败，实例目录可能已经建好；先刷新再报错，
+                  // 避免“装完了但版本列表里没有”。
+                  await s.refresh().catch(() => {});
                   B(false);
                 }
               })
@@ -1039,105 +1145,12 @@ function Pack({ path }: { path: string }) {
     </Modal>
   );
 }
-function Export({ id }: { id?: string }) {
-  const s = useStore();
-  const [format, setFormat] = useState("mrpack");
-  const [include, I] = useState(["mods", "config"]);
-  const [busy, B] = useState(false);
-  return (
-    <Modal
-      title="导出整合包"
-      footer={
-        <>
-          <Button onClick={s.hide}>取消</Button>
-          <Button
-            primary
-            busy={busy}
-            onClick={() =>
-              guarded(async () => {
-                const path = await saveFile(
-                  format === "mrpack"
-                    ? "Minecraft-modpack.mrpack"
-                    : "Minecraft-modpack.zip",
-                );
-                if (!path) return;
-                B(true);
-                try {
-                  await api("export_pack", {
-                    id: id ?? s.selected,
-                    path,
-                    include,
-                    format,
-                  });
-                  s.hide();
-                  s.notify("整合包已导出");
-                } finally {
-                  B(false);
-                }
-              })
-            }
-          >
-            选择位置并导出
-          </Button>
-        </>
-      }
-    >
-      <p>选择你要分享的内容。账号、访问令牌和启动日志不会包含在包中。</p>
-      <div className="export-checks">
-        {[
-          ["mods", "Mod"],
-          ["config", "配置"],
-          ["saves", "存档"],
-          ["resourcepacks", "资源包"],
-          ["shaderpacks", "光影"],
-          ["datapacks", "数据包"],
-        ].map(([v, t]) => (
-          <label key={v}>
-            <input
-              type="checkbox"
-              checked={include.includes(v)}
-              onChange={() =>
-                I((a) => (a.includes(v) ? a.filter((x) => x !== v) : [...a, v]))
-              }
-            />
-            {t}
-          </label>
-        ))}
-      </div>
-      <Field label="格式">
-        <ChoiceSelect
-          className="input"
-          aria-label="整合包导出格式"
-          value={format}
-          onValueChange={(selectedValue) => setFormat(selectedValue)}
-        >
-          <option value="mrpack">
-            Modrinth MRPACK（推荐，主流启动器通用）
-          </option>
-          <option value="universal">
-            通用 ZIP（Modrinth + CurseForge 双清单）
-          </option>
-          <option value="curseforge">CurseForge ZIP</option>
-          <option value="multimc">MultiMC / Prism ZIP</option>
-          <option value="kynex">KXL ZIP（旧版兼容）</option>
-        </ChoiceSelect>
-        <small>
-          MRPACK、CurseForge 和 MultiMC
-          使用对应的标准目录结构，可在支持该格式的启动器中导入。
-        </small>
-      </Field>
-      <div className="notice">
-        导出包包含所选目录中的文件，分享前请检查模组分发许可与存档隐私。
-      </div>
-    </Modal>
-  );
-}
 function RemoveInstance({ id }: { id: string }) {
   const s = useStore();
   const instance = s.instances.find((i) => i.id === id);
   return (
     <Modal
-      title="删除版本"
+      title={instance?.externalVersion ? "移除版本" : "删除版本"}
       footer={
         <>
           <Button onClick={s.hide}>取消</Button>
@@ -1148,18 +1161,26 @@ function RemoveInstance({ id }: { id: string }) {
                 await api("delete_instance", { id });
                 await s.refresh();
                 s.hide();
-                s.notify(`已删除 ${instance?.name ?? "版本"}`);
+                s.notify(
+                  `已${instance?.externalVersion ? "移除" : "删除"} ${instance?.name ?? "版本"}`,
+                );
               })
             }
           >
-            删除版本
+            {instance?.externalVersion ? "移除版本" : "删除版本"}
           </Button>
         </>
       }
     >
       <p>
-        删除 {instance?.name ?? "这个版本"} 的整个实例目录，包括其中的
-        Mod、资源包、存档和配置，且无法恢复。
+        {instance?.externalVersion ? (
+          `从列表中移除 ${instance.name}，原游戏目录中的版本、存档和模组会保留。`
+        ) : (
+          <>
+            删除 {instance?.name ?? "这个版本"} 的整个实例目录，包括其中的
+            Mod、资源包、存档和配置，且无法恢复。自定义运行目录中的文件会保留。
+          </>
+        )}
       </p>
       <div className="notice">
         账号资料、共享目录和其他实例不会被删除。正在运行的游戏需要先退出。

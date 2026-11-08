@@ -1,17 +1,24 @@
 {
-  "channel": "beta",
-  "version": "1.2.4-beta.1.2.4",
-  "displayVersion": "beta 1.2.4",
-  "label": "开发者预览版 beta 1.2.4",
+  "channel": "stable",
+  "version": "1.3.2",
+  "displayVersion": "v1.3.2",
+  "label": "公开构建 v1.3.2",
   "repositoryUrl": "https://github.com/mianste/Kynex-Launcher",
   "supportUrl": "https://afdian.com/a/keke_657",
   "changes": [
-    "统一检查在线安装、本地整合包导入及在线整合包下载的 Java 与依赖配置。",
-    "按游戏版本自动匹配 Java 8 / 17 / 21 / 25，修复高版本 Java 不兼容导致的启动失败。",
-    "修复 Forge、NeoForge、Fabric、Quilt 等加载器合并依赖时平台条目互相覆盖。",
-    "启动已有实例时自动补回缺失的平台依赖，修复 Windows LWJGL 缺库等问题，保留模组与存档。"
+    "版本管理支持添加、切换多个游戏目录，读取已有版本并保存选择。",
+    "单个版本可自定义运行目录，启动、模组、资源包、光影、存档、数据包和导出统一使用所选路径。",
+    "修复自动旋转开关打开后不转动的问题，拖动结束、切换窗口或 2D/3D 后均可恢复。",
+    "优化资源列表加载，复用缓存、合并重复请求并预取下一页；快来源先显示，后到结果不再打乱已有条目。",
+    "修复五类资源的短字符、中文和符号搜索，以及旧请求覆盖新结果的问题。",
+    "资源始终保留“安装”入口，同一个资源可以连续安装到多个版本。",
+    "修复签名 Forge 安装器报错、旧 CurseForge CDN 地址被拒，以及部分下载的证书链兼容问题。",
+    "整合包文件增加校验缓存与备用地址，下载失败重试时复用已完成文件。",
+    "全透明主题适配面板、弹窗和下拉菜单，修复展开选项时内容重叠，减少自动字色跳动并改善窗口圆角。",
+    "新闻增加加载占位与图片加载效果，修复顶部空白",
+    "优化皮肤外观同步、按钮与弹窗动效，精简界面提示。"
   ],
-  "productName": "Kynex Launcher Beta",
-  "identifier": "com.keke.kynex.beta",
-  "mainBinaryName": "Kynex Launcher Beta"
+  "productName": "Kynex Launcher Public",
+  "identifier": "com.keke.kynex.public",
+  "mainBinaryName": "Kynex Launcher Public"
 }

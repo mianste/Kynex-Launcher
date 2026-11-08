@@ -52,6 +52,7 @@ fn client() -> Result<reqwest::Client> {
 async fn bytes(http: &reqwest::Client, url: &str, limit: usize) -> Result<Vec<u8>> {
     let response = http
         .get(public_url(url)?)
+        .timeout(Duration::from_secs(12))
         .send()
         .await
         .map_err(|_| "未能连接远端，请检查网络后重试")?;

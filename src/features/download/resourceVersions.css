@@ -1,0 +1,221 @@
+.app .resource-version-modal {
+  width: min(800px, calc(100vw - 48px));
+}
+.resource-version-modal > header,
+.resource-version-modal > footer {
+  flex-shrink: 0;
+}
+.resource-version-picker {
+  display: grid;
+  gap: 20px;
+}
+.resource-version-intro h3 {
+  font-size: 16px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.resource-version-intro p {
+  margin-top: 4px;
+  font-size: 12px;
+}
+.resource-version-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 24px;
+  min-height: 0;
+}
+.resource-version-catalogue,
+.resource-version-detail {
+  min-width: 0;
+}
+.resource-version-list-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.resource-version-list-heading > span {
+  color: var(--text2);
+  font-size: 11px;
+}
+.resource-version-list {
+  max-height: 344px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.resource-version-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--line);
+}
+.resource-version-row:last-child {
+  border-bottom: 0;
+}
+.resource-version-row:hover {
+  background: var(--accent-low);
+}
+.resource-version-row:has(:checked) {
+  background: var(--accent-low);
+}
+.resource-version-row:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.resource-version-row input[type="radio"] {
+  appearance: none;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+  border: 1px solid var(--text2);
+  border-radius: 50%;
+  background: var(--control-bg);
+}
+.resource-version-row input[type="radio"]:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--control-bg);
+}
+.resource-version-row input[type="radio"]:focus-visible {
+  outline: none;
+}
+.resource-version-row-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.resource-version-row-copy strong {
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.resource-version-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--text2);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.resource-version-row-meta time {
+  font-variant-numeric: tabular-nums;
+}
+.resource-version-detail {
+  max-height: 372px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 8px;
+  scrollbar-gutter: stable;
+}
+.resource-version-detail h4 {
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.6;
+}
+.resource-version-detail dl {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.resource-version-detail dl > div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+}
+.resource-version-detail dt {
+  color: var(--text2);
+}
+.resource-version-detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.resource-version-games,
+.resource-version-file,
+.resource-version-requirements {
+  margin-top: 20px;
+}
+.resource-version-detail p {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.resource-version-games details {
+  margin-top: 8px;
+}
+.resource-version-games summary {
+  width: fit-content;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+.resource-version-requirements {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+.resource-version-requirements:empty {
+  display: none;
+}
+.resource-version-requirements .field {
+  gap: 4px;
+  margin: 0;
+}
+.resource-version-requirements .field > b {
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.6;
+}
+.resource-version-requirements .notice:not(.error) {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text2);
+}
+.resource-version-catalogue > .btn {
+  margin-top: 12px;
+}
+.resource-version-modal .btn:not(.primary) {
+  background: var(--control-bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+/* 只有一个可用版本时不再放下拉框，直接给一张已选中的版本卡。 */
+.single-version {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--control-selected-edge);
+  border-radius: 14px;
+  background: var(--control-selected);
+}
+.single-version-copy strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 650;
+}
+.single-version-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+  color: var(--text2);
+  font-size: 11px;
+}
+.single-version-warn {
+  color: var(--danger, #c2410c);
+}

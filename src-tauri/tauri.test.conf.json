@@ -1,0 +1,86 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Kynex Launcher",
+  "version": "1.2.2",
+  "identifier": "com.keke.kynex",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Kynex Launcher · 修复测试（未发布）",
+        "width": 1080,
+        "height": 720,
+        "minWidth": 1080,
+        "minHeight": 720,
+        "maxWidth": 1080,
+        "maxHeight": 720,
+        "center": true,
+        "decorations": false,
+        "maximizable": false,
+        "transparent": true,
+        "shadow": false,
+        "resizable": false,
+        "visible": false,
+        "dragDropEnabled": true,
+        "backgroundColor": "#00000000"
+      }
+    ],
+    "security": {
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "**"
+        ]
+      },
+      "csp": "default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' asset: http://asset.localhost blob: data: https://*.music.126.net https://*.music.163.com; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost; script-src 'self'; object-src 'none'; base-uri 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "shortDescription": "Kynex Launcher 我的世界启动器",
+    "windows": {
+      "nsis": {
+        "displayLanguageSelector": true,
+        "languages": [
+          "SimpChinese",
+          "English"
+        ],
+        "template": "../installer/tauri-installer-template.nsi",
+        "installerIcon": "icons/icon.ico",
+        "sidebarImage": "../installer/assets/sidebar.bmp",
+        "headerImage": "../installer/assets/header.bmp"
+      }
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "createUpdaterArtifacts": true,
+    "resources": {
+      "../docs/THIRD-PARTY-NOTICES.txt": "THIRD-PARTY-NOTICES.txt",
+      "../docs/licenses/": "licenses/"
+    }
+  },
+  "mainBinaryName": "Kynex Launcher",
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI1MzE0NjE4REFENDhDMTMKUldRVGpOVGFHRVl4dGNvSHpGNVJDSDJJRDY0U2dUcll4NmVZUDBSclpEYi92OTBMb1FNRHRLYWsK",
+      "endpoints": [],
+      "windows": {
+        "installMode": "passive"
+      },
+      "requireSignedVersion": true
+    }
+  }
+}

@@ -1,0 +1,120 @@
+/* All material colours are resolved where the opacity slider is applied. */
+.app {
+  --control-selected: color-mix(in srgb, var(--accent) calc(var(--ui-alpha) * 0.24), var(--glass));
+  --control-hover: color-mix(in srgb, var(--surface) var(--ui-alpha), transparent);
+  --accent-low: color-mix(in srgb, var(--accent) calc(var(--ui-alpha) * 0.19), transparent);
+  --glass-highlight: color-mix(in srgb, var(--surface) calc(var(--ui-alpha) * 0.12), transparent);
+  --reading-surface: var(--glass);
+}
+
+:root[data-theme] .app :is(
+  .choice-popover, .instance-select-menu, .dropzone, .log-input textarea,
+  .resource-filters, .native-login, .music-empty, .music-queue,
+  .music-platform-grid > button, .music-platform-login, .music-new-playlist,
+  .server-row, .add-account, .install-summary, .pack-summary,
+  .wardrobe-studio, .wardrobe-inspector, .wardrobe-library,
+  .wardrobe-card, .wardrobe-card-menu, .wardrobe-import,
+  .wardrobe-stage-wrap, .wardrobe-camera, .wardrobe-front-back button,
+  .wardrobe-drop-overlay, .skin-import-panel, .skin-import-zone,
+  .download-task-card, .resource-selection-bar, .single-version,
+  .version-options > button, .install-addon, .notice, .toast
+) {
+  background: var(--glass);
+  backdrop-filter: blur(var(--ui-blur));
+  -webkit-backdrop-filter: blur(var(--ui-blur));
+}
+.app .wardrobe-page {
+  --card: var(--glass);
+  --studio-bg: var(--glass);
+  --studio-line: var(--line);
+}
+.app :is(.search, .input, .taskbar, .other-game, .detail-cover, .badge,
+  .music-platform-search, .music-platform-login, .music-player-bar,
+  .music-track-list, .music-sidebar, .skin-upload-area, .skin-saved-entry) {
+  backdrop-filter: blur(var(--ui-blur));
+  -webkit-backdrop-filter: blur(var(--ui-blur));
+}
+:root[data-theme] .app :is(.badge.ok, .badge.warn, .badge.bad,
+  .news-image-fallback, .avatar) { background: var(--glass); }
+:root[data-theme] .app .btn.primary,
+:root[data-theme] .app .btn.primary:hover {
+  background: color-mix(in srgb, var(--accent) var(--ui-alpha), transparent);
+}
+:root[data-theme] .app .switch { background: var(--glass); }
+:root[data-theme] .app .switch.on { background: var(--control-selected); }
+:root[data-theme] .app .settings-page :is(.setting-control, .window-size-control, .window-presets) button {
+  background: var(--glass);
+}
+.app .wardrobe-camera > span { background: var(--glass); }
+.app .wardrobe-page :is(button, [role="tab"], .wardrobe-account, .wardrobe-eyebrow) {
+  font-size: 12px;
+}
+.app .wardrobe-stage-wrap { color: var(--text); }
+.app .wardrobe-stage { background: transparent; }
+.app .wardrobe-camera button,
+.app .wardrobe-front-back button,
+.app .wardrobe-stage-top :is(small, [role="tab"]),
+.app .wardrobe-stage-bottom,
+.app .wardrobe-stage .skin-flat-pair figure,
+.app .wardrobe-loading { color: var(--text2); }
+.app .wardrobe-stage-top [role="tab"].on { color: var(--text); }
+.app .wardrobe-stage-top [role="tablist"] { background: var(--glass); }
+.app .wallpaper.plain { background: var(--bg) !important; }
+.app > .overlay,
+:root[data-theme="light"] .app > .overlay {
+  background: color-mix(in srgb, var(--bg) calc(var(--ui-alpha) * 0.3), transparent);
+  backdrop-filter: blur(var(--ui-blur));
+  -webkit-backdrop-filter: blur(var(--ui-blur));
+}
+
+/* Text stays fully opaque; only its ink changes with the wallpaper. */
+.app [data-adaptive-ink="true"] {
+  color: var(--adaptive-ink) !important;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+  transition: color 180ms ease;
+}
+.app :is(input, textarea)[data-adaptive-ink]::placeholder {
+  color: var(--adaptive-ink);
+  opacity: 0.85;
+}
+.app :is(.resource-row small, .project-meta, .project-original-description,
+  .resource-version-row-meta, .resource-version-list-heading > span,
+  .wardrobe-setting-panel p, .wardrobe-stage-bottom, .wardrobe-model-tip,
+  .choice-hint, .choice-option-hint) { font-size: 12px; line-height: 1.5; }
+.app .home-header :is(h1, p) { color: var(--text); text-shadow: none; }
+
+/* Menu and option colours follow the same opacity as the rest of the UI. */
+:root[data-theme] .app .choice-popover[role="listbox"] {
+  background: var(--glass);
+  backdrop-filter: blur(var(--ui-blur));
+  -webkit-backdrop-filter: blur(var(--ui-blur));
+  isolation: isolate;
+}
+
+/* The outer page owns scrolling and top spacing. */
+.app .news-page {
+  position: relative;
+  inset: auto;
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+  padding: 0 0 12px;
+  gap: 12px;
+}
+.app .news-page > .page-head { min-height: 40px; margin: 0; }
+.app .news-page .news-filter-row { margin: 0; }
+.app .news-page .news-feature { margin: 0; }
+.app .news-page .news-grid { align-items: stretch; }
+.app .other-games-title > .btn { margin-left: auto; padding: 4px 8px; }
+.music-session-account { display: grid; gap: 6px; margin-top: 8px; }
+.music-session-account > button { display: flex; align-items: center; gap: 8px; }
+
+/* Remove secondary help copy while retaining file names, versions and errors. */
+.app :is(.setting-label > small, .settings-card-head p, .target-instance-hint,
+  .wardrobe-model-tip, .wardrobe-mini-note, .wardrobe-fallback-note,
+  .skin-card-description, .home-shortcuts small, .home-music small,
+  .music-panel-head p, .music-empty > span, .news-inline-note,
+  .news-feed-status, .skin-import-zone small, .wardrobe-stage-top small,
+  .wardrobe-stage-bottom, .wardrobe-setting-row small, .wardrobe-apply > p,
+  .wardrobe-setting-panel > small, .wardrobe-import-result > div > small) { display: none; }

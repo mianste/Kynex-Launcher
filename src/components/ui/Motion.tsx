@@ -47,21 +47,8 @@ export function MotionPage({
   id: string;
   children: ReactNode;
 }) {
-  const surface = useRef<HTMLElement>(null);
-  useLayoutEffect(() => {
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const motion = surface.current?.animate(
-      [
-        { opacity: 0, transform: "translateY(10px)" },
-        { opacity: 1, transform: "none" },
-      ],
-      { duration: 240, easing: "cubic-bezier(.22,1,.36,1)" },
-    );
-    return () => motion?.cancel();
-  }, [id]);
   return (
     <section
-      ref={surface}
       key={id}
       className={`page-content ${id === "home" ? "home" : ""} page-entering`}
     >

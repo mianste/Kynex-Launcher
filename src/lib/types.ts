@@ -12,7 +12,7 @@ export type Page =
   | "components";
 export type Loader =
   "vanilla" | "fabric" | "quilt" | "forge" | "neoforge" | "optifine";
-export type Game = "java";
+export type Game = "java" | "bedrock" | "dungeons" | "dungeons2" | "legends";
 export interface Instance {
   id: string;
   name: string;
@@ -23,6 +23,10 @@ export interface Instance {
   path: string;
   lastPlayed?: string;
   icon?: string;
+  packIcon?: string;
+  packLogo?: string;
+  modpack?: boolean;
+  externalVersion?: string;
   settings: InstanceSettings;
 }
 export interface InstanceSettings {
@@ -30,7 +34,18 @@ export interface InstanceSettings {
   java: string;
   width: number;
   height: number;
-  isolation: "all" | "modded" | "shared";
+  isolation: "all" | "modded" | "shared" | "custom";
+  gameDirectory?: string;
+}
+export interface GameDirectory {
+  id: string;
+  name: string;
+  path: string;
+  available: boolean;
+}
+export interface GameDirectories {
+  activeId: string;
+  items: GameDirectory[];
 }
 export interface Account {
   id: string;
@@ -52,8 +67,10 @@ export interface GameVersion {
   url: string;
 }
 export interface Resource {
+  modIds?: string[];
   name: string;
   size: number;
+  modified?: number | null;
   enabled: boolean;
   order?: number;
   version?: string;
@@ -62,15 +79,22 @@ export interface Resource {
   icon_url?: string;
 }
 export interface Settings extends InstanceSettings {
+  updateMode: "manual" | "automatic";
+  checkUpdatesOnStartup: boolean;
   accent: string;
   wallpaper: string;
+  /** 全局界面背景材质不透明度（0–100）；不改变文字与图标透明度。 */
+  uiOpacity: number;
   theme: "dark" | "light" | "system";
   clientId: string;
   curseforgeKey: string;
   threads: number;
   downloadSource: "official" | "bmclapi";
+  /** 启动前写入 options.txt 的游戏语言；none 表示保持实例原样。 */
+  gameLanguage: "zh_cn" | "en_us" | "none";
 }
 export interface Task {
+  directoryId?: string;
   taskId?: string;
   name?: string;
   action?: string;

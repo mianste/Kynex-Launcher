@@ -78,7 +78,8 @@ export const MinecraftViewer = forwardRef<ViewerHandle, Props>(
       const v = viewer.current,
         h = host.current;
       if (!v || !h) return;
-      h.dataset.autoRotate = String(v.autoRotate);
+      h.dataset.autoRotate = String(idle.current?.active ?? false);
+      h.dataset.rotation = String(v.playerWrapper.rotation.y);
       h.dataset.distance = String(v.controls.getDistance());
       h.dataset.polarAngle = String(v.controls.getPolarAngle());
       h.dataset.equipment = v.playerObject.backEquipment ?? "none";
@@ -159,17 +160,27 @@ export const MinecraftViewer = forwardRef<ViewerHandle, Props>(
         activity();
       };
       const end = () => {
+        if (!idle.current?.interacting) return;
         if (idle.current) idle.current.interacting = false;
+        // skinview3d 只监听画布上的 mouseup；在画布外松开也要结束它的拖动状态。
+        c.dispatchEvent(new MouseEvent("mouseup"));
         activity();
       };
       const touch = () => activity();
       const moved = (e: PointerEvent) => {
         if (e.buttons) activity();
+        else if (idle.current?.interacting) end();
       };
       const visibility = () => {
         if (v)
           v.renderPaused = document.hidden || liveOptions.current.mode === "2D";
-        activity();
+        end();
+        if (
+          !document.hidden &&
+          liveOptions.current.mode === "3D" &&
+          liveOptions.current.rotate
+        )
+          idle.current?.resume(performance.now());
       };
       try {
         v = new SkinViewer({
@@ -192,7 +203,14 @@ export const MinecraftViewer = forwardRef<ViewerHandle, Props>(
         v.adjustCameraDistance();
         configureControls(v);
         nearestTextures(v);
-        idle.current = new IdleRotation(v, performance.now());
+        // Own the yaw in one frame loop. skinview3d's separate mouse flag can
+        // remain set after a drag ends outside its canvas and block autoRotate.
+        v.autoRotate = false;
+        idle.current = new IdleRotation(
+          v.playerWrapper.rotation,
+          performance.now(),
+        );
+        if (liveOptions.current.rotate) idle.current.resume(performance.now());
         v.controls.addEventListener("start", start);
         v.controls.addEventListener("end", end);
         v.controls.addEventListener("change", report);
@@ -201,6 +219,11 @@ export const MinecraftViewer = forwardRef<ViewerHandle, Props>(
         c.addEventListener("wheel", touch, { passive: true });
         c.addEventListener("webglcontextlost", contextLost);
         document.addEventListener("visibilitychange", visibility);
+        window.addEventListener("pointerup", end);
+        window.addEventListener("pointercancel", end);
+        window.addEventListener("blur", end);
+        window.addEventListener("focus", visibility);
+        c.addEventListener("lostpointercapture", end);
         motionQuery.addEventListener("change", changed);
         let reported = 0;
         const update = (now: number) => {
@@ -209,7 +232,6 @@ export const MinecraftViewer = forwardRef<ViewerHandle, Props>(
             now,
             liveOptions.current.rotate &&
               liveOptions.current.mode === "3D" &&
-              !motionQuery.matches &&
               !document.hidden,
           );
           if (now - reported > 200) {
@@ -249,6 +271,11 @@ export const MinecraftViewer = forwardRef<ViewerHandle, Props>(
         c.removeEventListener("wheel", touch);
         c.removeEventListener("webglcontextlost", contextLost);
         document.removeEventListener("visibilitychange", visibility);
+        window.removeEventListener("pointerup", end);
+        window.removeEventListener("pointercancel", end);
+        window.removeEventListener("blur", end);
+        window.removeEventListener("focus", visibility);
+        c.removeEventListener("lostpointercapture", end);
         v?.controls.removeEventListener("start", start);
         v?.controls.removeEventListener("end", end);
         v?.controls.removeEventListener("change", report);
@@ -281,7 +308,7 @@ export const MinecraftViewer = forwardRef<ViewerHandle, Props>(
           onModel?.(
             v.playerObject.skin.modelType === "slim" ? "Slim" : "Classic",
           );
-          activity();
+          idle.current?.resume(performance.now());
           report();
           v.render();
           onLoaded();
@@ -297,7 +324,6 @@ export const MinecraftViewer = forwardRef<ViewerHandle, Props>(
       const v = viewer.current;
       if (v && ready) {
         v.playerObject.skin.setOuterLayerVisible(outer);
-        activity();
         report();
       }
     }, [outer, ready]);
@@ -307,7 +333,6 @@ export const MinecraftViewer = forwardRef<ViewerHandle, Props>(
       if (cape) v.loadCape(cape, { backEquipment: equipment });
       else v.loadCape(null);
       nearestTextures(v);
-      activity();
       report();
     }, [cape, equipment, ready]);
     useEffect(() => {
@@ -323,13 +348,13 @@ export const MinecraftViewer = forwardRef<ViewerHandle, Props>(
               : motion === "飞行"
                 ? new FlyingAnimation()
                 : new IdleAnimation();
-      activity();
     }, [motion, ready, reduced]);
     useEffect(() => {
       const v = viewer.current;
       if (v && ready) {
         v.renderPaused = mode === "2D" || document.hidden;
-        activity();
+        if (rotate && mode === "3D" && !document.hidden)
+          idle.current?.resume(performance.now());
       }
     }, [mode, ready, rotate]);
     return (

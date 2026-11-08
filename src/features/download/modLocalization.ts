@@ -12,7 +12,7 @@ const translations: ModTranslation[] = [
   {
     match: ["sodium", "钠"],
     name: "钠",
-    description: "高性能渲染优化模组，显著改善游戏帧率与流畅度。",
+    description: "提高游戏帧率，减少卡顿。",
     tags: ["性能优化", "客户端"],
     search: "Sodium",
   },
@@ -122,21 +122,21 @@ const translations: ModTranslation[] = [
   {
     match: ["the-twilight-forest", "twilight forest", "暮色森林"],
     name: "暮色森林",
-    description: "加入大型冒险维度、遗迹、首领与完整探索流程。",
+    description: "添加暮色森林世界、迷宫和首领。",
     tags: ["冒险", "维度"],
     search: "Twilight Forest",
   },
   {
     match: ["create", "机械动力"],
     name: "机械动力",
-    description: "围绕旋转动力、自动化生产与机械装置构建的科技模组。",
+    description: "添加齿轮、传动轴和自动生产机器。",
     tags: ["科技", "自动化"],
     search: "Create",
   },
   {
     match: ["botania", "植物魔法"],
     name: "植物魔法",
-    description: "以花朵、魔力与自然装置为核心的魔法科技模组。",
+    description: "用花朵收集魔力，制作魔法装备和装置。",
     tags: ["魔法", "自动化"],
     search: "Botania",
   },
@@ -155,7 +155,7 @@ const translations: ModTranslation[] = [
   {
     match: ["farmers-delight", "farmer's delight", "农夫乐事"],
     name: "农夫乐事",
-    description: "扩展烹饪、农作物与食物制作体验。",
+    description: "添加农作物、厨具和食物。",
     tags: ["农业", "食物"],
     search: "Farmer's Delight",
   },
@@ -191,6 +191,43 @@ const normalize = (value: string) =>
     .toLocaleLowerCase()
     .replace(/[\s_'’\-.]+/g, "");
 
+type NameRow = [string, string, string, string, string];
+let nameRows: NameRow[] = [];
+const names = new Map<string, string>();
+let namesPromise: Promise<void> | undefined;
+export function loadModNames(): Promise<void> {
+  return (namesPromise ??= import("./modNameIndex.json").then((module) => {
+    nameRows = module.default as NameRow[];
+    const titles = new Map<string, string | null>();
+    for (const [cf, mr, zh, en, ids] of nameRows) {
+      if (cf) names.set(`curseforge:${normalize(cf)}`, zh);
+      if (mr) names.set(`modrinth:${normalize(mr)}`, zh);
+      for (const id of ids.split(";").filter(Boolean))
+        names.set(`mod:${normalize(id)}`, zh);
+      if (en) {
+        const key = normalize(en);
+        titles.set(key, titles.has(key) && titles.get(key) !== zh ? null : zh);
+      }
+    }
+    for (const [key, zh] of titles) if (zh) names.set(`title:${key}`, zh);
+  }));
+}
+export function localModName(ids: string[] = [], filename = ""): string {
+  for (const id of ids) {
+    const name = names.get(`mod:${normalize(id)}`);
+    if (name) return name;
+  }
+  const slug = filename
+    .replace(/\.jar(?:\.disabled)?$/i, "")
+    .replace(/[-_+](?:v?\d).*$/, "");
+  const key = normalize(slug);
+  return (
+    names.get(`mod:${key}`) ||
+    names.get(`curseforge:${key}`) ||
+    names.get(`modrinth:${key}`) ||
+    ""
+  );
+}
 export function expandResourceQuery(query: string) {
   const value = query.trim();
   if (!value) return "";
@@ -199,6 +236,8 @@ export function expandResourceQuery(query: string) {
     entry.match.some((candidate) => normalize(candidate) === normalized),
   );
   if (exact) return exact.search;
+  const indexed = nameRows.find(([, , zh]) => normalize(zh) === normalized);
+  if (indexed) return indexed[3] || indexed[0] || indexed[1] || value;
   let expanded = value;
   for (const [chinese, english] of keywordTranslations) {
     expanded = expanded.replaceAll(chinese, ` ${english} `);
@@ -206,25 +245,32 @@ export function expandResourceQuery(query: string) {
   return expanded.replace(/\s+/g, " ").trim();
 }
 
+export async function resolveResourceQuery(query: string) {
+  const value = query.trim();
+  // English queries and built-in aliases need no deferred name-index import.
+  if (/[\u3400-\u9fff]/.test(value) && !translations.some(entry => entry.match.some(alias => normalize(alias) === normalize(value)))) {
+    await loadModNames().catch(() => {});
+  }
+  return expandResourceQuery(value);
+}
+
 export function localizeProject(project: Project) {
   const keys = [project.slug, project.title].map(normalize);
   const entry = translations.find((candidate) =>
     candidate.match.some((alias) => keys.includes(normalize(alias))),
   );
-  if (!entry) {
-    return {
-      name: project.title,
-      originalName: "",
-      description: project.description,
-      originalDescription: "",
-      tags: [] as string[],
-    };
-  }
+  const indexed =
+    project.project_type === "mod" || !project.project_type
+      ? names.get(
+          `${project.source || "modrinth"}:${normalize(project.slug)}`,
+        ) || names.get(`title:${normalize(project.title)}`)
+      : undefined;
+  const name = indexed || entry?.name || project.title;
   return {
-    name: entry.name,
-    originalName: entry.name === project.title ? "" : project.title,
-    description: entry.description,
-    originalDescription: project.description,
-    tags: entry.tags,
+    name,
+    originalName: name === project.title ? "" : project.title,
+    description: entry?.description || project.description,
+    originalDescription: entry ? project.description : "",
+    tags: entry?.tags || ([] as string[]),
   };
 }

@@ -1,0 +1,96 @@
+/* UI Animation: fast feedback, small content movement, stable glass surfaces. */
+.app {
+  --motion-feedback: 140ms;
+  --motion-content: 200ms;
+  --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.app button {
+  touch-action: manipulation;
+  transition: color var(--motion-feedback), border-color var(--motion-feedback),
+    background-color var(--motion-feedback), box-shadow var(--motion-content),
+    transform var(--motion-feedback) var(--motion-ease);
+}
+.app button:not(:disabled):active {
+  transform: scale(0.98);
+  transition-duration: 0s;
+}
+.app button:focus-visible,
+.app :is(input, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.app .choice-trigger svg { transition: transform 160ms var(--motion-ease); }
+.app .choice-trigger.open svg { transform: rotate(180deg); }
+.app .choice-popover {
+  animation: none;
+  opacity: 1;
+  transform: none;
+  transform-origin: var(--choice-origin, top) center;
+  transition: transform 160ms var(--motion-ease), opacity 120ms;
+}
+@starting-style {
+  .app .choice-popover { opacity: 0; transform: translateY(-3px) scale(0.985); }
+}
+.app .choice-popover.is-closing {
+  opacity: 0;
+  transform: translateY(-3px) scale(0.985);
+  pointer-events: none;
+  transition-duration: 100ms;
+}
+.app .choice-option { transition: background-color 100ms, color 100ms; }
+.app .choice-option[data-active="true"] { transition-duration: 0ms; }
+.app .modal {
+  animation: kxl-dialog-enter 220ms var(--motion-ease);
+  transform-origin: center;
+}
+.app .overlay.is-exiting .modal,
+.app .is-exiting .modal { animation: kxl-dialog-exit 100ms var(--motion-ease) both; }
+.app :is(.project-copy, .resource-row .grow, .news-feature-copy, .news-card-copy,
+  .account-header, .settings-card-head, .home-shortcuts > button > span,
+  .download-task-heading, .help-grid .card > h3, .native-library-heading) {
+  animation: kxl-content-enter var(--motion-content) var(--motion-ease);
+}
+.app :is(.project-result-row, .news-card, .resource-row):nth-child(2) > :is(.project-copy, .news-card-copy, .grow) { animation-delay: 30ms; }
+.app :is(.project-result-row, .news-card, .resource-row):nth-child(3) > :is(.project-copy, .news-card-copy, .grow) { animation-delay: 60ms; }
+.app :is(.project-result-row, .news-card, .resource-row):nth-child(n+4) > :is(.project-copy, .news-card-copy, .grow) { animation-delay: 90ms; }
+.app :is(.project-result-row, .resource-row, .version-row, .native-song) {
+  transition: background-color 140ms, border-color 140ms;
+}
+.app .music-session-account { animation: kxl-content-enter 180ms var(--motion-ease); }
+.app .download-task-heading svg:not(.spin) { animation: kxl-state-enter 180ms var(--motion-ease); }
+@media (hover: hover) and (pointer: fine) {
+  .app :is(.home-shortcuts > button, .other-game, .native-playlist-grid > button):hover > :first-child {
+    transform: translateY(-2px);
+  }
+  .app :is(.home-shortcuts > button, .other-game, .native-playlist-grid > button) > :first-child {
+    transition: transform 140ms var(--motion-ease);
+  }
+}
+@keyframes kxl-content-enter {
+  from { transform: translateY(5px); }
+  to { transform: none; }
+}
+@keyframes kxl-dialog-enter {
+  from { transform: translateY(8px); }
+  to { transform: none; }
+}
+@keyframes kxl-dialog-exit {
+  to { transform: translateY(6px); opacity: 0; }
+}
+@keyframes kxl-state-enter {
+  from { transform: scale(0.9); }
+  to { transform: none; }
+}
+/* Theme and opacity changes take effect immediately. */
+.app[data-appearance-changing] *,
+.app[data-appearance-changing] *::before,
+.app[data-appearance-changing] *::after { transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .app *, .app *::before, .app *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  .app button:not(:disabled):active,
+  .app .choice-trigger.open svg { transform: none; }
+}

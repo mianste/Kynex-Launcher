@@ -1,0 +1,33 @@
+.game-directory-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--glass);
+}
+.game-directory-current {
+  flex: 1;
+  min-width: 0;
+}
+.game-directory-current > .choice-select {
+  max-width: 340px;
+}
+.game-directory-path {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+@media (max-width: 850px) {
+  .game-directory-bar {
+    flex-wrap: wrap;
+  }
+  .game-directory-current {
+    min-width: 220px;
+  }
+}

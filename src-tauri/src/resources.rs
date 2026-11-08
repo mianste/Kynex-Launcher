@@ -3,16 +3,9 @@ use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Seek};
 fn root(core: &Core, id: &str) -> Result<PathBuf> {
-    let config = read_json(&core.instance(id)?.join("kxl.json"))?;
-    Ok(
-        if config["settings"]["isolation"] == "shared"
-            || (config["settings"]["isolation"] == "modded" && config["loader"] == "vanilla")
-        {
-            core.root.join("shared")
-        } else {
-            core.instance(id)?
-        },
-    )
+    let mut config = read_json(&core.instance(id)?.join("kxl.json"))?;
+    config["id"]=json!(id);
+    game_directories::running_directory(core,&config)
 }
 fn order_from(path: &Path) -> Vec<String> {
     std::fs::read_to_string(path)
@@ -114,7 +107,7 @@ fn metadata<R: Read + Seek>(
         .unwrap_or_default();
     (ids, requires, breaks, version, icon)
 }
-fn image_data(bytes: Vec<u8>) -> Option<String> {
+pub(crate) fn image_data(bytes: Vec<u8>) -> Option<String> {
     use base64::Engine;
     if bytes.len() > 2 * 1024 * 1024 {
         return None;
@@ -145,6 +138,29 @@ fn image_from_archive<R: Read + Seek>(
     file.read_to_end(&mut bytes).ok()?;
     image_data(bytes)
 }
+fn icon_from_anywhere<R: Read + Seek>(
+    archive: &mut zip::ZipArchive<R>,
+) -> Option<String> {
+    for index in 0..archive.len() {
+        let mut file = archive.by_index(index).ok()?;
+        if file.size() > 2 * 1024 * 1024 {
+            continue;
+        }
+        let name = file.name().to_ascii_lowercase();
+        if !(name.ends_with("pack.png")
+            || name.ends_with("icon.png")
+            || name.ends_with("logo.png"))
+        {
+            continue;
+        }
+        let mut bytes = Vec::with_capacity(file.size() as usize);
+        file.read_to_end(&mut bytes).ok()?;
+        if let Some(icon) = image_data(bytes) {
+            return Some(icon);
+        }
+    }
+    None
+}
 fn packaged_icon(path: &Path, kind: &str) -> String {
     let Ok(file) = std::fs::File::open(path) else {
         return String::new();
@@ -153,14 +169,18 @@ fn packaged_icon(path: &Path, kind: &str) -> String {
         return String::new();
     };
     if kind == "mods" {
-        return metadata(&mut archive, false).4;
+        let icon = metadata(&mut archive, false).4;
+        if !icon.is_empty() {
+            return icon;
+        }
     }
     for candidate in ["pack.png", "icon.png", "server-icon.png"] {
         if let Some(icon) = image_from_archive(&mut archive, candidate) {
             return icon;
         }
     }
-    String::new()
+    // 很多光影/资源包把图标放在 shaders/ 或子目录里，扫描任意层级的图标文件。
+    icon_from_anywhere(&mut archive).unwrap_or_default()
 }
 pub fn list(core: &Core, p: &Value) -> Result<Value> {
     let mut rows = crate::engine::resources(core, p)?
@@ -168,7 +188,7 @@ pub fn list(core: &Core, p: &Value) -> Result<Value> {
         .cloned()
         .unwrap_or_default();
     let kind = string(p, "kind")?;
-    let dir = root(core, string(p, "id")?)?.join(kind);
+    let dir = crate::engine::resource_dir(core,p)?;
     let lock = read_json(
         &core
             .instance(string(p, "id")?)?
@@ -200,59 +220,72 @@ pub fn list(core: &Core, p: &Value) -> Result<Value> {
     if kind == "mods" {
         let mut metas = BTreeMap::new();
         let mut providers: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-        // 并行读取 jar 元数据；模组较多时比逐个解压快很多。
+        // 并行读取 jar 元数据（含 .disabled）；只有启用的模组参与依赖与冲突判断。
         let found: Vec<(
             String,
+            bool,
             (Vec<String>, Vec<String>, Vec<String>, String, String),
         )> = rows
             .par_iter()
-            .filter(|row| row["enabled"] == true)
             .filter_map(|row| {
                 let name = string(row, "name").ok()?.to_string();
+                let enabled = row["enabled"] == true;
                 let file = std::fs::File::open(dir.join(&name)).ok()?;
                 let mut archive = zip::ZipArchive::new(file).ok()?;
-                Some((name, metadata(&mut archive, false)))
+                let mut meta = metadata(&mut archive, false);
+                // 很多模组没有在 fabric.mod.json/mods.toml 里声明图标，
+                // 退回到 jar 内任意层级的 icon.png / logo.png / pack.png。
+                if meta.4.is_empty() {
+                    meta.4 = icon_from_anywhere(&mut archive).unwrap_or_default();
+                }
+                Some((name, enabled, meta))
             })
             .collect();
-        for (name, meta) in found {
-            for id in &meta.0 {
-                providers
-                    .entry(id.clone())
-                    .or_default()
-                    .insert(name.clone());
+        for (name, enabled, meta) in found {
+            if enabled {
+                for id in &meta.0 {
+                    providers
+                        .entry(id.clone())
+                        .or_default()
+                        .insert(name.clone());
+                }
             }
             metas.insert(name, meta);
         }
         for row in &mut rows {
             let name = string(row, "name")?.to_string();
+            let enabled = row["enabled"] == true;
             let mut problems = vec![];
             if let Some((ids, requires, breaks, version, icon)) = metas.get(&name) {
-                for id in ids {
-                    if providers.get(id).map(|v| v.len() > 1).unwrap_or(false) {
-                        problems.push(format!("重复模组：{id}"));
+                if enabled {
+                    for id in ids {
+                        if providers.get(id).map(|v| v.len() > 1).unwrap_or(false) {
+                            problems.push(format!("重复模组：{id}"));
+                        }
                     }
-                }
-                for id in requires {
-                    if ![
-                        "minecraft",
-                        "java",
-                        "fabricloader",
-                        "quilt_loader",
-                        "forge",
-                        "neoforge",
-                    ]
-                    .contains(&id.as_str())
-                        && !providers.contains_key(id)
-                    {
-                        problems.push(format!("缺少依赖：{id}"));
+                    for id in requires {
+                        if ![
+                            "minecraft",
+                            "java",
+                            "fabricloader",
+                            "quilt_loader",
+                            "forge",
+                            "neoforge",
+                        ]
+                        .contains(&id.as_str())
+                            && !providers.contains_key(id)
+                        {
+                            problems.push(format!("缺少依赖：{id}"));
+                        }
                     }
-                }
-                for id in breaks {
-                    if providers.contains_key(id) {
-                        problems.push(format!("声明冲突：{id}"));
+                    for id in breaks {
+                        if providers.contains_key(id) {
+                            problems.push(format!("声明冲突：{id}"));
+                        }
                     }
                 }
                 row["version"] = json!(version);
+                row["modIds"] = json!(ids);
                 if !icon.is_empty() {
                     row["icon_url"] = json!(icon);
                 }
@@ -266,15 +299,49 @@ pub fn list(core: &Core, p: &Value) -> Result<Value> {
             row["problems"] = json!(problems);
         }
     } else if matches!(kind, "resourcepacks" | "shaderpacks" | "datapacks") {
+        // 本地图标按“文件名 + 修改时间”缓存，第二次打开列表不再重复解压。
+        let cache_path = core.root.join("cache/local-icons.json");
+        let mut icon_cache = read_json(&cache_path).unwrap_or_else(|_| json!({}));
+        let mut dirty = false;
         for row in &mut rows {
             let name = string(row, "name")?.to_string();
             let clean = name.strip_suffix(".disabled").unwrap_or(&name);
-            let icon = packaged_icon(&dir.join(&name), kind);
+            let path = dir.join(&name);
+            let modified = std::fs::metadata(&path)
+                .and_then(|meta| meta.modified())
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|time| time.as_secs())
+                .unwrap_or(0);
+            let key = format!("{kind}:{name}:{modified}");
+            let cached = icon_cache[&key]
+                .as_str()
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            let icon = match cached {
+                Some(icon) => icon,
+                None => {
+                    let icon = packaged_icon(&path, kind);
+                    if !icon.is_empty() {
+                        icon_cache[&key] = json!(icon);
+                        dirty = true;
+                    }
+                    icon
+                }
+            };
             if !icon.is_empty() {
                 row["icon_url"] = json!(icon);
             } else if let Some(icon) = remote_icons.get(clean) {
                 row["icon_url"] = json!(icon);
             }
+        }
+        if dirty
+            && icon_cache
+                .as_object()
+                .map(|entries| entries.len() < 4000)
+                .unwrap_or(false)
+        {
+            let _ = write_json(&cache_path, &icon_cache);
         }
     }
     Ok(json!(rows))
@@ -331,6 +398,69 @@ pub fn move_pack(core: &Core, p: &Value) -> Result<Value> {
         write_order(&options, &order)?;
     }
     list(core, &json!({"id":p["id"],"kind":"resourcepacks"}))
+}
+pub(crate) fn after_delete(core: &Core, p: &Value, deleted: &[String]) -> Vec<String> {
+    let mut warnings = Vec::new();
+    let result = (|| -> Result<()> {
+        let kind = string(p, "kind")?;
+        let dir = engine::resource_dir(core, p)?;
+        let game = dir.parent().ok_or("资源目录无效")?;
+        let mut names: BTreeSet<_> = deleted.iter().map(String::as_str).collect();
+        for name in deleted {
+            if let Some(clean) = name.strip_suffix(".disabled").filter(|clean| !dir.join(clean).exists()) {
+                names.insert(clean);
+            }
+        }
+        if kind == "resourcepacks" {
+            let path = game.join("options.txt");
+            if path.exists() {
+                let mut order = order_from(&path);
+                order.retain(|v| !v.strip_prefix("file/").is_some_and(|n| names.contains(n)));
+                write_order(&path, &order)?;
+                let text = std::fs::read_to_string(&path).map_err(err)?;
+                let lines = text.lines().map(|line| {
+                    let Some(value) = line.strip_prefix("incompatibleResourcePacks:") else { return Ok(line.to_owned()); };
+                    let mut packs: Vec<String> = serde_json::from_str(value).map_err(err)?;
+                    packs.retain(|v| !v.strip_prefix("file/").is_some_and(|n| names.contains(n)));
+                    Ok(format!("incompatibleResourcePacks:{}",serde_json::to_string(&packs).map_err(err)?))
+                }).collect::<Result<Vec<_>>>()?;
+                let temp = path.with_extension("txt.tmp");
+                std::fs::write(&temp, lines.join("\n") + "\n").map_err(err)?;
+                std::fs::rename(temp, path).map_err(err)?;
+            }
+        }
+        if kind == "shaderpacks" {
+            for relative in ["config/iris.properties", "config/oculus.properties", "optionsshaders.txt"] {
+                let path = game.join(relative);
+                if !path.exists() { continue; }
+                let text = std::fs::read_to_string(&path).map_err(err)?;
+                let active = text.lines().filter_map(|line| line.split_once('=')).any(|(key,value)| key.trim() == "shaderPack" && names.iter().any(|n| value.trim() == *n || value.trim() == n.replace(' ', "\\ ")));
+                if active {
+                    let mut lines: Vec<_> = text.lines().filter(|line| !matches!(line.split('=').next().unwrap_or("").trim(), "shaderPack" | "enableShaders")).map(str::to_owned).collect();
+                    lines.push("shaderPack=".into());
+                    if relative != "optionsshaders.txt" { lines.push("enableShaders=false".into()); }
+                    std::fs::write(path, lines.join("\n") + "\n").map_err(err)?;
+                }
+            }
+        }
+        let lock_path = if kind == "datapacks" && p["world"].as_str().is_some_and(|w| !w.is_empty()) {
+            game.join("kxl-datapacks.json")
+        } else { core.instance(string(p, "id")?)?.join("installed-projects.json") };
+        if let Ok(mut lock) = read_json(&lock_path) {
+            if let Some(entries) = lock.as_object_mut() {
+                entries.retain(|_, value| {
+                    let Some(file) = value["file"].as_str() else { return true; };
+                    // Historical records have no resource kind. Keep ambiguous
+                    // records if the same file still exists in another category.
+                    !names.contains(file) || ["mods", "resourcepacks", "shaderpacks", "datapacks"].iter().any(|k| game.join(k).join(file).exists())
+                });
+                write_json(&lock_path, &lock)?;
+            }
+        }
+        Ok(())
+    })();
+    if let Err(error) = result { warnings.push(format!("文件已删除，配置同步失败：{error}")); }
+    warnings
 }
 pub fn import_file(core: &Core, p: &Value) -> Result<Value> {
     use base64::Engine;
@@ -483,5 +613,62 @@ mod tests {
         assert_eq!(conflicts, vec!["c"]);
         assert_eq!(v, "1.0");
         assert!(icon.starts_with("data:image/png;base64,"));
+    }
+
+    fn mod_jar(id: &str, version: &str, depends: Option<&str>) -> Vec<u8> {
+        use std::io::Write;
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        w.start_file("fabric.mod.json", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        let depends = depends
+            .map(|dependency| format!(r#","depends":{{"{dependency}":"*"}}"#))
+            .unwrap_or_default();
+        w.write_all(format!(r#"{{"id":"{id}","version":"{version}"{depends}}}"#).as_bytes())
+            .unwrap();
+        w.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn disabled_mods_keep_metadata_but_do_not_satisfy_dependencies() {
+        let root = tempfile::tempdir().unwrap();
+        let core =
+            crate::Core::new(root.path().to_path_buf(), std::sync::Arc::new(|_| {})).unwrap();
+        let instance = root.path().join("instances").join("demo");
+        std::fs::create_dir_all(instance.join("mods")).unwrap();
+        write_json(
+            &instance.join("kxl.json"),
+            &json!({"id":"demo","name":"demo","version":"1.20.1","loader":"fabric","settings":{"isolation":"independent"}}),
+        )
+        .unwrap();
+        std::fs::write(
+            instance.join("mods").join("a.jar"),
+            mod_jar("a", "1.0", Some("b")),
+        )
+        .unwrap();
+        std::fs::write(
+            instance.join("mods").join("b.jar.disabled"),
+            mod_jar("b", "2.0", None),
+        )
+        .unwrap();
+
+        let rows = list(&core, &json!({"id":"demo","kind":"mods"})).unwrap();
+        let rows = rows.as_array().unwrap();
+        let a = rows.iter().find(|row| row["name"] == "a.jar").unwrap();
+        let b = rows
+            .iter()
+            .find(|row| row["name"] == "b.jar.disabled")
+            .unwrap();
+        // 禁用模组仍要读出元数据，界面才能显示版本和图标。
+        assert_eq!(b["enabled"], false);
+        assert_eq!(b["version"], "2.0");
+        assert_eq!(b["modIds"], json!(["b"]));
+        // 但禁用文件不参与依赖解析，a 仍然缺少 b。
+        assert_eq!(a["enabled"], true);
+        assert!(a["problems"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|problem| problem.as_str().unwrap_or("").contains("缺少依赖：b")));
+        assert!(b["problems"].as_array().unwrap().is_empty());
     }
 }

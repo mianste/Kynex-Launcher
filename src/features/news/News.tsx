@@ -1,15 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, Newspaper, RefreshCw, Rss } from "lucide-react";
-import {
-  Button,
-  Chip,
-  Empty,
-  SearchInput,
-  Skeleton,
-} from "../../components/ui";
+import { ArrowUpRight, Newspaper, RefreshCw } from "lucide-react";
+import { Button, Chip, Empty, SearchInput } from "../../components/ui";
 import { api, desktop, external } from "../../lib/bridge";
 import type { NewsArticle } from "../../lib/types";
 import { guarded } from "../../store";
+import "./newsLoading.css";
 
 type NewsResponse = {
   articles: NewsArticle[];
@@ -65,8 +60,15 @@ function dateLabel(value: string) {
       }).format(date);
 }
 
-function NewsImage({ article }: { article: NewsArticle }) {
+function NewsImage({
+  article,
+  eager = false,
+}: {
+  article: NewsArticle;
+  eager?: boolean;
+}) {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   if (!article.image || failed)
     return (
       <div className="news-image-fallback" aria-hidden="true">
@@ -74,13 +76,59 @@ function NewsImage({ article }: { article: NewsArticle }) {
       </div>
     );
   return (
-    <img
-      src={article.image}
-      alt=""
-      loading="lazy"
-      referrerPolicy="no-referrer"
-      onError={() => setFailed(true)}
-    />
+    <div className={`news-image ${loaded ? "is-loaded" : "is-loading"}`}>
+      {!loaded && (
+        <div className="news-image-placeholder" aria-hidden="true">
+          <Newspaper size={32} />
+        </div>
+      )}
+      <img
+        src={article.image}
+        alt=""
+        loading={eager ? "eager" : "lazy"}
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
+}
+
+function NewsLoading() {
+  const copy = (
+    <div className="news-skeleton-copy">
+      <i />
+      <b />
+      <b />
+      <p />
+      <p />
+      <small />
+    </div>
+  );
+  return (
+    <div className="news-loading" role="status" aria-label="正在加载新闻">
+      <div className="news-loading-label">
+        <RefreshCw size={16} className="spin" />
+        <span>正在加载新闻</span>
+      </div>
+      <div className="news-feature news-skeleton" aria-hidden="true">
+        <div className="news-skeleton-media">
+          <Newspaper size={40} />
+        </div>
+        {copy}
+      </div>
+      <div className="news-grid" aria-hidden="true">
+        {[0, 1].map((index) => (
+          <div className="news-card news-skeleton" key={index}>
+            <div className="news-skeleton-media">
+              <Newspaper size={28} />
+            </div>
+            {copy}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -125,23 +173,12 @@ export function News() {
   }, [category, query, response.articles]);
 
   const [featured, ...rest] = visible;
-  const status = !desktop
-    ? "网页预览 · 示例资讯"
-    : response.stale
-      ? `${response.source} · 离线缓存`
-      : response.cached
-        ? `${response.source} · 已缓存`
-        : response.source;
 
   const open = (article: NewsArticle) => guarded(() => external(article.url));
 
   return (
-    <section className="page-content news-page">
+    <section className="news-page" aria-busy={busy}>
       <div className="page-head">
-        <div>
-          <h1>MC 新闻</h1>
-          <p>来自 Minecraft.net 的官方动态与版本资讯。</p>
-        </div>
         <div className="actions news-toolbar">
           <SearchInput
             value={query}
@@ -168,24 +205,10 @@ export function News() {
             {item}
           </Chip>
         ))}
-        <span className="news-feed-status">
-          <Rss size={13} />
-          {status || "正在获取官方资讯"}
-        </span>
       </div>
 
-      {error && response.articles.length > 0 && (
-        <p className="news-inline-note">暂时无法更新，正在显示已有内容。</p>
-      )}
       {busy && response.articles.length === 0 ? (
-        <div
-          className="news-grid news-loading"
-          aria-label="正在获取 Minecraft 新闻"
-        >
-          {Array.from({ length: 6 }, (_, index) => (
-            <Skeleton key={index} />
-          ))}
-        </div>
+        <NewsLoading />
       ) : !featured ? (
         <Empty
           title={error ? "新闻暂时无法获取" : "没有符合条件的新闻"}
@@ -193,9 +216,18 @@ export function News() {
         />
       ) : (
         <>
+          {busy && (
+            <div
+              className="news-update-progress"
+              role="status"
+              aria-label="正在刷新新闻"
+            >
+              <i />
+            </div>
+          )}
           <button className="news-feature" onClick={() => open(featured)}>
             <div className="news-feature-media">
-              <NewsImage article={featured} />
+              <NewsImage key={featured.image} article={featured} eager />
             </div>
             <div className="news-feature-copy">
               <span className="news-kicker">
@@ -221,7 +253,7 @@ export function News() {
                   onClick={() => open(article)}
                 >
                   <div className="news-card-media">
-                    <NewsImage article={article} />
+                    <NewsImage key={article.image} article={article} />
                   </div>
                   <div className="news-card-copy">
                     <span className="news-kicker">

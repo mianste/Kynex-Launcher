@@ -29,7 +29,7 @@ pub(crate) fn configured_key(core: &Core, provided: &str) -> Option<String> {
         }
     }
     if key.is_empty() {
-        if let Ok(value) = read_json(&core.root.join("curseforge-key.json")) {
+        if let Ok(value) = read_json(&core.data_root.join("curseforge-key.json")) {
             key = value["apiKey"].as_str().unwrap_or("").trim().to_string();
         }
     }
@@ -49,6 +49,27 @@ fn endpoint(key: Option<&str>) -> &'static str {
     } else {
         API
     }
+}
+
+pub(crate) async fn post(core:&Core,path:&str,key:Option<&str>,body:&Value)->Result<Value>{
+    let request=|base:&str| {
+        let url=format!("{base}/{path}");
+        async move {
+            let mut request=core.http.post(url).json(body).timeout(std::time::Duration::from_secs(12));
+            if let Some(key)=key{request=request.header("x-api-key",key);}
+            let value:Value=request.send().await.map_err(|e|format!("CurseForge 连接失败：{e}"))?.error_for_status().map_err(|e|format!("CurseForge 请求失败：{e}"))?.json().await.map_err(err)?;
+            if value.get("data").is_none_or(Value::is_null){return Err("CurseForge 响应无效".into());}
+            Ok::<Value,String>(value)
+        }
+    };
+    let primary=request(endpoint(key));
+    if key.is_none(){return jobs::wait(core,primary).await?;}
+    let mirror=async{tokio::time::sleep(std::time::Duration::from_millis(300)).await;request(API_MIRROR).await};
+    tokio::pin!(primary);tokio::pin!(mirror);
+    jobs::wait(core,async{tokio::select!{
+        first=&mut primary=>match first{Ok(v)=>Ok(v),Err(a)=>mirror.await.map_err(|b|format!("{a}；备用源：{b}"))},
+        second=&mut mirror=>match second{Ok(v)=>Ok(v),Err(a)=>primary.await.map_err(|b|format!("{a}；备用源：{b}"))},
+    }}).await?
 }
 
 async fn get(core: &Core, url: &str, key: Option<&str>) -> Result<Value> {
@@ -117,6 +138,7 @@ fn class_id(kind: &str) -> Result<u32> {
         "modpack" => Ok(4471),
         "resourcepack" => Ok(12),
         "shader" => Ok(6552),
+        "datapack" => Ok(6945),
         _ => Err("CurseForge 不支持此资源类型".into()),
     }
 }
@@ -148,12 +170,25 @@ fn project_id(value: &Value) -> Result<u64> {
         .ok_or_else(|| "CurseForge 项目 ID 无效".to_string())
 }
 
+fn search_filter(query: &str) -> String {
+    let query = query.trim();
+    // CurseForge treats a bare one/two-character filter as an empty search.
+    // A quoted literal reaches its search parser without turning into the
+    // unfiltered popular list. Apply this to every resource class.
+    if !query.is_empty() && query.chars().count() < 3 {
+        format!("\"{}\"", query.replace('\\', "\\\\").replace('"', "\\\""))
+    } else {
+        query.to_owned()
+    }
+}
+
 pub async fn search(
     core: &Core,
     kind: &str,
     query: &str,
     game: Option<&str>,
     loader: Option<&str>,
+    category: Option<u64>,
     provided_key: &str,
     page: u64,
 ) -> Result<Value> {
@@ -171,10 +206,13 @@ pub async fn search(
                 .append_pair("sortField", "2")
                 .append_pair("sortOrder", "desc");
             if !query.trim().is_empty() {
-                pairs.append_pair("searchFilter", query.trim());
+                pairs.append_pair("searchFilter", &search_filter(query));
             }
             if let Some(game) = game.filter(|v| !v.is_empty()) {
                 pairs.append_pair("gameVersion", game);
+            }
+            if let Some(category) = category {
+                pairs.append_pair("categoryId", &category.to_string());
             }
             if kind == "mod" {
                 if let Some(loader) = loader.filter(|v| !v.is_empty()) {
@@ -216,6 +254,7 @@ pub async fn search(
         .ok_or("CurseForge 返回了无法识别的搜索结果")?;
     let hits: Vec<Value> = data
         .iter()
+        .filter(|item| !crate::literal_search_required(query) || crate::literal_search_match(query, &[item["name"].as_str().unwrap_or(""), item["slug"].as_str().unwrap_or(""), item["summary"].as_str().unwrap_or("")]))
         .map(|item| {
             json!({
                 "project_id": item["id"],
@@ -229,24 +268,25 @@ pub async fn search(
             })
         })
         .collect();
-    let total = value["pagination"]["totalCount"]
+    let total = if crate::literal_search_required(query) { hits.len() as u64 } else { value["pagination"]["totalCount"]
         .as_u64()
-        .unwrap_or(hits.len() as u64);
+        .unwrap_or(hits.len() as u64) };
     Ok(json!({"hits": hits, "total": total, "page": page, "pageSize": 30}))
 }
 
-async fn files(
+pub(crate) async fn file_page(
     core: &Core,
     mod_id: u64,
     game: Option<&str>,
     loader: Option<&str>,
     key: Option<&str>,
-) -> Result<Vec<Value>> {
+    index: u64,
+) -> Result<Value> {
     let mut url =
         reqwest::Url::parse(&format!("{}/mods/{mod_id}/files", endpoint(key))).map_err(err)?;
     {
         let mut pairs = url.query_pairs_mut();
-        pairs.append_pair("pageSize", "50");
+        pairs.append_pair("pageSize", "50").append_pair("index", &index.to_string());
         if let Some(game) = game.filter(|v| !v.is_empty()) {
             pairs.append_pair("gameVersion", game);
         }
@@ -255,10 +295,30 @@ async fn files(
         }
     }
     let value = get(core, url.as_str(), key).await?;
-    Ok(value["data"].as_array().cloned().unwrap_or_default())
+    if !value["data"].is_array() { return Err("CurseForge 版本列表响应无效".into()); }
+    Ok(value)
 }
 
-fn compatible(file: &Value, game: Option<&str>, loader: Option<&str>) -> bool {
+pub(crate) async fn files(
+    core: &Core,
+    mod_id: u64,
+    game: Option<&str>,
+    loader: Option<&str>,
+    key: Option<&str>,
+) -> Result<Vec<Value>> {
+    let mut rows=Vec::new();
+    loop {
+        core.stopped()?;
+        let value=file_page(core,mod_id,game,loader,key,rows.len() as u64).await?;
+        let items=value["data"].as_array().ok_or("CurseForge 版本列表响应无效")?;
+        let count=items.len(); rows.extend(items.iter().cloned());
+        let total=value["pagination"]["totalCount"].as_u64().unwrap_or(rows.len() as u64);
+        if count==0 || rows.len() as u64>=total {break;}
+    }
+    Ok(rows)
+}
+
+pub(crate) fn compatible(file: &Value, game: Option<&str>, loader: Option<&str>) -> bool {
     // A dedicated server archive is not an installable client modpack.
     if file["isServerPack"] == true {
         return false;
@@ -280,7 +340,7 @@ fn compatible(file: &Value, game: Option<&str>, loader: Option<&str>) -> bool {
     true
 }
 
-async fn best_file(
+pub(crate) async fn best_file(
     core: &Core,
     mod_id: u64,
     game: Option<&str>,
@@ -403,6 +463,15 @@ fn dependency_ids(file: &Value) -> Vec<u64> {
         .unwrap_or_default()
 }
 
+async fn selected_file(core: &Core, p: &Value, project: u64, game: &str, loader: Option<&str>, key: Option<&str>) -> Result<Value> {
+    if let Some(vid) = p["versionId"].as_str() {
+        let file = file_by_id(core, project, vid.parse().map_err(|_| "文件版本 ID 无效")?, key).await?;
+        if file["modId"].as_u64() != Some(project) || file["isAvailable"] == false || !compatible(&file, if resource_downloads::needs_game_match(p["kind"].as_str().unwrap_or("mods")){Some(game)}else{None}, loader) {
+            return Err("所选文件不属于此项目或不兼容当前实例".into());
+        }
+        Ok(file)
+    } else { best_file(core, project, Some(game), loader, key).await }
+}
 pub async fn dependencies(core: &Core, p: &Value) -> Result<Value> {
     let id = string(p, "id")?;
     let instance = read_json(&core.instance(id)?.join("kxl.json"))?;
@@ -410,18 +479,7 @@ pub async fn dependencies(core: &Core, p: &Value) -> Result<Value> {
     let loader = instance["loader"].as_str().unwrap_or("vanilla");
     let cf_key = configured_key(core, p["curseforgeKey"].as_str().unwrap_or(""));
     let project = project_id(&p["project"])?;
-    let file = best_file(
-        core,
-        project,
-        Some(game),
-        if loader == "vanilla" {
-            None
-        } else {
-            Some(loader)
-        },
-        cf_key.as_deref(),
-    )
-    .await?;
+    let file = selected_file(core, p, project, game, if loader == "vanilla" { None } else { Some(loader) }, cf_key.as_deref()).await?;
     let lock = read_json(&core.instance(id)?.join("installed-projects.json"))
         .unwrap_or_else(|_| json!({}));
     let mut dependencies = vec![];
@@ -450,6 +508,7 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
         "mods" => "mod",
         "resourcepacks" => "resourcepack",
         "shaderpacks" => "shader",
+        "datapacks" => "datapack",
         _ => return Err("CurseForge 不支持安装到此资源分类".into()),
     };
     let game = string(&instance, "version")?.to_string();
@@ -471,14 +530,9 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
         if seen.len() > 128 {
             return Err("CurseForge 依赖树过大，请改用整合包安装".into());
         }
-        let file = best_file(
-            core,
-            mod_id,
-            Some(game.as_str()),
-            if cf_kind == "mod" { Some(loader) } else { None },
-            cf_key.as_deref(),
-        )
-        .await?;
+        let file = if mod_id == project {
+            selected_file(core, p, project, &game, if cf_kind == "mod" {Some(loader)} else {None}, cf_key.as_deref()).await?
+        } else { best_file(core, mod_id, Some(&game), if cf_kind == "mod" {Some(loader)} else {None}, cf_key.as_deref()).await? };
         for dep in dependency_ids(&file) {
             if !skip_dependencies {
                 pending.push_back(dep);
@@ -486,9 +540,9 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
         }
         selected.push((mod_id, file));
     }
-    let dir = crate::engine::resource_dir(core, &json!({"id":id,"kind":kind}))?;
+    let dir = crate::resource_downloads::install_dir(core,p)?;
     std::fs::create_dir_all(&dir).map_err(err)?;
-    let lock_path = core.instance(id)?.join("installed-projects.json");
+    let lock_path = crate::resource_downloads::lock_path(core,p)?;
     let mut lock = read_json(&lock_path).unwrap_or_else(|_| json!({}));
     let plan: Vec<(u64, String, String, String, Value)> = selected
         .iter()
@@ -502,6 +556,7 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
             ))
         })
         .collect::<Result<Vec<_>>>()?;
+    if kind=="datapacks" && plan.iter().any(|(_,name,_,_,_)|!name.to_lowercase().ends_with(".zip")){return Err("所选版本没有数据包 ZIP 文件".into());}
     let total = plan.len();
     core.stage("下载资源文件", 0, total);
     let count = Arc::new(AtomicUsize::new(0));
@@ -533,10 +588,9 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
                 if format!("{:x}", Sha1::digest(&bytes))
                     == lock[key.as_str()]["sha1"].as_str().unwrap_or("")
                 {
-                    let disabled = dir.join(format!("{previous}.disabled"));
-                    if !disabled.exists() {
-                        std::fs::rename(&old_path, disabled).map_err(err)?;
-                    }
+                    let mut disabled = dir.join(format!("{previous}.disabled"));
+                    if disabled.exists() { disabled=dir.join(format!("{previous}.{}.disabled",uuid::Uuid::new_v4())); }
+                    std::fs::rename(&old_path, disabled).map_err(err)?;
                 }
             }
         }
@@ -555,7 +609,10 @@ pub async fn install_modpack(core: &Core, p: &Value) -> Result<Value> {
     core.stage("获取 CurseForge 整合包版本", 0, 1);
     let project = project_id(&p["project"])?;
     let cf_key = configured_key(core, p["curseforgeKey"].as_str().unwrap_or(""));
-    let file = best_file(core, project, p["game"].as_str(), p["loader"].as_str(), cf_key.as_deref()).await?;
+    let file = if let Some(vid)=p["versionId"].as_str(){
+        let file=file_by_id(core,project,vid.parse().map_err(|_|"文件版本 ID 无效")?,cf_key.as_deref()).await?;
+        if file["modId"].as_u64()!=Some(project) || file["isAvailable"]==false || file["isServerPack"]==true {return Err("所选文件不属于此整合包或不可下载".into());}file
+    }else{best_file(core, project, p["game"].as_str(), p["loader"].as_str(), cf_key.as_deref()).await?};
     let download = download_url(&file)?;
     let file_name = file_name(&file).unwrap_or("modpack.zip").to_string();
     let dir = core
@@ -574,7 +631,7 @@ pub async fn install_modpack(core: &Core, p: &Value) -> Result<Value> {
         .to_string();
     let result = crate::packs::import(
         core,
-        &json!({"path": path, "name": name, "settings": p["settings"].clone(), "curseforgeKey": p["curseforgeKey"].clone()}),
+        &json!({"path": path, "name": name, "settings": p["settings"].clone(), "curseforgeKey": p["curseforgeKey"].clone(),"project":p["project"],"source":"curseforge","iconUrl":p["iconUrl"]}),
     )
     .await;
     let _ = std::fs::remove_dir_all(&dir);
@@ -584,6 +641,18 @@ pub async fn install_modpack(core: &Core, p: &Value) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn short_searches_reach_the_filter_parser_in_every_resource_class() {
+        for query in ["a", "ab", "玉", "背包", "12", "+", "🙂"] {
+            assert_eq!(search_filter(query), format!("\"{query}\""));
+        }
+        assert_eq!(search_filter("  ab  "), "\"ab\"");
+        assert_eq!(search_filter("\""), "\"\\\"\"");
+        assert_eq!(search_filter(""), "");
+        for query in ["Jade", "Sodium", "shader pack", "中文整合包"] {
+            assert_eq!(search_filter(query), query);
+        }
+    }
     #[test]
     fn ids_and_cdn_fallback() {
         assert_eq!(class_id("mod").unwrap(), 6);

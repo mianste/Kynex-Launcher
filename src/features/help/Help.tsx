@@ -4,31 +4,34 @@ import { Card, Tabs, Badge } from "../../components/ui";
 const topics = [
   [
     "安装第一个版本",
-    "在「下载」中获取官方版本清单，选择游戏版本，再选择原版或加载器。安装完成后去「账号」登录，再从首页启动。初次安装会下载依赖与资源，耗时取决于网络。",
+    "打开「下载」，选好游戏版本，再选择原版、Forge 或 Fabric 等。安装好后到「账号」登录，然后回首页启动游戏。",
   ],
   [
     "Forge 与 Fabric 怎么选",
-    "两者的模组不能混用。先确认目标模组支持的游戏与加载器版本。Kynex 支持 Fabric / Quilt 元数据安装及 Forge / NeoForge 官方安装器；OptiFine 请从其官网获取。",
+    "看你想装的模组支持哪一个，再安装对应的游戏版本。Forge 和 Fabric 的模组不能混用。",
   ],
   [
     "整合包拖拽导入",
-    "把 .mrpack 或 Kynex 导出的 zip 拖进窗口，确认包名、游戏、加载器与目标名称后安装。CurseForge 包可识别，但文件安装需要额外 API 授权，当前版本会明确提示。",
+    "把 .mrpack 或整合包 zip 拖进启动器，确认名称后安装。如果提示缺少下载权限，按提示填写 CurseForge 密钥。",
   ],
   [
     "崩溃与日志排查",
-    "打开「诊断」，导入 latest.log 或 crash-reports 中的文本报告。规则覆盖内存、Java、方法签名、依赖、重复模组、Mixin 与 OpenGL。通用退出码不能单独确定原因。",
+    "打开「诊断」，拖入 latest.log 或 crash-reports 文件夹里的报错文件，点击「分析日志」。只看退出码通常找不到原因。",
   ],
-
+  [
+    "一键进服与端口",
+    "点击「进服」，填写服务器地址。端口默认是 25565。IPv6 地址带端口时写成 [地址]:端口。正版服务器需要正版账号。",
+  ],
+  [
+    "皮肤、披风与一键读档",
+    "在「皮肤」里导入 PNG 图片，拖动人物可以转动视角，点击「应用」后才会更换皮肤。在版本的「存档」页可以直接进入已有世界（需要 Minecraft 1.20 或更新版本）。",
+  ],
 ];
 export function Help() {
   const [tab, T] = useState("帮助库");
   return (
     <>
       <div className="page-head">
-        <div>
-          <h1>帮助中心</h1>
-          <p>把时间留给游戏，把问题交给这里。</p>
-        </div>
         <Badge>Kynex Launcher</Badge>
       </div>
       <Tabs items={["帮助库", "更新日志"]} value={tab} onChange={T} />
@@ -69,10 +72,6 @@ export function Help() {
               <li key={item}>{item}</li>
             ))}
           </ul>
-          <p>
-            完整支持范围、尚未接入项和构建步骤见项目 docs/STATUS.md 与
-            docs/BUILD.md。
-          </p>
         </Card>
       )}
     </>

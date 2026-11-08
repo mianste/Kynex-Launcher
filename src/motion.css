@@ -258,3 +258,17 @@ button:not(:disabled):active {
     scroll-behavior: auto !important;
   }
 }
+
+
+/* 切换页面时不再做整页/卡片淡入，避免低不透明度下出现一瞬间的透明闪屏。 */
+.page-content,
+.page-content.page-entering,
+.page-content.page-leaving,
+.page-content .card,
+.page-content .resource-row,
+.page-content .version-card,
+.page-content .account-card,
+.page-content .instance-card,
+.page-content .skin-saved-entry {
+  animation: none !important;
+}

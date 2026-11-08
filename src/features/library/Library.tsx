@@ -1,3 +1,8 @@
+import { InstanceIcon } from "../../components/ui/LoaderIcon";
+import { GameDirectoryBar } from "./GameDirectoryBar";
+import { ResourceDeleteDialog, type DeleteRequest } from "./ResourceDeleteDialog";
+import { useResourceDragSelection } from "./useResourceDragSelection";
+import { useModUpdateState } from "../../lib/modUpdateState";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Box,
@@ -14,6 +19,9 @@ import {
   Upload,
   ImagePlus,
   PackageOpen,
+  CheckSquare,
+  CircleMinus,
+  CircleCheck,
 } from "lucide-react";
 import {
   Button,
@@ -24,6 +32,7 @@ import {
   Tabs,
   Switch,
   Card,
+  OptionSelect,
 } from "../../components/ui";
 import { useStore, guarded, launch } from "../../store";
 import {
@@ -33,11 +42,7 @@ import {
   pickImageFile,
   readableSize,
 } from "../../lib/bridge";
-import type { Game, Resource } from "../../lib/types";
-export const games: { value: Game | "all"; label: string }[] = [
-  { value: "all", label: "全部游戏" },
-  { value: "java", label: "Java 版" },
-];
+import type { Resource } from "../../lib/types";
 async function chooseInstanceIcon(id: string) {
   const file = await pickImageFile("wallpaper");
   if (!file) return false;
@@ -53,31 +58,9 @@ async function chooseInstanceIcon(id: string) {
   });
   return true;
 }
-export function GameChips({
-  value,
-  change,
-}: {
-  value: string;
-  change: (s: string) => void;
-}) {
-  return (
-    <div className="chips">
-      {games.map((g) => (
-        <Chip
-          key={g.value}
-          active={g.value === value}
-          onClick={() => change(g.value)}
-        >
-          {g.label}
-        </Chip>
-      ))}
-    </div>
-  );
-}
 export function Library() {
   const s = useStore();
   const [q, Q] = useState("");
-  const [game, G] = useState("all");
   const [type, T] = useState("全部");
   const [worlds, W] = useState<
     { name: string; id: string; instance: string; version: string }[]
@@ -101,7 +84,6 @@ export function Library() {
   }, [s.instances]);
   const shown = s.instances.filter(
     (i) =>
-      (game === "all" || i.game === game) &&
       i.name.toLowerCase().includes(q.toLowerCase()) &&
       (type === "全部" || type === "实例"),
   );
@@ -112,25 +94,21 @@ export function Library() {
   }
   return (
     <>
+      <GameDirectoryBar />
       <div className="page-head">
-        <div>
-          <h1>你的世界</h1>
-          <p>游戏、服务器与存档，在这里井然有序。</p>
-        </div>
         <div className="actions">
           <SearchInput
             value={q}
             onChange={Q}
-            placeholder="搜索版本、服务器、存档"
+            placeholder="搜索版本、存档"
           />
-          <></>
+
           <Button primary onClick={() => s.setPage("discover")}>
             <Plus size={16} />
             新建
           </Button>
         </div>
       </div>
-      <GameChips value={game} change={G} />
       <div className="chips">
         {["全部", "实例", "存档"].map((t) => (
           <Chip key={t} active={t === type} onClick={() => T(t)}>
@@ -153,15 +131,12 @@ export function Library() {
                   s.setPage("instance");
                 }}
               >
-                {i.icon ? (
-                  <img className="instance-custom-icon" src={i.icon} alt="" />
-                ) : (
-                  <div className="cube">
-                    <i />
-                    <i />
-                    <i />
-                  </div>
-                )}
+                <InstanceIcon
+                  instance={i}
+                  className={
+                    i.icon ? "instance-custom-icon" : "instance-default-icon"
+                  }
+                />
                 <Badge>
                   {i.loader.toUpperCase()}
                   {i.loader === "forge" && i.optifineVersion
@@ -227,26 +202,35 @@ export function Library() {
                 <p>
                   {w.instance} · {w.version}
                 </p>
-                <></>
+                <Button
+                  primary
+                  onClick={() => {
+                    useStore.setState({ selected: w.id });
+                    void guarded(() => api("open_resource_folder", { id: w.id, kind: "saves" }));
+                  }}
+                >
+                  打开存档文件夹
+                </Button>
               </Card>
             ))}
         </div>
       ) : (
         <Empty
-          title={
-            game !== "java" && game !== "all"
-              ? "通过官方客户端游玩"
-              : "还没有匹配的内容"
-          }
+          title="还没有匹配的内容"
           detail={
-            type === "服务器"
-              ? "输入服务器地址，Kynex 会解析 SRV 并连接所选实例。"
-              : type === "存档"
+            type === "存档"
                 ? "进入实例详情的「存档」标签查看本机世界。"
-                : "安装版本后，它会出现在你的游戏库中。"
+                : "安装版本后会显示在这里。"
           }
         >
-          <></>
+          <Button
+            primary
+            onClick={() =>
+              s.setPage("discover")
+            }
+          >
+            浏览版本
+          </Button>
         </Empty>
       )}
     </>
@@ -259,26 +243,95 @@ const tabKinds: Record<string, string> = {
   光影: "shaderpacks",
   数据包: "datapacks",
 };
+import { loadModNames, localModName } from "../download/modLocalization";
+import { ModUpdates, type ModUpdateContext } from "../download/ModManagement";
+import "./modUpdates.css";
+import "./resourceManagement.css";
 export function InstanceDetail() {
   const s = useStore();
   const i = s.instances.find((i) => i.id === s.selected);
   const [tab, T] = useState("概览");
+  const [, NamesReady] = useState(0);
+  useEffect(() => {
+    let live = true;
+    void loadModNames()
+      .then(() => {
+        if (live) NamesReady((n) => n + 1);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
   const [rows, R] = useState<Resource[]>([]);
+  const [loadedResources, LoadedResources] = useState("");
+  const [selectedResources, SelectResources] = useState<string[]>([]);
+  const [deleteRequest, DeleteRequestState] = useState<DeleteRequest | null>(null);
+  const [resourceFilter, ResourceFilter] = useState("all");
+  const cachedModRows = useModUpdateState((state) => state.byId[s.selected]?.rows);
   const [q, Q] = useState("");
+  const [dataWorld, DataWorld] = useState("");
+  const [dataWorlds, DataWorlds] = useState<{ name: string }[]>([]);
+  useEffect(() => {
+    let live = true;
+    DataWorld("");
+    DataWorlds([]);
+    if (i && tab === "数据包" && desktop)
+      void api<{ name: string }[]>("datapack_worlds", { id: i.id })
+        .then((v) => {
+          if (live && Array.isArray(v)) DataWorlds(v);
+        })
+        .catch((e) => {
+          if (live) E(String(e));
+        });
+    return () => {
+      live = false;
+    };
+  }, [i?.id, tab]);
   const [error, E] = useState("");
   const [loading, Loading] = useState(false);
   const [dragging, Dragging] = useState(false);
+  const managed = ["Mod", "资源包", "光影", "数据包"].includes(tab);
+  const currentResourceScope = `${i?.id ?? ""}:${tabKinds[tab] ?? ""}:${tab === "数据包" ? dataWorld : ""}`;
+  const resourceScope = useRef(currentResourceScope);
+  resourceScope.current = currentResourceScope;
+  const scopeRows = loadedResources === currentResourceScope ? rows : [];
+  const resourceBusy = loading || loadedResources !== currentResourceScope || !!deleteRequest || Object.values(s.tasks).some((task) =>
+    !task.finished && !task.error && task.payload?.id === i?.id && ["install_project", "update_mods", "export_pack"].includes(task.action || ""));
+  const updateMap = new Map((cachedModRows || []).map((row) => [row.file, row]));
+  const visibleResources = scopeRows.filter((r) => (tab !== "Mod" || !r.dir && /\.(jar|litemod)(\.disabled)?$/i.test(r.name)) &&
+    `${r.name} ${tab === "Mod" ? localModName(r.modIds, r.name) : ""}`.toLowerCase().includes(q.toLowerCase()) &&
+    (tab !== "Mod" || resourceFilter === "all" || resourceFilter === "enabled" && r.enabled || resourceFilter === "disabled" && !r.enabled ||
+      resourceFilter === "update" && updateMap.get(r.name)?.status === "update" || resourceFilter === "unknown" && r.enabled &&
+      (!updateMap.has(r.name) || ["error", "unknown"].includes(updateMap.get(r.name)!.status) || updateMap.get(r.name)?.partial)));
+  const visibleSignature = visibleResources.map((r) => r.name).join("\0");
+  const dragSelection = useResourceDragSelection(visibleResources.map((r) => r.name), selectedResources, SelectResources, resourceBusy || !managed);
+  useEffect(() => {
+    SelectResources([]); DeleteRequestState(null); ResourceFilter("all"); Q("");
+  }, [i?.id, tab, dataWorld]);
+  useEffect(() => {
+    const visible = new Set(visibleSignature.split("\0"));
+    SelectResources((before) => {
+      const next = before.filter((name) => visible.has(name));
+      return next.length === before.length ? before : next;
+    });
+  }, [visibleSignature]);
   const ensuredLoaders = useRef(new Set<string>());
   const refreshResources = useCallback(async () => {
     if (!i || !tabKinds[tab] || !desktop) return;
+    const scope = `${i.id}:${tabKinds[tab]}:${tab === "数据包" ? dataWorld : ""}`;
     const value = await api<Resource[]>("resources", {
       id: i.id,
       kind: tabKinds[tab],
+      world: tab === "数据包" ? dataWorld || undefined : undefined,
     });
+    if (resourceScope.current !== scope) return;
+    E("");
     R((before) =>
       JSON.stringify(before) === JSON.stringify(value) ? before : value,
     );
-  }, [i?.id, tab]);
+    LoadedResources(scope);
+  }, [i?.id, tab, dataWorld]);
   const importPaths = useCallback(
     async (paths: string[]) => {
       if (!i || !tabKinds[tab] || !paths.length) return;
@@ -287,6 +340,7 @@ export function InstanceDetail() {
         const value = await api<Resource[]>("import_resource_paths", {
           id: i.id,
           kind: tabKinds[tab],
+          world: tab === "数据包" ? dataWorld || undefined : undefined,
           paths,
         });
         R(value);
@@ -296,12 +350,13 @@ export function InstanceDetail() {
         Dragging(false);
       }
     },
-    [i?.id, tab],
+    [i?.id, tab, dataWorld],
   );
   useEffect(() => {
     E("");
     if (i && tabKinds[tab] && desktop) {
       let live = true;
+      LoadedResources("");
       Loading(true);
       const update = () =>
         refreshResources()
@@ -321,6 +376,7 @@ export function InstanceDetail() {
       };
     } else {
       R([]);
+      LoadedResources("");
     }
   }, [i?.id, tab, refreshResources]);
   useEffect(() => {
@@ -378,6 +434,7 @@ export function InstanceDetail() {
     await api("toggle_resource", {
       id: i.id,
       kind: tabKinds[tab],
+      world: tab === "数据包" ? dataWorld || undefined : undefined,
       name: r.name,
     });
     await refreshResources();
@@ -400,6 +457,7 @@ export function InstanceDetail() {
         await api("import_resource", {
           id: i.id,
           kind: tabKinds[tab],
+          world: tab === "数据包" ? dataWorld || undefined : undefined,
           name: file.name,
           base64: btoa(binary),
         });
@@ -421,8 +479,237 @@ export function InstanceDetail() {
     ]);
     if (path) await importPaths([path]);
   }
+  const modResources = scopeRows.filter(
+    (r) => !r.dir && /\.(jar|litemod)(\.disabled)?$/i.test(r.name),
+  );
+  function selectResource(name: string) {
+    if (resourceBusy) return;
+    SelectResources((before) => before.includes(name) ? before.filter((n) => n !== name) : [...before, name]);
+  }
+  function confirmResourceDelete(names: string[]) {
+    if (!i || !names.length || resourceBusy) return;
+    DeleteRequestState({ id: i.id, kind: tabKinds[tab], world: tab === "数据包" ? dataWorld || undefined : undefined,
+      label: tab === "Mod" ? "模组" : tab, names, shared: i.settings.isolation === "shared" || i.settings.isolation === "modded" && i.loader === "vanilla" });
+  }
+  function renderResources(updates?: ModUpdateContext) {
+    if (desktop && loadedResources !== currentResourceScope) return <p className="resource-loading" role="status">正在读取{tab}…</p>;
+    const visible = visibleResources;
+    return (
+      <>
+        {visible.length ? (
+          <div
+            className={`resource-list ${tab === "Mod" ? "mod-resource-list" : ""}`}
+            {...(managed ? dragSelection : {})}
+          >
+            {visible.map((r, n) => {
+              const update = updates?.byFile.get(r.name);
+              const SelectionContent = managed ? "button" : "div";
+              return (
+                <div className={`resource-row ${selectedResources.includes(r.name) ? "selected" : ""}`} key={r.name}
+                  data-resource-name={r.name}>
+                  <SelectionContent className="resource-selection-content"
+                    {...(managed ? { type: "button" as const, "aria-label": `选择 ${r.name}`, "aria-pressed": selectedResources.includes(r.name), disabled: resourceBusy || updates?.applying, onClick: () => selectResource(r.name) } : {})}>
+                  <div className="resource-monogram">
+                    <span>{r.name.slice(0, 2).toUpperCase()}</span>
+                    {r.icon_url && (
+                      <img
+                        src={r.icon_url}
+                        draggable={false}
+                        alt=""
+                        loading="lazy"
+                        onError={(event) => {
+                          event.currentTarget.style.display = "none";
+                        }}
+                      />
+                    )}
+                  </div>
+                  <div className="grow">
+                    <b title={r.name}>
+                      {tab === "Mod"
+                        ? localModName(r.modIds, r.name) ||
+                          r.name.replace(/\.disabled$/, "")
+                        : r.name.replace(/\.disabled$/, "")}
+                    </b>
+                    <small title={r.name}>
+                      {tab === "Mod" && localModName(r.modIds, r.name)
+                        ? `${r.name.replace(/\.disabled$/, "")} · `
+                        : ""}
+                      {readableSize(r.size)} ·{" "}
+                      {tab === "数据包"
+                        ? r.enabled
+                          ? "文件已就绪，游戏中确认启用"
+                          : "文件已停用"
+                        : r.enabled
+                          ? "已启用"
+                          : "已停用"}
+                    </small>
+                    {tab === "Mod" && (
+                      <>
+                        {(update?.current || r.version) && (
+                          <small className="mod-update-version">
+                            {update?.current || r.version}
+                            {update?.status === "update" && update.latest && (
+                              <>
+                                {" "}
+                                → <strong>{update.latest}</strong>
+                              </>
+                            )}
+                          </small>
+                        )}
+                        {update?.source && (
+                          <small className="mod-update-source">
+                            {update.source === "modrinth"
+                              ? "Modrinth"
+                              : "CurseForge"}
+                            {update.cached ? " · 缓存结果" : ""}
+                            {update.partial ? " · 部分来源待确认" : ""}
+                          </small>
+                        )}
+                        {update &&
+                          ["unknown", "error"].includes(update.status) && (
+                            <small
+                              className="mod-update-message"
+                              title={update.detail}
+                            >
+                              {update.detail}
+                            </small>
+                          )}
+                        {!!r.problems?.length && (
+                          <div className="mod-file-problems">
+                            {r.problems.map((problem) => (
+                              <Badge key={problem} tone="warn">
+                                {problem}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  </SelectionContent>
+                  {tab === "Mod" && (
+                    <div
+                      className="mod-row-state"
+                      title={update?.warning || update?.detail}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Badge
+                        tone={
+                          update?.status === "update"
+                            ? "warn"
+                            : update?.status === "current" && !update.partial
+                              ? "ok"
+                              : "neutral"
+                        }
+                      >
+                        {!r.enabled
+                          ? "已停用"
+                          : updates?.checking && !update
+                            ? "检测中"
+                            : update?.status === "update"
+                              ? "可更新"
+                              : update?.partial
+                                ? "部分确认"
+                                : update?.status === "current"
+                                  ? "暂无更新"
+                                  : update?.status === "error"
+                                    ? "检测失败"
+                                    : "未识别"}
+                      </Badge>
+                      {update?.status === "update" && (
+                        <Button
+                          disabled={updates?.busy}
+                          onClick={() => void updates?.update([r.name])}
+                        >
+                          <ArrowUp size={14} />
+                          更新
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  {tab !== "Mod" &&
+                    r.problems?.map((problem) => (
+                      <Badge key={problem} tone="warn">
+                        {problem}
+                      </Badge>
+                    ))}
+                  <div className="resource-row-actions" onClick={(e) => e.stopPropagation()}>
+                  {tab === "存档" ? (
+                    <Button
+                      primary
+                      onClick={() => void guarded(() => api("open_resource_folder", { id: s.selected, kind: "saves" }))}
+                    >
+                      打开存档文件夹
+                    </Button>
+                  ) : managed ? (
+                    <Button className="resource-enable-button" role="switch" aria-checked={r.enabled}
+                      aria-label={`${r.name} 启用`} title={r.enabled ? "停用" : "启用"}
+                      disabled={resourceBusy || updates?.applying} onClick={() => guarded(() => toggle(r))}>
+                      {r.enabled ? <CircleMinus size={16} /> : <CircleCheck size={16} />}
+                    </Button>
+                  ) : (
+                    <Switch
+                      label={`${r.name} 启用`}
+                      disabled={resourceBusy || updates?.applying}
+                      on={r.enabled}
+                      change={() => guarded(() => toggle(r))}
+                    />
+                  )}
+                  {tab === "资源包" && (
+                    <>
+                      <Button
+                        disabled={resourceBusy || !r.enabled || n === 0}
+                        title="上移加载顺序"
+                        onClick={() => guarded(() => moveResource(r, -1))}
+                      >
+                        <ArrowUp size={14} />
+                      </Button>
+                      <Button
+                        disabled={
+                          resourceBusy || !r.enabled ||
+                          n === rows.filter((x) => x.enabled).length - 1
+                        }
+                        title="下移加载顺序"
+                        onClick={() => guarded(() => moveResource(r, 1))}
+                      >
+                        <ArrowDown size={14} />
+                      </Button>
+                    </>
+                  )}
+                  {managed && <Button className="resource-delete-button" aria-label={`删除 ${r.name}`} title="删除"
+                    disabled={resourceBusy || updates?.applying} onClick={() => confirmResourceDelete([r.name])}><Trash2 size={16} /></Button>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <Empty
+            title={
+              modResources.length && tab === "Mod"
+                ? "没有匹配的模组"
+                : `还没有${tab}`
+            }
+            detail={
+              tab === "Mod" && modResources.length
+                ? "调整搜索词或状态筛选后再试。"
+                : desktop
+                  ? `把文件拖到这里，或打开${tab}文件夹添加；列表会自动刷新。`
+                  : "网页预览不读取本机文件。"
+            }
+          />
+        )}
+      </>
+    );
+  }
   return (
     <>
+      {deleteRequest && <ResourceDeleteDialog request={deleteRequest} close={() => DeleteRequestState(null)} completed={async (deleted) => {
+        SelectResources((before) => before.filter((name) => !deleted.includes(name)));
+        R((before) => before.filter((r) => !deleted.includes(r.name)));
+        s.notify(`已将 ${deleted.length} 个文件移到回收站`);
+        await refreshResources();
+      }} />}
       <div className="detail-head">
         <button
           aria-label="返回版本"
@@ -432,11 +719,7 @@ export function InstanceDetail() {
           <ArrowLeft />
         </button>
         <div className="detail-cover">
-          {i.icon ? (
-            <img className="instance-detail-icon" src={i.icon} alt="" />
-          ) : (
-            <Box size={40} />
-          )}
+          <InstanceIcon instance={i} className="instance-detail-icon" />
         </div>
         <div className="grow">
           <h1>
@@ -519,11 +802,11 @@ export function InstanceDetail() {
             <p>每个实例都有自己的模组、配置与世界。</p>
             <div className="stack">
               <Button onClick={() => s.show("export", i.id)}>导出整合包</Button>
-              <Button onClick={() => T("存档")}>管理存档</Button>
+              <Button onClick={() => T("存档")}>一键读档</Button>
               <Button onClick={() => s.setPage("diagnose")}>
                 诊断游戏日志
               </Button>
-              <></>
+
             </div>
           </Card>
         </div>
@@ -535,9 +818,26 @@ export function InstanceDetail() {
             编辑版本设置
           </Button>
         </Card>
+      ) : tab === "服务器" ? (
+        <Empty
+          title="连接你的服务器"
+          detail="支持域名、IPv4、IPv6 与 SRV 解析。"
+        >
+          <Button primary onClick={() => s.show("server")}>
+            输入服务器地址
+          </Button>
+        </Empty>
       ) : (
         <div
-          className={`resource-dropzone ${dragging ? "dragging" : ""}`}
+          className={`resource-dropzone ${managed ? "pcl-resource-page" : ""} ${selectedResources.length ? "has-selection" : ""} ${dragging ? "dragging" : ""}`}
+          onKeyDown={(event) => {
+            if (!managed || resourceBusy || event.target instanceof HTMLInputElement && event.target.type !== "checkbox") return;
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
+              event.preventDefault(); SelectResources(visibleResources.map((r) => r.name));
+            } else if (event.key === "Delete" && selectedResources.length) {
+              event.preventDefault(); confirmResourceDelete(selectedResources);
+            }
+          }}
           onDragEnter={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -563,25 +863,34 @@ export function InstanceDetail() {
         >
           <div className="spread section-tools">
             <SearchInput value={q} onChange={Q} placeholder={`搜索${tab}`} />
-            <Button busy={loading} onClick={() => guarded(refreshResources)}>
-              <RefreshCw size={14} /> 刷新
-            </Button>
-            <Button busy={loading} onClick={() => guarded(browseResource)}>
-              <Upload size={14} /> 添加{tab}
-            </Button>
+            <div className="resource-management-actions">
             <Button
               onClick={() =>
                 guarded(() =>
                   api("open_resource_folder", {
                     id: i.id,
                     kind: tabKinds[tab],
+                    world:
+                      tab === "数据包" ? dataWorld || undefined : undefined,
                   }),
                 )
               }
             >
               <FolderOpen size={14} /> 打开{tab}文件夹
             </Button>
+            <Button disabled={resourceBusy} onClick={() => guarded(browseResource)}>
+              <Upload size={14} /> {managed ? "从文件安装" : `添加${tab}`}
+            </Button>
+            {managed && <Button disabled={resourceBusy || !visibleResources.length} onClick={() => SelectResources(
+              selectedResources.length === visibleResources.length ? [] : visibleResources.map((r) => r.name))}>
+              <CheckSquare size={14} /> {visibleResources.length > 0 && selectedResources.length === visibleResources.length ? "取消全选" : "全选"}
+            </Button>}
+            <Button busy={loading} disabled={!!deleteRequest} onClick={() => guarded(refreshResources)}>
+              <RefreshCw size={14} /> 刷新
+            </Button>
+            </div>
           </div>
+
           {dragging && (
             <div className="resource-drop-hint">
               <Upload size={28} />
@@ -591,85 +900,52 @@ export function InstanceDetail() {
           )}
           {tab === "数据包" && (
             <div className="notice">
-              数据包需要放在指定世界的 saves/世界名/datapacks
-              中；这里显示实例级待安装文件。
+              <OptionSelect
+                label="查看数据包的存档"
+                value={dataWorld}
+                onChange={DataWorld}
+                options={[
+                  { value: "", label: "实例级待安装文件" },
+                  ...dataWorlds.map((w) => ({ value: w.name, label: w.name })),
+                ]}
+              />
+              <p>
+                {dataWorld
+                  ? `当前查看 ${dataWorld} 的 datapacks 文件夹。`
+                  : "可选择存档查看其中的数据包，或在下载页面选择数据包版本与目标存档。"}
+              </p>
             </div>
           )}
           {error && <div className="notice error">{error}</div>}
-          {rows.length ? (
-            <div className="resource-list">
-              {rows
-                .filter((r) => r.name.toLowerCase().includes(q.toLowerCase()))
-                .map((r, n) => (
-                  <div className="resource-row" key={r.name}>
-                    <div className="resource-monogram">
-                      <span>{r.name.slice(0, 2).toUpperCase()}</span>
-                      {r.icon_url && (
-                        <img
-                          src={r.icon_url}
-                          alt=""
-                          loading="lazy"
-                          onError={(event) => {
-                            event.currentTarget.style.display = "none";
-                          }}
-                        />
-                      )}
-                    </div>
-                    <div className="grow">
-                      <b>{r.name.replace(/\.disabled$/, "")}</b>
-                      <small>
-                        {readableSize(r.size)} ·{" "}
-                        {r.enabled ? "已启用" : "已停用"}
-                      </small>
-                    </div>
-                    {r.problems?.map((problem) => (
-                      <Badge key={problem} tone="warn">
-                        {problem}
-                      </Badge>
-                    ))}
-                    {tab === "存档" ? (
-                      <></>
-                    ) : (
-                      <Switch
-                        label={`${r.name} 启用`}
-                        on={r.enabled}
-                        change={() => guarded(() => toggle(r))}
-                      />
-                    )}
-                    {tab === "资源包" && (
-                      <>
-                        <Button
-                          disabled={!r.enabled || n === 0}
-                          title="上移加载顺序"
-                          onClick={() => guarded(() => moveResource(r, -1))}
-                        >
-                          <ArrowUp size={14} />
-                        </Button>
-                        <Button
-                          disabled={
-                            !r.enabled ||
-                            n === rows.filter((x) => x.enabled).length - 1
-                          }
-                          title="下移加载顺序"
-                          onClick={() => guarded(() => moveResource(r, 1))}
-                        >
-                          <ArrowDown size={14} />
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                ))}
-            </div>
+          {tab === "Mod" ? (
+            <ModUpdates
+              key={i.id}
+              id={i.id}
+              refresh={refreshResources}
+              resources={modResources}
+              resourcesReady={loadedResources === currentResourceScope}
+              filter={resourceFilter}
+              onFilterChange={ResourceFilter}
+              disabled={!!deleteRequest}
+              revision={modResources
+                .map(
+                  (r) => `${r.name}:${r.size}:${r.version}:${r.modified ?? ""}`,
+                )
+                .join("|")}
+            >
+              {(state) => renderResources(state)}
+            </ModUpdates>
           ) : (
-            <Empty
-              title={`还没有${tab}`}
-              detail={
-                desktop
-                  ? `把文件拖到这里，或打开${tab}文件夹添加；列表会自动刷新。`
-                  : "网页预览不读取本机文件。"
-              }
-            />
+            renderResources()
           )}
+          {managed && selectedResources.length > 0 && <div className="resource-selection-bar" role="region" aria-label="已选资源操作">
+            <span>已选择 {selectedResources.length} 个文件</span>
+            <Button disabled={resourceBusy} onClick={() => SelectResources([])}>取消选择</Button>
+            <Button className="resource-delete-button" disabled={resourceBusy} onClick={() => confirmResourceDelete(selectedResources)}>
+              <Trash2 size={16} /> 删除所选
+            </Button>
+          </div>}
+
           {tab === "资源包" && (
             <small className="muted">
               已写入本实例的 Minecraft 资源包配置；下次进入游戏生效。

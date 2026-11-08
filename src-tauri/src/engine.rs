@@ -61,7 +61,7 @@ pub fn allowed(v: &Value) -> bool {
     }
     allow
 }
-fn lib_path(name: &str) -> Result<String> {
+pub(crate) fn lib_path(name: &str) -> Result<String> {
     let (name, ext) = name.split_once('@').unwrap_or((name, "jar"));
     let v: Vec<_> = name.split(':').collect();
     if v.len() < 3 || v.len() > 4 {
@@ -81,7 +81,7 @@ fn lib_path(name: &str) -> Result<String> {
         ext
     ))
 }
-fn under(base: &Path, path: &str) -> Result<PathBuf> {
+pub(crate) fn under(base: &Path, path: &str) -> Result<PathBuf> {
     let p = Path::new(path);
     if p.is_absolute()
         || p.components()
@@ -119,6 +119,66 @@ async fn wait_download<T>(
         tokio::select! { value = &mut future => return value, _ = check.tick() => core.stopped()?, }
     }
 }
+/// 断点续传时对 `.part` 文件的处理方式。
+#[derive(Debug, PartialEq)]
+enum Resume {
+    /// 重新写：没有断点文件，或服务端忽略了 Range 直接返回整文件。
+    Fresh,
+    /// 从断点末尾继续写。
+    Append(u64),
+    /// 206 的区间与断点对不上，断点已不可用。
+    Invalid,
+}
+
+/// 根据响应状态、`Content-Range` 与已有片段长度决定如何续传。
+fn resume_action(status: u16, content_range: Option<&str>, part_len: u64) -> Resume {
+    if status != 206 {
+        return Resume::Fresh;
+    }
+    match content_range.and_then(parse_content_range_start) {
+        Some(start) if start == part_len => Resume::Append(start),
+        _ => Resume::Invalid,
+    }
+}
+
+/// 解析 `Content-Range: bytes 100-199/200`；总长度可能是 `*`，此时返回 0。
+fn content_range_parts(value: &str) -> Option<(u64, u64)> {
+    let rest = value.trim().strip_prefix("bytes")?.trim();
+    let (range, total) = rest.split_once('/')?;
+    let (start, _) = range.split_once('-')?;
+    let start = start.trim().parse::<u64>().ok()?;
+    let total = total.trim().parse::<u64>().unwrap_or(0);
+    Some((start, total))
+}
+
+fn parse_content_range_start(value: &str) -> Option<u64> {
+    content_range_parts(value).map(|(start, _)| start)
+}
+
+fn parse_content_range_total(value: &str) -> Option<u64> {
+    content_range_parts(value)
+        .map(|(_, total)| total)
+        .filter(|total| *total > 0)
+}
+
+/// 续传前把已有片段读进哈希器，保证最终校验覆盖整个文件。
+async fn hash_prefix(path: &Path) -> Result<(Sha1, sha2::Sha256)> {
+    use tokio::io::AsyncReadExt;
+    let mut file = tokio::fs::File::open(path).await.map_err(err)?;
+    let mut sha1 = Sha1::new();
+    let mut sha256 = sha2::Sha256::new();
+    let mut buffer = vec![0_u8; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer).await.map_err(err)?;
+        if read == 0 {
+            break;
+        }
+        sha1.update(&buffer[..read]);
+        sha256.update(&buffer[..read]);
+    }
+    Ok((sha1, sha256))
+}
+
 pub async fn download(core: &Core, url: &str, path: &Path, hash: &str) -> Result<()> {
     // Forge's installer extracts bundled Maven artifacts and records an empty
     // URL for them. They are local-only files, verified by the supplied hash.
@@ -129,7 +189,18 @@ pub async fn download(core: &Core, url: &str, path: &Path, hash: &str) -> Result
     let file_lock = core.jobs.file_lock(path);
     let _file_guard = wait_download(core, async { Ok(file_lock.lock().await) }).await?;
     core.stopped()?;
-    if cached_file_valid(path, hash).await? { return Ok(()); }
+    // 断点文件独立于目标文件：下载中断后保留，下次从已写入的字节继续。
+    let mut part = path.as_os_str().to_os_string();
+    part.push(".kxl-part");
+    let part = PathBuf::from(part);
+    if cached_file_valid(path, hash).await? {
+        let _ = tokio::fs::remove_file(&part).await;
+        return Ok(());
+    }
+    let mut resume_from = match tokio::fs::metadata(&part).await {
+        Ok(meta) if meta.is_file() => meta.len(),
+        _ => 0,
+    };
     if url.is_empty() {
         return Err(format!(
             "加载器内置文件缺失或校验失败：{}。请重新安装对应加载器以修复此文件",
@@ -154,23 +225,67 @@ pub async fn download(core: &Core, url: &str, path: &Path, hash: &str) -> Result
                     request = request.header("x-api-key", key);
                 }
             }
+            if resume_from > 0 {
+                request = request.header(reqwest::header::RANGE, format!("bytes={resume_from}-"));
+            }
             if client_progress { (core.progress)(json!({"stage":"连接游戏客户端下载源","done":0,"total":1,"detail":format!("第 {} 次尝试",attempt+1)})); }
             let response = wait_download(core, async {
-                tokio::time::timeout(std::time::Duration::from_secs(8), request.send())
+                let response = tokio::time::timeout(std::time::Duration::from_secs(8), request.send())
                     .await
                     .map_err(|_| "下载源连接超时，正在切换备用源".to_string())?
-                    .map_err(err)?
-                    .error_for_status()
-                    .map_err(err)
+                    .map_err(err)?;
+                // 断点比服务器上的文件还长时返回 416，说明片段已不可用。
+                if response.status().as_u16() == 416 {
+                    let _ = tokio::fs::remove_file(&part).await;
+                    return Err("断点数据已失效，正在重新下载".to_string());
+                }
+                response.error_for_status().map_err(err)
             }).await?;
-            let expected = response.content_length().unwrap_or(0) as usize;
+            let status = response.status().as_u16();
+            let content_range = response
+                .headers()
+                .get(reqwest::header::CONTENT_RANGE)
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_string);
+            let append_from = match resume_action(status, content_range.as_deref(), resume_from) {
+                Resume::Append(from) => from,
+                Resume::Fresh => 0,
+                Resume::Invalid => {
+                    let _ = tokio::fs::remove_file(&part).await;
+                    return Err("断点位置与服务器不一致，正在重新下载".into());
+                }
+            };
+            let expected = if status == 206 {
+                content_range
+                    .as_deref()
+                    .and_then(parse_content_range_total)
+                    .map(|total| total as usize)
+                    .or_else(|| {
+                        response
+                            .content_length()
+                            .map(|len| len as usize + append_from as usize)
+                    })
+                    .unwrap_or(0)
+            } else {
+                response.content_length().unwrap_or(0) as usize
+            };
+            let (mut sha1, mut sha256) = if append_from > 0 {
+                hash_prefix(&part).await?
+            } else {
+                (Sha1::new(), sha2::Sha256::new())
+            };
             let mut response = response.bytes_stream();
-            let mut received = 0usize;
+            let mut received = append_from as usize;
             let mut update = std::time::Instant::now() - std::time::Duration::from_secs(1);
-            let tmp = path.with_extension(format!("part-{}", uuid::Uuid::new_v4()));
-            let mut file = tokio::fs::File::create(&tmp).await.map_err(err)?;
-            let mut sha1 = Sha1::new();
-            let mut sha256 = sha2::Sha256::new();
+            let mut file = if append_from > 0 {
+                tokio::fs::OpenOptions::new()
+                    .append(true)
+                    .open(&part)
+                    .await
+                    .map_err(err)?
+            } else {
+                tokio::fs::File::create(&part).await.map_err(err)?
+            };
             let result: Result<()> = async {
                 use tokio::io::AsyncWriteExt;
                 loop {
@@ -195,6 +310,9 @@ pub async fn download(core: &Core, url: &str, path: &Path, hash: &str) -> Result
                 }
                 file.flush().await.map_err(err)?;
                 drop(file);
+                if expected > 0 && received < expected {
+                    return Err(format!("下载不完整：{received} / {expected} 字节"));
+                }
                 if !hash.is_empty() {
                     let digest = if hash.len() == 64 {
                         format!("{:x}", sha256.finalize())
@@ -202,16 +320,16 @@ pub async fn download(core: &Core, url: &str, path: &Path, hash: &str) -> Result
                         format!("{:x}", sha1.finalize())
                     };
                     if digest != hash.to_lowercase() {
+                        // 断点内容已被污染，删除后从头再来，不能留着重试。
+                        let _ = tokio::fs::remove_file(&part).await;
                         return Err("文件哈希校验失败".into());
                     }
                 }
-                tokio::fs::rename(&tmp, path).await.map_err(err)?;
+                tokio::fs::rename(&part, path).await.map_err(err)?;
                 Ok(())
             }
             .await;
-            if result.is_err() {
-                let _ = tokio::fs::remove_file(&tmp).await;
-            }
+            // 失败时保留 .part，下一次尝试（或下次启动）可以续传。
             result
         }
         .await;
@@ -221,6 +339,10 @@ pub async fn download(core: &Core, url: &str, path: &Path, hash: &str) -> Result
                 if actual_url.as_str() != url {
                     crate::mirrors::mark_failed(core);
                 }
+                resume_from = tokio::fs::metadata(&part)
+                    .await
+                    .map(|meta| meta.len())
+                    .unwrap_or(0);
                 last = format!("{}：{e}",path.file_name().unwrap_or_default().to_string_lossy());
             }
         }
@@ -228,6 +350,8 @@ pub async fn download(core: &Core, url: &str, path: &Path, hash: &str) -> Result
     Err(format!("文件下载失败，已尝试 {} 个下载入口：{last}",candidates.len()))
 }
 async fn tasks(core: &Core, files: Vec<FileTask>, stage: &str, concurrency: usize) -> Result<()> {
+    // 阶段自身有并发上限，设置里的 threads 只能再往下调。
+    let concurrency = concurrency.min(core.threads()).max(1);
     let total = files.len();
     let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let update = Arc::new(std::sync::Mutex::new(std::time::Instant::now()));
@@ -318,71 +442,9 @@ async fn asset_tasks(core: &Core, files: Vec<FileTask>) -> Result<()> {
     Ok(())
 }
 pub async fn loaders(core: &Core, game: &str, loader: &str) -> Result<Value> {
-    safe_name(game)?;
-    match loader {
-        "vanilla" => Ok(json!([])),
-        "fabric" | "quilt" => {
-            let host = if loader == "fabric" {
-                "meta.fabricmc.net"
-            } else {
-                "meta.quiltmc.org"
-            };
-            let v = core
-                .get(&format!(
-                    "https://{host}/v{}/versions/loader/{game}",
-                    if loader == "fabric" { 2 } else { 3 }
-                ))
-                .await?;
-            Ok(json!(v
-                .as_array()
-                .ok_or("加载器列表无效")?
-                .iter()
-                .filter_map(|x| x["loader"]["version"].as_str())
-                .collect::<Vec<_>>()))
-        }
-        "forge" => {
-            let v = core
-                .get(&format!(
-                    "https://bmclapi2.bangbang93.com/forge/minecraft/{game}"
-                ))
-                .await?;
-            Ok(json!(v
-                .as_array()
-                .ok_or("Forge 列表无效")?
-                .iter()
-                .filter_map(|x| x["version"].as_str())
-                .rev()
-                .collect::<Vec<_>>()))
-        }
-        "neoforge" => {
-            let response=crate::mirrors::text(core,"https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml").await?;
-            let parts: Vec<_> = game.split('.').collect();
-            let prefix = if parts.len() >= 3 {
-                format!("{}.{}.", parts[1], parts[2])
-            } else {
-                String::new()
-            };
-            let re = regex::Regex::new(r"<version>([^<]+)</version>").unwrap();
-            let mut out: Vec<_> = re
-                .captures_iter(&response)
-                .map(|c| c[1].to_string())
-                .filter(|v| !prefix.is_empty() && v.starts_with(&prefix))
-                .collect();
-            out.reverse();
-            Ok(json!(out))
-        }
-        "optifine" => {
-            let rows = crate::optifine::releases(core, game).await?;
-            Ok(json!(rows
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|r| r["value"].as_str())
-                .collect::<Vec<_>>()))
-        }
-        _ => Err("未知的加载器".into()),
-    }
+    crate::loader_catalog::loaders(core, game, loader, false).await
 }
+
 async fn metadata(core: &Core, id: &str) -> Result<Value> {
     crate::metadata::version(core, id).await
 }
@@ -490,7 +552,7 @@ async fn offline_mapping_installer(core: &Core, installer: &Path, base: &Value) 
     for index in remove.into_iter().rev(){processors.remove(index);}
     let target=installer.with_extension("offline-mappings.jar");
     let mut original=zip::ZipArchive::new(std::fs::File::open(installer).map_err(err)?).map_err(err)?;
-    if original.file_names().any(|n|n.starts_with("META-INF/")&&(n.ends_with(".SF")||n.ends_with(".RSA")||n.ends_with(".DSA"))){return Err("此加载器使用签名安装器，不能重写离线处理清单".into())}
+    if original.file_names().any(|n|n.starts_with("META-INF/")&&(n.ends_with(".SF")||n.ends_with(".RSA")||n.ends_with(".DSA"))){return Ok(installer.into())}
     let mut writer=zip::ZipWriter::new(std::fs::File::create(&target).map_err(err)?);
     for i in 0..original.len(){
         let mut entry=original.by_index(i).map_err(err)?;
@@ -553,23 +615,48 @@ fn reusable_loader(
     }
     None
 }
+fn unique_instance_name(core: &Core, base: &str) -> Result<String> {
+    let taken: std::collections::HashSet<String> = core
+        .instances()?
+        .as_array()
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|row| row["name"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    if !taken.contains(base) {
+        return Ok(base.to_string());
+    }
+    for index in 2..1000 {
+        let candidate = format!("{base} ({index})");
+        if !taken.contains(&candidate) {
+            return Ok(candidate);
+        }
+    }
+    Err("同名实例过多，请先清理旧实例".into())
+}
 pub async fn install(core: &Core, p: &Value) -> Result<Value> {
-    let name = string(p, "name")?;
-    safe_name(name)?;
+    core.set_threads(p["settings"]["threads"].as_u64().unwrap_or(8) as usize);
+    let name = string(p, "name")?.to_string();
+    safe_name(&name)?;
     let game = string(p, "version")?;
     safe_name(game)?;
     let loader = p["loader"].as_str().unwrap_or("vanilla");
     let id = uuid::Uuid::new_v4().to_string();
     let dir = core.instance(&id)?;
-    if core
+    let duplicate = core
         .instances()?
         .as_array()
         .unwrap()
         .iter()
-        .any(|v| v["name"] == name)
-    {
-        return Err("实例名已存在".into());
-    }
+        .any(|v| v["name"] == name.as_str());
+    // 重复安装同一个版本/整合包时自动加序号，而不是直接报“实例名已存在”。
+    let name = if duplicate {
+        unique_instance_name(core, &name)?
+    } else {
+        name
+    };
     let addon = p["optifineVersion"].as_str().filter(|v| !v.is_empty());
     if addon.is_some() && loader != "forge" {
         return Err("OptiFine 附加安装仅适用于 Forge；其他加载器请分别安装".into());
@@ -587,7 +674,7 @@ pub async fn install(core: &Core, p: &Value) -> Result<Value> {
     } else {
         None
     };
-    let result = async {
+    let mut result = async {
         core.stage("获取版本索引", 0, 2);
         let base = metadata(core, game).await?;
         std::fs::create_dir_all(&dir).map_err(err)?;
@@ -604,12 +691,13 @@ pub async fn install(core: &Core, p: &Value) -> Result<Value> {
             "forge" | "neoforge" => {
                 let loader_lock = core.jobs.file_lock(&core.root.join("loader-installer"));
                 let _loader_guard = crate::jobs::wait(core, loader_lock.lock()).await?;
+                let existing_dirs:std::collections::HashSet<_>=std::fs::read_dir(core.root.join("versions")).into_iter().flatten().flatten().map(|e|e.file_name()).collect();
                 let lv=string(p,"loaderVersion")?;safe_name(lv)?;
                 // The installer needs the vanilla client/libraries, not thousands of sounds/textures.
                 prepare_libraries(core,&dir,&base).await?;
                 let vanilla_dir=core.root.join("versions").join(game);
                 std::fs::create_dir_all(&vanilla_dir).map_err(err)?;
-                write_json(&vanilla_dir.join(format!("{game}.json")),&base)?;
+                if !vanilla_dir.join(format!("{game}.json")).exists() {write_json(&vanilla_dir.join(format!("{game}.json")),&base)?;}
                 let vanilla_jar=vanilla_dir.join(format!("{game}.jar"));
                 if !vanilla_jar.exists() { std::fs::copy(dir.join("client.jar"),&vanilla_jar).map_err(err)?; }
                 let coordinate=if loader=="forge"{format!("{game}-{lv}")}else{lv.into()};
@@ -624,6 +712,9 @@ pub async fn install(core: &Core, p: &Value) -> Result<Value> {
                 } else {
                 prefetch_loader_libraries(core,&installer).await?;
                 let java=ensure_java(core,&base,&settings).await?;
+                if let Some(installed) = crate::loader_processors::install_if_signed(core, &installer, &base, &java).await? {
+                    version = merge(base.clone(), installed);
+                } else {
                 let profiles=core.root.join("launcher_profiles.json");
                 if !profiles.exists(){write_json(&profiles,&json!({"profiles":{}}))?;}
                 core.stage("执行加载器安装器",0,1);
@@ -641,6 +732,13 @@ pub async fn install(core: &Core, p: &Value) -> Result<Value> {
                 }
                 version=merge(base.clone(),found.ok_or("安装器没有生成版本配置")?);
                 }
+                }
+                for id in [Some(game),version["id"].as_str()].into_iter().flatten() {
+                    if !existing_dirs.contains(std::ffi::OsStr::new(id)) {
+                        let folder=core.root.join("versions").join(safe_name(id)?);
+                        if folder.is_dir(){std::fs::write(folder.join(".kxl-internal"),b"").map_err(err)?;}
+                    }
+                }
             },
             _ => return Err("未知的加载器".into()),
         }
@@ -648,7 +746,7 @@ pub async fn install(core: &Core, p: &Value) -> Result<Value> {
         prepare(core,&dir,&version).await?;
         if let Some(release)=&optifine {
             let java=ensure_java(core,&base,&settings).await?;
-            let addon_dir = if loader=="forge" && settings["isolation"]=="shared" {core.root.join("shared")}else{dir.clone()};
+            let addon_dir = game_directories::running_directory(core,&json!({"id":id,"loader":loader,"settings":settings}))?;
             crate::optifine::install(core,game,release,loader=="forge",&java,&addon_dir,&mut version).await?;
             if loader=="optifine" {prepare(core,&dir,&version).await?;}
         }
@@ -666,12 +764,23 @@ pub async fn install(core: &Core, p: &Value) -> Result<Value> {
             ("qsl", "Quilt Standard Libraries")
         };
         core.stage(&format!("安装 {label}"), 0, 1);
-        if let Err(error) =
-            install_project(core, &json!({"id":id,"kind":"mods","project":project})).await
-        {
-            return Err(format!(
-                  "加载器已安装，但自动补齐 {label} 失败：{error}。实例已保留，进入 Mod 页面会自动重试"
-              ));
+        let payload = json!({"id":id,"kind":"mods","project":project});
+        let mut attempt = install_project(core, &payload).await;
+        if attempt.is_err() {
+            // Modrinth 偶发 4xx/网络错误时给一次重试机会。
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            attempt = install_project(core, &payload).await;
+        }
+        if let Err(error) = attempt {
+            // 不再因为一个前置失败就丢掉整个实例；记录 warning，后续可在 Mod 页补装。
+            if let Ok(value) = &mut result {
+                if let Some(object) = value.as_object_mut() {
+                    object.insert(
+                        "warnings".into(),
+                        json!([format!("{label} 自动安装失败：{error}")]),
+                    );
+                }
+            }
         }
     }
     if result.is_err() {
@@ -727,7 +836,11 @@ async fn prepare_libraries(core: &Core, dir: &Path, version: &Value) -> Result<(
     } else {
         client_path.clone()
     };
-    download(core, string(client, "url")?, &cache, hash).await?;
+    if cache!=client_path && !cached_file_valid(&cache,hash).await? && !hash.is_empty() && cached_file_valid(&client_path,hash).await? {
+        std::fs::create_dir_all(cache.parent().unwrap()).map_err(err)?;
+        std::fs::copy(&client_path,&cache).map_err(err)?;
+    }
+    if !cached_file_valid(&cache,hash).await? {download(core, string(client, "url")?, &cache, hash).await?;}
     if cache != client_path {
         let valid = tokio::fs::read(&client_path)
             .await
@@ -978,7 +1091,8 @@ pub fn java_list() -> Result<Value> {
 }
 pub fn java_list_at(core: &Core) -> Result<Value> {
     let mut list = java_list()?.as_array().cloned().unwrap_or_default();
-    let root = core.root.join("runtimes");
+    let roots=if core.root==core.data_root {vec![core.root.join("runtimes")]}else{vec![core.root.join("runtimes"),core.data_root.join("runtimes")]};
+    for root in roots {
     if let Ok(entries) = std::fs::read_dir(root) {
         for entry in entries.flatten() {
             for path in runtime_java_paths(&entry.path()) {
@@ -987,6 +1101,7 @@ pub fn java_list_at(core: &Core) -> Result<Value> {
                 }
             }
         }
+    }
     }
     Ok(json!(list))
 }
@@ -1223,9 +1338,18 @@ pub async fn launch(core: &Core, p: &Value) -> Result<Value> {
     let dir = core.instance(id)?;
     let mut instance = read_json(&dir.join("kxl.json"))?;
     let mut version = read_json(&dir.join("version.json"))?;
+    if let Some(source)=instance["externalClient"].as_str().filter(|_|!dir.join("client.jar").is_file()) {
+        let source=PathBuf::from(source);
+        let hash=version["downloads"]["client"]["sha1"].as_str().unwrap_or("");
+        if source.is_file() && source.canonicalize().map_err(err)?.starts_with(core.root.canonicalize().map_err(err)?) && (hash.is_empty() || cached_file_valid(&source,hash).await?) {
+            std::fs::copy(source,dir.join("client.jar")).map_err(err)?;
+        }
+    }
     // All install/import routes use the same launch-time repair for older manifests.
     let game = string(&instance, "version")?;
-    let base = metadata(core, game).await?;
+    let base = if instance["externalVersion"].is_string() {
+        read_json(&core.root.join("versions").join(safe_name(game)?).join(format!("{game}.json"))).unwrap_or_else(|_|version.clone())
+    } else {metadata(core, game).await?};
     if restore_platform_libraries(&mut version, &base) {
         write_json(&dir.join("version.json"), &version)?;
     }
@@ -1233,6 +1357,7 @@ pub async fn launch(core: &Core, p: &Value) -> Result<Value> {
         .get("settings")
         .filter(|v| v.is_object())
         .unwrap_or(&p["settings"]);
+    core.set_threads(p["settings"]["threads"].as_u64().unwrap_or(8) as usize);
     let java = ensure_java(core, &version, settings).await?;
     let auth = auth::session(
         core,
@@ -1283,14 +1408,14 @@ pub async fn launch(core: &Core, p: &Value) -> Result<Value> {
     }
     cp.push(dir.join("client.jar").to_string_lossy().to_string());
     let sep = if cfg!(windows) { ";" } else { ":" };
-    let gamedir = if settings["isolation"] == "shared"
-        || (settings["isolation"] == "modded" && instance["loader"] == "vanilla")
-    {
-        core.root.join("shared")
-    } else {
-        dir.clone()
-    };
+    let gamedir = game_directories::running_directory(core,&instance)?;
     std::fs::create_dir_all(&gamedir).map_err(err)?;
+    // 启动前同步游戏语言。写入失败不阻塞启动，只保留游戏内原有设置。
+    let _ = crate::game_options::apply_language(
+        &gamedir,
+        &game,
+        p["settings"]["gameLanguage"].as_str().unwrap_or("zh_cn"),
+    );
     let mut vars = BTreeMap::new();
     for (k, v) in [
         ("auth_player_name", auth.name.clone()),
@@ -1417,15 +1542,7 @@ pub async fn launch(core: &Core, p: &Value) -> Result<Value> {
         .as_secs()
         .to_string());
     write_json(&dir.join("kxl.json"), &instance)?;
-    let progress = core.progress.clone();
-    std::thread::spawn(move || {
-        let mut child = child;
-        if let Ok(status) = child.wait() {
-            progress(
-                json!({"stage":if status.success(){"游戏已退出"}else{"游戏异常退出，请导入日志诊断"},"done":1,"total":1,"detail":format!("exit code {:?}",status.code())}),
-            );
-        }
-    });
+    crate::ai_diagnose::watch(core, child, vec![logs.join("kxl-launch.log")]);
     Ok(json!(true))
 }
 fn extract_natives(path: &Path, to: &Path) -> Result<()> {
@@ -1449,19 +1566,14 @@ fn extract_natives(path: &Path, to: &Path) -> Result<()> {
 }
 pub(crate) fn resource_dir(core: &Core, p: &Value) -> Result<PathBuf> {
     let instance = core.instance(string(p, "id")?)?;
-    let config = read_json(&instance.join("kxl.json"))?;
-    let shared = config["settings"]["isolation"] == "shared"
-        || (config["settings"]["isolation"] == "modded" && config["loader"] == "vanilla");
+    let mut config = read_json(&instance.join("kxl.json"))?;
+    config["id"]=p["id"].clone();
     let kind = string(p, "kind")?;
+    if kind=="datapacks" && p["world"].as_str().is_some_and(|s|!s.is_empty()){return crate::resource_downloads::install_dir(core,p);}
     if !["mods", "resourcepacks", "saves", "shaderpacks", "datapacks"].contains(&kind) {
         return Err("资源分类无效".into());
     }
-    Ok(if shared {
-        core.root.join("shared")
-    } else {
-        instance
-    }
-    .join(kind))
+    Ok(game_directories::running_directory(core,&config)?.join(kind))
 }
 pub fn resources(core: &Core, p: &Value) -> Result<Value> {
     let dir = resource_dir(core, p)?;
@@ -1469,7 +1581,9 @@ pub fn resources(core: &Core, p: &Value) -> Result<Value> {
     let mut out = vec![];
     for e in std::fs::read_dir(dir).map_err(err)?.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
-        out.push(json!({"name":name,"size":e.metadata().map_err(err)?.len(),"enabled":!name.ends_with(".disabled"),"dir":e.file_type().map(|t|t.is_dir()).unwrap_or(false)}));
+        let metadata=e.metadata().map_err(err)?;
+        let modified=metadata.modified().ok().and_then(|v|v.duration_since(std::time::UNIX_EPOCH).ok()).map(|v|v.as_millis() as u64);
+        out.push(json!({"name":name,"size":metadata.len(),"modified":modified,"enabled":!name.ends_with(".disabled"),"dir":e.file_type().map(|t|t.is_dir()).unwrap_or(false)}));
     }
     out.sort_by_key(|v| v["name"].as_str().unwrap_or("").to_string());
     Ok(json!(out))
@@ -1521,12 +1635,12 @@ pub fn toggle_resource(core: &Core, p: &Value) -> Result<Value> {
     }
     Ok(json!(true))
 }
-async fn project_version(
+pub(crate) async fn project_version(
     core: &Core,
     project: &str,
     game: &str,
     loader: &str,
-    mods: bool,
+    kind: &str,
 ) -> Result<Value> {
     safe_name(project)?;
     let mut url = reqwest::Url::parse(&format!(
@@ -1535,14 +1649,14 @@ async fn project_version(
     .map_err(err)?;
     url.query_pairs_mut()
         .append_pair("game_versions", &json!([game]).to_string());
-    if mods {
+    if matches!(kind,"mods"|"datapacks") {
         url.query_pairs_mut()
-            .append_pair("loaders", &json!([loader]).to_string());
+            .append_pair("loaders", &json!([if kind=="datapacks"{"datapack"}else{loader}]).to_string());
     }
     let versions = core.get(url.as_str()).await?;
     versions
         .as_array()
-        .and_then(|a| a.first())
+        .and_then(|a| a.iter().max_by_key(|v| v["date_published"].as_str().unwrap_or("")))
         .cloned()
         .ok_or_else(|| format!("项目 {project} 没有兼容当前游戏与加载器的版本"))
 }
@@ -1554,7 +1668,12 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
     let game = string(&instance, "version")?;
     let root_project = string(p, "project")?.to_string();
     let root_icon = p["iconUrl"].as_str().map(str::to_string);
-    let first = project_version(core, &root_project, game, loader, kind == "mods").await?;
+    let first = if let Some(vid) = p["versionId"].as_str() {
+        safe_name(vid)?;
+        let v = core.get(&format!("https://api.modrinth.com/v2/version/{vid}")).await?;
+        if v["project_id"] != root_project { return Err("所选版本不属于当前项目".into()); }
+        v
+    } else { project_version(core, &root_project, game, loader, kind).await? };
     let mut pending = std::collections::VecDeque::from([first]);
     let mut seen = std::collections::HashSet::new();
     let mut projects = std::collections::BTreeMap::new();
@@ -1574,7 +1693,7 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
                 return Err(format!("项目 {pid} 存在互不兼容的依赖版本"));
             }
         }
-        if !version["game_versions"]
+        if resource_downloads::needs_game_match(kind) && !version["game_versions"]
             .as_array()
             .map(|a| a.iter().any(|v| v == game))
             .unwrap_or(false)
@@ -1589,7 +1708,8 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
         {
             return Err(format!("依赖 {pid} 不支持 {loader}"));
         }
-        if let Some(deps) = version["dependencies"].as_array() {
+        if kind=="datapacks" && !version["loaders"].as_array().is_some_and(|a|a.iter().any(|v|v=="datapack")){return Err(format!("版本 {vid} 不是数据包发行版"));}
+        if let Some(deps) = version["dependencies"].as_array().filter(|_|p["skipDependencies"]!=true) {
             for dep in deps.iter().filter(|d| d["dependency_type"] == "required") {
                 if let Some(vid) = dep["version_id"].as_str() {
                     safe_name(vid)?;
@@ -1599,7 +1719,7 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
                     );
                 } else if let Some(pid) = dep["project_id"].as_str() {
                     pending
-                        .push_back(project_version(core, pid, game, loader, kind == "mods").await?);
+                        .push_back(project_version(core, pid, game, loader, kind).await?);
                 } else {
                     return Err("依赖没有可下载的版本或项目 ID".into());
                 }
@@ -1607,19 +1727,14 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
         }
         versions.push(version);
     }
-    let dir = resource_dir(core, &json!({"id":id,"kind":kind}))?;
+    let dir = crate::resource_downloads::install_dir(core,p)?;
     std::fs::create_dir_all(&dir).map_err(err)?;
-    let lockpath = core.instance(id)?.join("installed-projects.json");
+    let lockpath = crate::resource_downloads::lock_path(core,p)?;
     let mut lock = read_json(&lockpath).unwrap_or_else(|_| json!({}));
     let total = versions.len();
     let mut plans = Vec::with_capacity(total);
     for version in versions.iter().rev() {
-        let files = version["files"].as_array().ok_or("资源没有文件")?;
-        let file = files
-            .iter()
-            .find(|f| f["primary"] == true)
-            .or(files.first())
-            .ok_or("资源没有下载文件")?;
+        let file = crate::resource_downloads::modrinth_file(version,kind)?;
         let name = safe_name(string(file, "filename")?)?;
         let hash = string(&file["hashes"], "sha1")?;
         if hash.len() != 40 {
@@ -1644,7 +1759,7 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
             })
             .collect(),
         "安装资源与必需依赖",
-        8,
+        12,
     )
     .await?;
     for (pid, version, name, hash, _) in plans {
@@ -1658,10 +1773,9 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
                 if format!("{:x}", Sha1::digest(&bytes))
                     == lock[pid.as_str()]["sha1"].as_str().unwrap_or("")
                 {
-                    let disabled = dir.join(format!("{previous}.disabled"));
-                    if !disabled.exists() {
-                        std::fs::rename(oldpath, disabled).map_err(err)?;
-                    }
+                    let mut disabled = dir.join(format!("{previous}.disabled"));
+                    if disabled.exists() { disabled=dir.join(format!("{previous}.{}.disabled",uuid::Uuid::new_v4())); }
+                    std::fs::rename(oldpath, disabled).map_err(err)?;
                 }
             }
         }
@@ -1675,6 +1789,7 @@ pub async fn install_project(core: &Core, p: &Value) -> Result<Value> {
     write_json(&lockpath, &lock)?;
     Ok(json!({"files":total}))
 }
+#[cfg(feature = "desktop")]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1829,6 +1944,52 @@ mod tests {
             json!({"libraries":[{"name":"net.fabricmc:fabric-loader:0.16.14"}]}),
         );
         assert_eq!(v["libraries"].as_array().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn resume_only_when_server_confirms_the_offset() {
+        // 没有断点、或服务端忽略 Range 返回 200：从头写。
+        assert_eq!(resume_action(200, None, 0), Resume::Fresh);
+        assert_eq!(resume_action(200, None, 1024), Resume::Fresh);
+        // 206 且起点正好等于断点：接着写。
+        assert_eq!(
+            resume_action(206, Some("bytes 1024-2047/4096"), 1024),
+            Resume::Append(1024)
+        );
+        // 206 的起点与断点不一致：断点不可信，必须重下。
+        assert_eq!(
+            resume_action(206, Some("bytes 0-1023/4096"), 1024),
+            Resume::Invalid
+        );
+        assert_eq!(resume_action(206, None, 1024), Resume::Invalid);
+        assert_eq!(
+            resume_action(206, Some("bytes 0-1023/*"), 0),
+            Resume::Append(0)
+        );
+    }
+
+    #[test]
+    fn content_range_parses_totals() {
+        assert_eq!(content_range_parts("bytes 100-199/200"), Some((100, 200)));
+        assert_eq!(parse_content_range_total("bytes 0-9/10"), Some(10));
+        assert_eq!(parse_content_range_total("bytes 0-9/*"), None);
+        assert_eq!(content_range_parts("garbage"), None);
+    }
+
+    #[tokio::test]
+    async fn hash_prefix_matches_full_hash() {
+        let bytes = b"abcdefghij".repeat(4096);
+        let temp = tempfile::tempdir().unwrap();
+        let part = temp.path().join("file.part");
+        std::fs::write(&part, &bytes[..1000]).unwrap();
+        let (mut sha1, mut sha256) = hash_prefix(&part).await.unwrap();
+        sha1.update(&bytes[1000..]);
+        sha256.update(&bytes[1000..]);
+        assert_eq!(format!("{:x}", sha1.finalize()), format!("{:x}", Sha1::digest(&bytes)));
+        assert_eq!(
+            format!("{:x}", sha256.finalize()),
+            format!("{:x}", sha2::Sha256::digest(&bytes))
+        );
     }
 }
 

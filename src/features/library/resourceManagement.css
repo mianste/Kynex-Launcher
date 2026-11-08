@@ -1,0 +1,68 @@
+.pcl-resource-page {
+  --resource-panel: color-mix(in srgb, var(--surface) 95%, transparent);
+  padding-bottom: 12px;
+}
+.app .pcl-resource-page .section-tools {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  margin: 16px 0 14px;
+}
+.app .pcl-resource-page .search {
+  width: 100%; max-width: none;
+  background: var(--resource-panel);
+  border-radius: 5px; box-shadow: none;
+}
+.resource-management-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pcl-resource-page .resource-management-actions { padding: 14px 16px; background: var(--resource-panel); border-radius: 5px; }
+.app .pcl-resource-page .resource-management-actions .btn {
+  min-width: 108px; border-radius: 4px; border: 1px solid var(--line);
+  box-shadow: none; padding: 8px 16px; background: transparent;
+}
+.app .pcl-resource-page .resource-management-actions .btn:first-child { color: var(--accent); border-color: var(--accent); }
+.app .pcl-resource-page .mod-update-manager,
+.app .pcl-resource-page > .resource-list { padding: 4px 14px 12px; background: var(--resource-panel); border-radius: 5px; }
+.app .pcl-resource-page .mod-update-filters { padding-bottom: 8px; border: 0; gap: 4px; }
+.app .pcl-resource-page .mod-update-filters .chip { padding: 4px 10px; box-shadow: none; background: transparent; border-color: transparent; }
+.app .pcl-resource-page .mod-update-filters .chip.on { color: var(--on-accent); background: var(--accent) !important; }
+.app .pcl-resource-page .resource-list { gap: 2px; }
+.pcl-resource-page .resource-list { user-select: none; }
+.pcl-resource-page[data-selecting="true"] .resource-selection-bar { pointer-events: none; }
+.app .pcl-resource-page .resource-list .resource-row {
+  min-height: 56px; margin: 0; padding: 6px; gap: 10px;
+  border: 1px solid transparent; border-radius: 4px;
+  box-shadow: none; background: transparent; cursor: pointer;
+}
+.app .pcl-resource-page .resource-list .resource-row:hover,
+.app .pcl-resource-page .resource-list .resource-row.selected { background: var(--accent-low); border-color: var(--accent-mid); }
+.app .pcl-resource-page .resource-selection-content { display:flex; align-items:center; gap:10px; flex:1; min-width:0; border:0; background:none; padding:0; color:inherit; font:inherit; box-shadow:none; text-align:left; cursor:pointer; }
+.resource-selection-content:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:4px; }
+.app .pcl-resource-page .resource-monogram { width: 34px; height: 34px; border-radius: 4px; }
+.pcl-resource-page .resource-row .grow { min-width: 0; }
+.pcl-resource-page .resource-row .grow > b,
+.pcl-resource-page .resource-row .grow > small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pcl-resource-page .resource-row .grow > b { font-size: 13px; font-weight: 500; }
+.pcl-resource-page .resource-row .grow > small { font-size: 11px; margin: 0; }
+.resource-row-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+.app .pcl-resource-page .resource-row-actions .btn,
+.app .pcl-resource-page .mod-row-state .btn {
+  color: var(--accent); border: 0; box-shadow: none; background: transparent;
+  border-radius: 4px; padding: 6px; min-width: 28px; min-height: 28px;
+}
+.app .pcl-resource-page .resource-row-actions .btn:hover { background: var(--accent-low); }
+.app .resource-delete-button:hover { color: var(--bad); }
+.pcl-resource-page .resource-selection-bar {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 58px; z-index: 20; display: flex; align-items: center; justify-content: center;
+  gap: 16px; width: max-content; max-width: calc(100% - 48px); margin: 0; padding: 10px 16px;
+  background: var(--glass); border: 1px solid var(--line); border-radius: 6px;
+}
+.pcl-resource-page.has-selection { padding-bottom: 90px; }
+.app .loader-grid button:disabled { opacity: 0.48 !important; cursor: not-allowed; filter: grayscale(1) !important; }
+.loader-grid .loader-availability { color: var(--text2); font-size: 11px; margin-top: 3px; }
+.loader-query-retry { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; font-size: 12px; }
+.resource-selection-bar > span { font-size: 12px; }
+.resource-selection-bar .btn { box-shadow: none; border-radius: 4px; }
+.resource-delete-files { max-height: 220px; overflow: auto; margin-top: 16px; padding-inline-start: 22px; }
+.resource-delete-files li { overflow-wrap: anywhere; margin-block: 4px; }
+.resource-delete-dialog .resource-delete-confirm { background: var(--bad); color: var(--white); }

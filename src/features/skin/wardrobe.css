@@ -559,7 +559,7 @@
 }
 .wardrobe-dropzone {
   border: 1px dashed var(--line);
-  background: var(--bg);
+  background: var(--glass);
   border-radius: 12px;
   width: 100%;
   min-height: 170px;

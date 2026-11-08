@@ -1,4 +1,4 @@
-name: Developer preview Windows build
+name: Windows public source checks
 
 on:
   push:
@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  beta:
+  windows:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:

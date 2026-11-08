@@ -67,9 +67,44 @@ fn urls(core: &Core, url: &str) -> Result<Vec<String>> {
         &core.download_source.read().map_err(err)?,
     ))
 }
+// Only the public catalogue is shared between the two known application IDs.
+// Relocated/temporary game roots keep their own cache.
+fn catalogue_paths(core: &Core) -> Vec<PathBuf> {
+    let mut paths=vec![core.root.join("cache/version-manifest.json")];
+    if core.root.file_name().and_then(|n|n.to_str())==Some("game") {
+        if let Some(app)=core.root.parent() {
+            if matches!(app.file_name().and_then(|n|n.to_str()),Some("com.keke.kynex"|"com.keke.kynex.beta")) {
+                if let Some(base)=app.parent() {
+                    paths.push(base.join("com.keke.kynex.shared/cache/version-manifest.json"));
+                    for id in ["com.keke.kynex","com.keke.kynex.beta"] {
+                        let path=base.join(id).join("game/cache/version-manifest.json");
+                        if !paths.contains(&path){paths.push(path);}
+                    }
+                }
+            }
+        }
+    }
+    paths
+}
+fn cached_catalogue(core: &Core) -> Option<Value> {
+    catalogue_paths(core).iter().filter_map(|path| {
+        let value=read_json(path).ok().filter(valid_manifest)?;
+        Some((std::fs::metadata(path).ok()?.modified().ok()?,value))
+    }).max_by_key(|(modified,_)|*modified).map(|(_,value)|value)
+}
+fn persist_catalogue(core:&Core,value:&Value) {
+    for path in catalogue_paths(core).into_iter().take(2) {
+        let Some(parent)=path.parent() else {continue};
+        if std::fs::create_dir_all(parent).is_err(){continue;}
+        let temp=path.with_extension(format!("{}.tmp",uuid::Uuid::new_v4()));
+        if let Ok(bytes)=serde_json::to_vec(value){
+            if std::fs::write(&temp,bytes).is_ok(){let _=std::fs::rename(&temp,&path);}
+            if temp.exists(){let _=std::fs::remove_file(temp);}
+        }
+    }
+}
 pub async fn manifest(core: &Core, force: bool) -> Result<Value> {
-    let cache = core.root.join("cache/version-manifest.json");
-    let cached = read_json(&cache).ok().filter(valid_manifest);
+    let cached = cached_catalogue(core);
     if !force {
         if let Some(value) = &cached {
             let background = core.clone();
@@ -77,7 +112,7 @@ pub async fn manifest(core: &Core, force: bool) -> Result<Value> {
                 let Ok(sources) = urls(&background, engine::MANIFEST) else { return; };
                 if let Ok(bytes) = fetch(&background, sources, "").await {
                     if let Ok(value) = serde_json::from_slice::<Value>(&bytes) {
-                        if valid_manifest(&value) { let _=write_json(&background.root.join("cache/version-manifest.json"), &value); }
+                        if valid_manifest(&value) { persist_catalogue(&background,&value); }
                     }
                 }
             });
@@ -95,7 +130,7 @@ pub async fn manifest(core: &Core, force: bool) -> Result<Value> {
             if !valid_manifest(&value) {
                 return cached.ok_or_else(|| "下载源返回了空的版本清单，请重试".into());
             }
-            let _ = write_json(&cache, &value);
+            persist_catalogue(core,&value);
             Ok(value)
         }
         Err(error) => cached.ok_or(error),
@@ -103,10 +138,9 @@ pub async fn manifest(core: &Core, force: bool) -> Result<Value> {
 }
 pub async fn version(core: &Core, id: &str) -> Result<Value> {
     core.stopped()?;
-    let cache = core.root.join("cache/version-manifest.json");
     // Version IDs and their hashes are immutable. Reuse the selected catalogue
     // entry immediately rather than downloading the entire catalogue again.
-    let mut index = read_json(&cache).ok().filter(valid_manifest);
+    let mut index = cached_catalogue(core);
     if !index.as_ref().is_some_and(|v| {
         v["versions"]
             .as_array()
@@ -245,4 +279,26 @@ mod tests {
         assert_eq!(value["id"], "1.20.1");
         assert!(value["downloads"]["client"]["url"].is_string());
     }
+}
+
+#[cfg(test)] mod shared_catalogue_tests {
+ use super::*;
+ #[tokio::test] async fn beta_reuses_stable_catalogue_without_waiting_for_network(){
+  let t=tempfile::tempdir().unwrap();let core=Core::new(t.path().join("com.keke.kynex.beta/game"),Arc::new(|_|{})).unwrap();
+  let stable=t.path().join("com.keke.kynex/game/cache/version-manifest.json");
+  let value=json!({"versions":[{"id":"1.20.1","url":"https://unreachable.invalid/version.json"}]});
+  write_json(&stable,&value).unwrap();
+  assert_eq!(tokio::time::timeout(Duration::from_millis(250),manifest(&core,false)).await.unwrap().unwrap(),value);
+  persist_catalogue(&core,&value);
+  assert_eq!(read_json(&t.path().join("com.keke.kynex.shared/cache/version-manifest.json")).unwrap(),value);
+  assert_eq!(read_json(&stable).unwrap(),value);
+ }
+ #[test] fn invalid_shared_cache_cannot_replace_valid_local_and_custom_roots_are_isolated(){
+  let t=tempfile::tempdir().unwrap();let core=Core::new(t.path().join("com.keke.kynex.beta/game"),Arc::new(|_|{})).unwrap();
+  let value=json!({"versions":[{"id":"1.20.1","url":"https://example.com/1.json"}]});
+  write_json(&core.root.join("cache/version-manifest.json"),&value).unwrap();
+  write_json(&t.path().join("com.keke.kynex.shared/cache/version-manifest.json"),&json!({"error":"bad"})).unwrap();
+  assert_eq!(cached_catalogue(&core).unwrap(),value);
+  let isolated=Core::new(t.path().join("custom/game"),Arc::new(|_|{})).unwrap();assert_eq!(catalogue_paths(&isolated).len(),1);assert!(cached_catalogue(&isolated).is_none());
+ }
 }

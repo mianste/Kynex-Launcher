@@ -1,5 +1,6 @@
 import {
   Children,
+  Fragment,
   isValidElement,
   useEffect,
   useId,
@@ -15,6 +16,8 @@ type Choice = {
   label: string;
   hint?: string;
   disabled?: boolean;
+  group?: string;
+  indent?: boolean;
 };
 type Props = {
   value?: string | number;
@@ -76,6 +79,8 @@ export function ChoiceSelect({
   const selected = options.findIndex((item) => item.value === String(value));
   const [open, setOpen] = useState(false),
     [active, setActive] = useState(Math.max(0, selected));
+  const [closing, setClosing] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout>>();
   const [position, setPosition] = useState({
     left: 0,
     top: 0,
@@ -89,6 +94,11 @@ export function ChoiceSelect({
   const enabled = (index: number) => !options[index]?.disabled;
   function close() {
     setOpen(false);
+    setClosing(true);
+    clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setClosing(false),
+      matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 100);
+    requestAnimationFrame(() => trigger.current?.focus({ preventScroll: true }));
   }
   function choose(index: number) {
     if (!enabled(index)) return;
@@ -99,16 +109,50 @@ export function ChoiceSelect({
   function show() {
     if (disabled || !options.length) return;
     setActive(Math.max(0, selected));
+    clearTimeout(closeTimer.current);
+    setClosing(false);
     setOpen(true);
   }
+  useEffect(() => () => clearTimeout(closeTimer.current), []);
+  useLayoutEffect(() => {
+    if ((!open && !closing) || !menu.current) return;
+    const root = document.querySelector(".app");
+    const restored = new Map<HTMLElement, { value: string; priority: string }>();
+    const shield = () => {
+      // Cut the covered region out of the interface beneath the portal. The
+      // actual wallpaper remains visible even when the menu itself is clear.
+      for (const [node, old] of restored) node.style.setProperty("clip-path", old.value, old.priority);
+      restored.clear();
+      const bounds = { left: position.left, top: position.top, right: position.left + position.width, bottom: position.top + menu.current!.offsetHeight };
+      for (const node of root?.querySelectorAll<HTMLElement>("*") ?? []) {
+        if (!(node instanceof HTMLElement) || node.closest(".wallpaper,.wallpaper-video,.scrim,.ui-tint,.choice-popover")) continue;
+        const r = node.getBoundingClientRect();
+        if (!r.width || !r.height || r.left >= bounds.right || r.right <= bounds.left || r.top >= bounds.bottom || r.bottom <= bounds.top) continue;
+        const sx = node.offsetWidth / r.width, sy = node.offsetHeight / r.height;
+        const l = (bounds.left - r.left) * sx, t = (bounds.top - r.top) * sy;
+        const right = (bounds.right - r.left) * sx, bottom = (bounds.bottom - r.top) * sy;
+        const rx = 16 * sx, ry = 16 * sy;
+        const extent = Math.max(innerWidth, innerHeight, r.width, r.height) * 4;
+        restored.set(node, { value: node.style.getPropertyValue("clip-path"), priority: node.style.getPropertyPriority("clip-path") });
+        node.style.setProperty("clip-path", `path(evenodd, "M ${-extent} ${-extent} H ${extent} V ${extent} H ${-extent} Z M ${l + rx} ${t} H ${right - rx} Q ${right} ${t} ${right} ${t + ry} V ${bottom - ry} Q ${right} ${bottom} ${right - rx} ${bottom} H ${l + rx} Q ${l} ${bottom} ${l} ${bottom - ry} V ${t + ry} Q ${l} ${t} ${l + rx} ${t} Z")`);
+      }
+    };
+    shield();
+    const resize = new ResizeObserver(shield);
+    resize.observe(menu.current);
+    return () => {
+      resize.disconnect();
+      for (const [node, old] of restored) node.style.setProperty("clip-path", old.value, old.priority);
+    };
+  }, [open, closing, position]);
   useLayoutEffect(() => {
     if (!open || !trigger.current) return;
     const place = () => {
       const r = trigger.current!.getBoundingClientRect(),
         edge = 14;
       const requested = Math.min(292, options.length * 44 + 12),
-        below = innerHeight - r.bottom - edge,
-        above = r.top - edge;
+        below = innerHeight - r.bottom - edge - 6,
+        above = r.top - edge - 6;
       const down = below >= Math.min(requested, 190) || below >= above;
       const height = Math.min(requested, Math.max(80, down ? below : above));
       const width = Math.min(Math.max(r.width, 220), innerWidth - edge * 2);
@@ -130,6 +174,7 @@ export function ChoiceSelect({
       if (!menu.current?.contains(event.target as Node)) place();
     };
     place();
+    menu.current?.focus({ preventScroll: true });
     document.addEventListener("pointerdown", outside, true);
     window.addEventListener("resize", place);
     document.addEventListener("scroll", scroll, true);
@@ -225,10 +270,11 @@ export function ChoiceSelect({
         </span>
         <ChevronDown size={15} />
       </button>
-      {open &&
+      {(open || closing) &&
         createPortal(
           <div
-            className="choice-popover"
+            className={`choice-popover ${closing ? "is-closing" : ""}`}
+            aria-hidden={closing || undefined}
             ref={menu}
             style={{
               position: "fixed",
@@ -238,32 +284,41 @@ export function ChoiceSelect({
               maxHeight: position.height,
             }}
             role="listbox"
+            tabIndex={-1}
+            aria-activedescendant={`${id}-${active}`}
+            onKeyDown={keyDown}
             aria-label={label}
             id={id}
           >
             {options.map((item, index) => (
-              <div
-                key={item.value}
-                id={`${id}-${index}`}
-                role="option"
-                aria-selected={item.value === String(value)}
-                aria-disabled={item.disabled || undefined}
-                data-active={active === index || undefined}
-                className="choice-option"
-                onPointerMove={() => setActive(index)}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => choose(index)}
-              >
-                <span>
-                  <b>{item.label}</b>
-                  {item.hint && <small>{item.hint}</small>}
-                </span>
-                {item.value === String(value) ? (
-                  <Check size={15} />
-                ) : (
-                  <span className="choice-check-space" />
+              <Fragment key={item.value}>
+                {item.group && item.group !== options[index - 1]?.group && (
+                  <div className="choice-group" role="presentation">
+                    {item.group}
+                  </div>
                 )}
-              </div>
+                <div
+                  id={`${id}-${index}`}
+                  role="option"
+                  aria-selected={item.value === String(value)}
+                  aria-disabled={item.disabled || undefined}
+                  data-active={active === index || undefined}
+                  className={`choice-option ${item.indent ? "indent" : ""}`}
+                  onPointerMove={() => setActive(index)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => choose(index)}
+                >
+                  <span>
+                    <b>{item.label}</b>
+                    {item.hint && <small>{item.hint}</small>}
+                  </span>
+                  {item.value === String(value) ? (
+                    <Check size={15} />
+                  ) : (
+                    <span className="choice-check-space" />
+                  )}
+                </div>
+              </Fragment>
             ))}
           </div>,
           document.querySelector(".app") ?? document.body,

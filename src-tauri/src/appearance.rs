@@ -161,6 +161,20 @@ pub(crate) async fn microsoft_profile(c: &Core, a: &Value, token: &str) -> Resul
 pub async fn sync(c: &Core, id: &str) -> Result<Value> {
     let a = account(c, id)?;
     let updated = if a["kind"] == "microsoft" {
+        // A valid Minecraft token needs one profile request, not the entire
+        // Microsoft → Xbox → XSTS → Minecraft login chain on every click.
+        if let Some(token) = auth::appearance_token(id) {
+            let response = c.http.get(PROFILE).bearer_auth(&token)
+                .timeout(std::time::Duration::from_secs(10)).send().await
+                .map_err(|_| "无法连接正版皮肤服务")?;
+            if response.status().is_success() {
+                let profile: Value = response.json().await.map_err(|_| "正版皮肤档案无效")?;
+                return auth::save(c, &microsoft_account(a, &profile)?);
+            }
+            if response.status().as_u16() != 401 {
+                return Err(format!("同步皮肤失败（HTTP {}），请稍后重试", response.status().as_u16()));
+            }
+        }
         // Refresh already retrieves the authenticated profile (including all owned capes).
         auth::session(c, id, "").await?;
         account(c, id)?

@@ -1,0 +1,117 @@
+.project-results {
+  border-top: 1px solid var(--line);
+}
+.project-result-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.project-result-row:hover {
+  background: var(--accent-low);
+}
+.project-result-row .project-icon {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: var(--control-bg);
+  color: var(--text2);
+}
+.project-result-row .project-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--control-bg);
+}
+.project-result-row .project-icon > span {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  max-height: 100%;
+  padding: 2px 4px;
+  overflow: hidden;
+  text-align: center;
+  line-height: 1.15;
+  font-size: 12px;
+}
+.project-result-row .project-icon > span.hidden {
+  display: none;
+}
+.project-result-row .project-copy {
+  flex: 1;
+  min-width: 0;
+}
+.project-result-row .project-title-line {
+  align-items: baseline;
+  gap: 12px;
+}
+.project-result-row .project-title-line h3 {
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+.project-result-row .project-title-line h3 small {
+  font-size: 11px;
+  color: var(--text2);
+}
+.project-result-row .project-title-line .badge {
+  white-space: nowrap;
+  flex: none;
+}
+.project-result-row .project-tags {
+  margin: 4px 0;
+}
+.project-result-row .project-copy > p {
+  font-size: 12px;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.project-result-row .project-original-description {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+}
+.project-result-row .project-meta {
+  margin-top: 8px;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 11px;
+}
+.project-result-row > .btn {
+  flex: none;
+}
+.catalog-loading .resource-skeleton-row {
+  min-height: 116px;
+  padding: 16px 8px;
+}
+.catalog-source-warning {
+  padding: 12px 0;
+  color: var(--text2);
+  font-size: 12px;
+}
+.catalog-source-warning summary {
+  cursor: pointer;
+}
+.catalog-source-warning p {
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+
+.project-result-row .project-title-line .badge {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--text2);
+}

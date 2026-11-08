@@ -5,5 +5,5 @@
   "forge.png": "https://files.minecraftforge.net/static/images/favicon-32x32.png",
   "neoforge.png": "https://neoforged.net/img/authors/neoforged.png",
   "optifine.png": "https://optifine.net/images/of16r.png",
-  "vanilla": "Independent code-native grass block illustration in LoaderIcon.tsx"
+  "minecraft.png": "Mojang Minecraft Java 1.20.1 client.jar / pack.png, extracted from locally installed official client; Minecraft artwork remains owned by Mojang/Microsoft."
 }

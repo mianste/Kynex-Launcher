@@ -1,0 +1,20 @@
+.export-pack-dialog .modal-body { max-height: calc(100vh - 235px); overflow: auto; }
+.export-metadata { display: grid; grid-template-columns: minmax(0, 2fr) minmax(130px, 1fr); gap: 20px; margin-bottom: 16px; }
+.export-metadata .field { margin: 0; }
+.export-options, .export-advanced { background: var(--glass); border-radius: 5px; padding: 14px 18px; }
+.export-options-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.export-options-heading .btn { padding: 3px 8px; background: transparent; border: 0; box-shadow: none; font-size: 12px; }
+.export-option { display: flex; align-items: center; gap: 8px; min-height: 28px; font-size: 13px; cursor: pointer; }
+.export-option input { appearance: auto; width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--accent); }
+.export-option small { color: var(--text2); font-size: 11px; }
+.export-option > span { min-width: 0; overflow-wrap: anywhere; }
+.export-child { margin-inline-start: 28px; }
+.export-game-hint { display: block; margin: 0 0 5px 24px; font-size: 11px; }
+.export-file-options { margin: 2px 0 7px 24px; }
+.export-file-options > summary { font-size: 11px; color: var(--text2); cursor: pointer; }
+.export-file-options > div { max-height: 180px; overflow: auto; margin-top: 4px; }
+.export-file-options .export-option > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.export-advanced { margin-top: 14px; }
+.export-advanced > summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+.export-advanced .field { margin-top: 14px; }
+.export-advanced p { font-size: 11px; margin-top: 8px; }

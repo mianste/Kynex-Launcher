@@ -1,0 +1,20 @@
+/* One antialiased alpha mask for the whole composited window, including video.
+   Rounded overflow plus a second rounded clip would multiply edge coverage. */
+.app {
+  --corner-aa: 1.25px;
+  border-radius: 0;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  clip-path: none;
+  --corner-mask:
+    linear-gradient(#000 0 0) center / calc(100% - 2 * var(--window-radius)) 100% no-repeat,
+    linear-gradient(#000 0 0) center / 100% calc(100% - 2 * var(--window-radius)) no-repeat,
+    radial-gradient(circle at 100% 100%, #000 calc(var(--window-radius) - var(--corner-aa)), transparent var(--window-radius)) top left / var(--window-radius) var(--window-radius) no-repeat,
+    radial-gradient(circle at 0 100%, #000 calc(var(--window-radius) - var(--corner-aa)), transparent var(--window-radius)) top right / var(--window-radius) var(--window-radius) no-repeat,
+    radial-gradient(circle at 100% 0, #000 calc(var(--window-radius) - var(--corner-aa)), transparent var(--window-radius)) bottom left / var(--window-radius) var(--window-radius) no-repeat,
+    radial-gradient(circle at 0 0, #000 calc(var(--window-radius) - var(--corner-aa)), transparent var(--window-radius)) bottom right / var(--window-radius) var(--window-radius) no-repeat;
+  -webkit-mask: var(--corner-mask);
+  mask: var(--corner-mask);
+}
+html, body, #root { background: transparent; }

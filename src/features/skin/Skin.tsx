@@ -45,7 +45,7 @@ export function Skin() {
     [renderError, RenderError] = useState("");
   const [section, Section] = useState("模型"),
     [motion, Motion] = useState<SkinMotion>("站立"),
-    [rotate, Rotate] = useState(true),
+    [rotate, Rotate] = useState(() => !matchMedia("(prefers-reduced-motion: reduce)").matches),
     [outer, Outer] = useState(true);
   const [capeOn, CapeOn] = useState(false),
     [customCape, CustomCape] = useState<HTMLCanvasElement | null>(null),
@@ -61,29 +61,63 @@ export function Skin() {
   useEffect(() => {
     CapeChoice(w.account?.capeId || "");
     CapeTexture("");
-    CapeOn(!!w.account?.cape);
-    CustomCape(null);
+    const equipped =
+      w.account?.kind === "microsoft"
+        ? w.account.capes?.find((c) => c.id === w.account?.capeId)?.texture ||
+          w.account.cape
+        : w.account?.cape;
+    CapeOn(!!equipped);
+    CustomCape(equipped ? cachedCape(equipped) || null : null);
     CapeError("");
   }, [w.account?.id, w.account?.cape, w.account?.capeId]);
   const capeSource =
     capeTexture ||
     (official
-      ? w.account?.capes?.find((v) => v.id === capeChoice)?.texture
+      ? w.account?.capes?.find((v) => v.id === capeChoice)?.texture ||
+        (capeChoice === w.account?.capeId ? w.account?.cape : "")
       : w.account?.cape) ||
     "";
   useEffect(() => {
-    let active=true;
-    if(!capeSource){CustomCape(null);return;}
-    const ready=cachedCape(capeSource);
-    if(ready){CustomCape(ready);CapeError("");return;}
-    void loadCape(capeSource).then(canvas=>{if(active){CustomCape(canvas);CapeError("");}}).catch(e=>{if(active)CapeError(String(e));});
-    return ()=>{active=false;};
-  },[capeSource]);
-  useEffect(()=>{
-    let active=true; const sources=(w.account?.capes || []).map(v=>v.texture);let index=0;
-    const worker=async()=>{while(active&&index<sources.length){const source=sources[index++];await loadCape(source).catch(()=>{});}};
-    void Promise.all([worker(),worker()]);return ()=>{active=false;};
-  },[w.account?.id,w.account?.capes]);
+    let active = true;
+    if (!capeSource) {
+      CustomCape(null);
+      return;
+    }
+    const ready = cachedCape(capeSource);
+    if (ready) {
+      CustomCape(ready);
+      CapeError("");
+      return;
+    }
+    void loadCape(capeSource)
+      .then((canvas) => {
+        if (active) {
+          CustomCape(canvas);
+          CapeError("");
+        }
+      })
+      .catch((e) => {
+        if (active) CapeError(String(e));
+      });
+    return () => {
+      active = false;
+    };
+  }, [capeSource, w.account?.id, w.account?.cape, w.account?.capeId]);
+  useEffect(() => {
+    let active = true;
+    const sources = (w.account?.capes || []).map((v) => v.texture);
+    let index = 0;
+    const worker = async () => {
+      while (active && index < sources.length) {
+        const source = sources[index++];
+        await loadCape(source).catch(() => {});
+      }
+    };
+    void Promise.all([worker(), worker()]);
+    return () => {
+      active = false;
+    };
+  }, [w.account?.id, w.account?.capes]);
   const capeDirty = official
     ? (capeOn ? capeChoice : "") !== (w.account?.capeId || "")
     : !!capeTexture || (!capeOn && !!w.account?.cape);
@@ -223,10 +257,6 @@ export function Skin() {
   return (
     <div className="wardrobe-page">
       <div className="page-head">
-        <div>
-          <h1>皮肤</h1>
-          <p>查看、导入和管理你的 Minecraft 皮肤。</p>
-        </div>
         <div className="row">
           {w.account?.kind !== "offline" && w.account && (
             <Button
@@ -540,7 +570,7 @@ export function Skin() {
                     </ChoiceSelect>
                   </Field>
                   <small>
-                    遵循系统“减少动态效果”设置。触碰预览即暂停自转。
+                    拖动人物时会暂停旋转。
                   </small>
                 </>
               )}

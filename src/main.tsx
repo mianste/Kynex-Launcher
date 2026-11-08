@@ -6,6 +6,9 @@ import "./styles.css";
 import "./motion.css";
 import "./features/skin/wardrobe.css";
 import "./acrylic.css";
+import "./appearance.css";
+import "./interaction-motion.css";
+import "./window-corners.css";
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { error: string }
@@ -25,6 +28,16 @@ class ErrorBoundary extends React.Component<
       this.props.children
     );
   }
+}
+// 生产版关闭 WebView2 默认右键菜单（返回/刷新/另存为/打印），开发版保留方便调试。
+if (!import.meta.env.DEV) {
+  window.addEventListener(
+    "contextmenu",
+    (event) => {
+      event.preventDefault();
+    },
+    { capture: true },
+  );
 }
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <ErrorBoundary>

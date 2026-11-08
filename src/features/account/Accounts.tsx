@@ -15,10 +15,6 @@ export function Accounts() {
   return (
     <>
       <div className="page-head">
-        <div>
-          <h1>账号</h1>
-          <p>每一种身份，都能找到自己的世界。</p>
-        </div>
         <Button primary onClick={() => s.show("login")}>
           <Plus size={16} />
           添加账号

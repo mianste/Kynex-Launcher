@@ -1,3 +1,4 @@
+import { InstanceIcon } from "../../components/ui/LoaderIcon";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   ArrowUpRight,
@@ -14,6 +15,7 @@ import {
   Swords,
   Map,
   Music2,
+  RefreshCw,
 } from "lucide-react";
 import { useStore, launch, guarded } from "../../store";
 import { Button, Badge } from "../../components/ui";
@@ -41,23 +43,28 @@ export function Home() {
           >
             <Heart size={14} /> 爱发电
           </button>
+
         </div>
       </header>
       <div className="home-dashboard">
         <section className="home-quick-panel">
-          <h2>常用入口</h2>
+          <h2 className="readable-title">常用入口</h2>
           <div className="home-shortcuts">
+
+
             <button onClick={() => guarded(importPack)}>
               <span>
                 <PackagePlus size={23} />
               </span>
-              <b>导入整合包</b>
-              <small>ZIP / MRPACK</small>
+              <span className="shortcut-copy readable-copy">
+                <b>导入整合包</b>
+                <small>ZIP / MRPACK</small>
+              </span>
             </button>
           </div>
           <div className="home-recent-head">
-            <h2>最近的实例</h2>
-            <button onClick={() => s.setPage("library")}>
+            <h2 className="readable-title">最近的实例</h2>
+            <button className="readable-copy" onClick={() => s.setPage("library")}>
               全部版本 <ArrowUpRight size={13} />
             </button>
           </div>
@@ -71,13 +78,12 @@ export function Home() {
                 }}
               >
                 <span className="home-instance-icon">
-                  {item.icon ? (
-                    <img src={item.icon} alt="" />
-                  ) : (
-                    <Box size={20} />
-                  )}
+                  <InstanceIcon
+                    instance={item}
+                    className="home-instance-artwork"
+                  />
                 </span>
-                <span>
+                <span className="readable-copy">
                   <b>{item.name}</b>
                   <small>
                     Minecraft {item.version} / {item.loader}
@@ -89,7 +95,7 @@ export function Home() {
             {!s.instances.length && (
               <button onClick={() => s.setPage("discover")}>
                 <Plus size={20} />
-                <span>
+                <span className="readable-copy">
                   <b>安装第一个版本</b>
                   <small>选择游戏版本与加载器</small>
                 </span>
@@ -110,7 +116,7 @@ export function Home() {
                 (account?.name.slice(0, 1).toUpperCase() ?? "K")
               )}
             </div>
-            <div>
+            <div className="readable-copy">
               <b>{account?.name ?? "添加你的第一个账号"}</b>
               <small>
                 {account
@@ -125,11 +131,12 @@ export function Home() {
             <ArrowUpRight size={16} />
           </button>
           <div className="glass launch-card">
+            <div className="launch-copy readable-copy">
             <div className="launch-status">
               <i />
               Java 版<Badge tone="ok">本地游戏库</Badge>
             </div>
-            <h2>准备好出发了吗？</h2>
+            <h2>启动 Minecraft</h2>
             <button className="version-link" onClick={() => s.show("versions")}>
               {instance?.name ?? "选择或安装版本"}
               <ChevronDown size={15} />
@@ -143,14 +150,16 @@ export function Home() {
               </span>
               <span>{instance?.settings.memory ?? s.settings.memory} MB</span>
             </div>
+            </div>
             <div className="launch-buttons">
               <Button primary busy={s.busy} onClick={() => void launch()}>
                 <Play size={19} />
                 {s.busy ? "正在准备…" : "进入游戏"}
               </Button>
+
             </div>
             <button
-              className="text-button"
+              className="text-button readable-copy"
               onClick={() => s.setPage("library")}
             >
               <FolderOpen size={13} /> 管理版本与存档 <ArrowUpRight size={12} />
@@ -158,6 +167,7 @@ export function Home() {
           </div>
         </aside>
       </div>
+
     </div>
   );
 }

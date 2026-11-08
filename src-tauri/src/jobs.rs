@@ -6,20 +6,33 @@ use tokio::sync::{Mutex as AsyncMutex, OwnedSemaphorePermit, Semaphore};
 pub struct Jobs {
     slots: Arc<Semaphore>,
     pub download_slots: Semaphore,
+    pub mod_scan_slots: Semaphore,
     active: Mutex<HashMap<String, Arc<AtomicBool>>>,
     locks: Mutex<HashMap<String, Weak<AsyncMutex<()>>>>,
+    mod_scans: Mutex<HashMap<String, (u64, bool)>>,
 }
 impl Default for Jobs {
     fn default() -> Self {
         Self {
             slots: Arc::new(Semaphore::new(3)),
             download_slots: Semaphore::new(24),
+            mod_scan_slots: Semaphore::new(2),
             active: Mutex::new(HashMap::new()),
             locks: Mutex::new(HashMap::new()),
+            mod_scans: Mutex::new(HashMap::new()),
         }
     }
 }
 impl Jobs {
+    pub fn request_mod_scan(&self,id:&str)->bool{
+        let mut scans=self.mod_scans.lock().unwrap();let scan=scans.entry(id.into()).or_insert((0,false));
+        scan.0+=1;if scan.1{return false;}scan.1=true;true
+    }
+    pub fn mod_scan_generation(&self,id:&str)->u64{self.mod_scans.lock().unwrap().get(id).map(|v|v.0).unwrap_or(0)}
+    pub fn finish_mod_scan(&self,id:&str,generation:u64)->bool{
+        let mut scans=self.mod_scans.lock().unwrap();let Some(scan)=scans.get_mut(id)else{return true};
+        if scan.0!=generation{return false;}scan.1=false;true
+    }
     fn lock(&self, key: String) -> Arc<AsyncMutex<()>> {
         let mut locks = self.locks.lock().unwrap();
         locks.retain(|_, lock| lock.strong_count() > 0);
@@ -32,6 +45,9 @@ impl Jobs {
     }
     pub fn file_lock(&self, path: &Path) -> Arc<AsyncMutex<()>> {
         self.lock(format!("file:{}", path.to_string_lossy().to_lowercase()))
+    }
+    pub fn instance_lock(&self, id: &str) -> Arc<AsyncMutex<()>> {
+        self.lock(format!("instance:{id}"))
     }
     pub fn start(self: &Arc<Self>, action: &str, payload: &Value) -> Job {
         let id = uuid::Uuid::new_v4().to_string();
@@ -97,6 +113,11 @@ impl Drop for Job {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]fn installed_mod_scans_coalesce_per_instance(){
+        let jobs=Jobs::default();assert!(jobs.request_mod_scan("a"));let first=jobs.mod_scan_generation("a");
+        assert!(!jobs.request_mod_scan("a"));assert!(jobs.request_mod_scan("b"));assert!(!jobs.finish_mod_scan("a",first));
+        let next=jobs.mod_scan_generation("a");assert!(jobs.finish_mod_scan("a",next));assert!(jobs.request_mod_scan("a"));
+    }
     #[tokio::test]
     async fn jobs_are_independent_and_same_target_serializes() {
         let jobs = Arc::new(Jobs::default());

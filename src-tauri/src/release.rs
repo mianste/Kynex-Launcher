@@ -16,11 +16,15 @@ pub fn version() -> String {
     info()["version"].as_str().unwrap_or("1.1.0").to_owned()
 }
 pub fn endpoints(core: &Core) -> Result<Vec<reqwest::Url>> {
-    let config = read_json(&core.root.join("update-sources.json")).unwrap_or_else(|_| {
-        serde_json::from_str(include_str!("../../config/update-sources.json"))
-            .expect("valid update sources")
-    });
-    source_urls(&config, info()["channel"].as_str().unwrap_or("stable"))
+    let bundled:Value=serde_json::from_str(include_str!("../../config/update-sources.json")).expect("valid update sources");
+    let local=read_json(&core.root.join("update-sources.json")).ok();
+    let build=info();let channel=build["channel"].as_str().unwrap_or("stable");
+    // Older local test packages could leave an empty override. Startup checks
+    // are controlled by settings; an empty source must not disable manual checks.
+    // v1.3.2 begins a new signing chain. Migrate only the exact old bundled URL;
+    // keep user-defined GitHub update sources intact.
+    let config=local.as_ref().filter(|v|v[channel]["github"].as_str().is_some_and(|url|!url.trim().is_empty() && !(channel=="stable" && url.trim()=="https://github.com/mianste/Kynex-Launcher/releases/download/updater-stable/stable.json"))).unwrap_or(&bundled);
+    source_urls(config,channel)
 }
 fn source_urls(config: &Value, channel: &str) -> Result<Vec<reqwest::Url>> {
     let raw = config[channel]["github"].as_str().unwrap_or("").trim();
@@ -44,6 +48,20 @@ fn source_urls(config: &Value, channel: &str) -> Result<Vec<reqwest::Url>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]fn bundled_channels_have_their_own_official_manifest(){
+        let config:Value=serde_json::from_str(include_str!("../../config/update-sources.json")).unwrap();
+        for (channel,file) in [("stable","stable-v2.json"),("beta","beta.json")]{let sources=source_urls(&config,channel).unwrap();assert!(sources.is_empty(),"Public source does not ship official update settings");let _=file;}
+    }
+    #[test]fn old_bundled_override_migrates_to_the_new_signing_chain(){
+        let t=tempfile::tempdir().unwrap();let c=Core::new(t.path().into(),Arc::new(|_|{})).unwrap();
+        write_json(&c.root.join("update-sources.json"),&json!({"stable":{"github":"https://github.com/mianste/Kynex-Launcher/releases/download/updater-stable/stable.json"}})).unwrap();
+        if info()["channel"]=="stable" {assert!(endpoints(&c).unwrap().is_empty());}
+    }
+    #[test]fn empty_local_override_falls_back_without_crossing_channels(){
+        let t=tempfile::tempdir().unwrap();let c=Core::new(t.path().into(),Arc::new(|_|{})).unwrap();
+        write_json(&c.root.join("update-sources.json"),&json!({"stable":{"github":""},"beta":{"github":""}})).unwrap();
+        let urls=endpoints(&c).unwrap();assert!(urls.is_empty());
+    }
     #[test]
     fn blank_sources_never_trigger_network_or_cross_channels() {
         let config = json!({"stable":{"github":""},"beta":{"github":"https://github.com/mianste/Kynex-Launcher/releases/download/updater-beta/beta.json"}});

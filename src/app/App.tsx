@@ -1,6 +1,9 @@
 import { DownloadTasks } from "../features/download/DownloadTasks";
 import { progressBuffer } from "../lib/progressBuffer";
+import { useModUpdateState, type ModScanEvent } from "../lib/modUpdateState";
 import { RELEASE } from "../lib/release";
+import { normalizeUiOpacity } from "../lib/appearance";
+import { useAdaptiveText } from "../lib/useAdaptiveText";
 import { ReleaseNotices } from "../features/updates/ReleaseNotices";
 import {
   lazy,
@@ -9,6 +12,7 @@ import {
   useEffect,
   useState,
   useRef,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import {
@@ -30,7 +34,7 @@ import {
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Page } from "../lib/types";
 import { useStore, guarded } from "../store";
-import { api, desktop, onProgress, pickFile } from "../lib/bridge";
+import { api, assetUrl, desktop, onProgress, pickFile } from "../lib/bridge";
 import { Home } from "../features/launch/Home";
 import { Library, InstanceDetail } from "../features/library/Library";
 import { Download as Discover } from "../features/download/Download";
@@ -39,6 +43,11 @@ import { Accounts } from "../features/account/Accounts";
 const Skin = lazy(() =>
   import("../features/skin/Skin").then((module) => ({ default: module.Skin })),
 );
+import {
+  AutomaticDiagnosis,
+  useDiagnosis,
+  type DiagnosisEvent,
+} from "../features/diagnose/AiDiagnosis";
 import { Diagnose } from "../features/diagnose/Diagnose";
 import { Settings } from "../features/settings/Settings";
 import { Help } from "../features/help/Help";
@@ -59,7 +68,6 @@ import {
 import wallpaper from "../assets/wallpaper-default.jpg";
 import brandIcon from "../assets/kxl-icon.png";
 import { MotionPage } from "../components/ui/Motion";
-import { useSmoothWheel } from "../lib/useSmoothWheel";
 import { useSelectionMotion } from "../lib/useSelectionMotion";
 const navigation: { id: Page; label: string; icon: ReactNode }[] = [
   { id: "home", label: "启动", icon: <Rocket /> },
@@ -82,9 +90,26 @@ export function App() {
   const [tasksOpen, TasksOpen] = useState(false);
   const depth = useRef(0);
   const appRoot = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const update = () =>
+      appRoot.current?.style.setProperty(
+        "--corner-aa",
+        `${1.35 / Math.max(1, window.devicePixelRatio)}px`,
+      );
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  useAdaptiveText(
+    appRoot,
+    s.settings.wallpaper,
+    normalizeUiOpacity(s.settings.uiOpacity),
+    s.page,
+    s.settings.theme,
+  );
   const navRoot = useRef<HTMLElement>(null);
   useSelectionMotion(navRoot);
-  useSmoothWheel(appRoot);
+  // 原生滚轮：自定义惯性在拖滚动条到底时会继续缓动，表现为“还在慢慢下滑”。
   const finish = useCallback(() => S(false), []);
   useEffect(() => {
     if (desktop) {
@@ -129,6 +154,7 @@ export function App() {
   useEffect(() => {
     let cleanup: (() => void) | undefined;
     let completionTimer: ReturnType<typeof setTimeout> | undefined;
+    let modScanTimer: ReturnType<typeof setInterval> | undefined;
     let live = true;
     const progress = progressBuffer((events) => {
       if (!live) return;
@@ -138,7 +164,9 @@ export function App() {
         tasks[id] = { ...tasks[id], ...task };
         if (task.error) s.notify(task.error);
       }
-      const active = Object.values(tasks).filter((t) => !t.finished && !t.error);
+      const active = Object.values(tasks).filter(
+        (t) => !t.finished && !t.error,
+      );
       useStore.setState({ tasks, task: active.at(-1) || null });
     });
     const image = new Image();
@@ -152,9 +180,34 @@ export function App() {
       if (live) R(true);
     });
     if (desktop) {
-      onProgress(progress.push).then((f) => {
-        if (live) cleanup = f;
-        else f();
+      onProgress((task) => {
+        if ("modUpdateScan" in task) {
+          if (
+            task.directoryId &&
+            task.directoryId !== useStore.getState().directoryId
+          )
+            return;
+          useModUpdateState
+            .getState()
+            .receive(task.modUpdateScan as ModScanEvent);
+          return;
+        }
+        const event = task as unknown as DiagnosisEvent;
+        if (event.autoDiagnosis) {
+          useDiagnosis.getState().receive(event);
+          return;
+        }
+        progress.push(task);
+      }).then((f) => {
+        if (live) {
+          cleanup = f;
+          const prepareMods = () =>
+            void api("scan_installed_mod_updates", {
+              curseforgeKey: useStore.getState().settings.curseforgeKey,
+            }).catch(() => {});
+          prepareMods();
+          modScanTimer = setInterval(prepareMods, 30 * 60_000);
+        } else f();
       });
     }
     const change = () => {
@@ -169,6 +222,7 @@ export function App() {
       live = false;
       progress.dispose();
       if (completionTimer) clearTimeout(completionTimer);
+      if (modScanTimer) clearInterval(modScanTimer);
       cleanup?.();
       window.removeEventListener("hashchange", change);
     };
@@ -193,6 +247,8 @@ export function App() {
   useEffect(() => {
     const media = matchMedia("(prefers-color-scheme: light)");
     const apply = () => {
+      const root = appRoot.current;
+      if (root) root.dataset.appearanceChanging = "true";
       const theme =
         s.settings.theme === "system"
           ? media.matches
@@ -201,6 +257,9 @@ export function App() {
           : s.settings.theme;
       document.documentElement.dataset.theme = theme;
       document.documentElement.style.colorScheme = theme;
+      requestAnimationFrame(() => {
+        if (root) delete root.dataset.appearanceChanging;
+      });
     };
     apply();
     media.addEventListener("change", apply);
@@ -242,10 +301,19 @@ export function App() {
     components: <Components />,
   };
   const custom = s.settings.wallpaper.startsWith("data:");
+  const dynamicVideo = s.settings.wallpaper.startsWith("video:")
+    ? s.settings.wallpaper.slice("video:".length)
+    : "";
+  // 直接写在根节点上，切换页面/重渲染时不会出现某一帧还没拿到变量的情况。
+  const uiPercent = normalizeUiOpacity(s.settings.uiOpacity);
+  const uiAlpha = `${uiPercent}%`;
+  // 保持视频与静态壁纸的模糊层稳定，滑杆只更新面板色；0% 时完全透出壁纸。
+  const uiBlur = uiPercent === 0 ? "0px" : "26px";
   return (
     <main
       ref={appRoot}
-      className={`app page-${s.page} ${splash ? "splash-active" : ""}`}
+      className={`app page-${s.page} ${splash ? "splash-active" : ""} ${dynamicVideo ? "video-wallpaper" : ""}`}
+      style={{ "--ui-alpha": uiAlpha, "--ui-blur": uiBlur } as CSSProperties}
       onDragOverCapture={(e) => {
         if (
           (e.target as HTMLElement).closest(
@@ -285,6 +353,18 @@ export function App() {
           backgroundImage: `url(${custom ? s.settings.wallpaper : wallpaper})`,
         }}
       />
+      {dynamicVideo && desktop && (
+        <video
+          key={dynamicVideo}
+          className="wallpaper-video"
+          crossOrigin="anonymous"
+          src={assetUrl(dynamicVideo)}
+          autoPlay
+          muted
+          loop
+          playsInline
+        />
+      )}
       <div className="scrim" />
       <header className="chrome">
         <div className="drag-region" data-tauri-drag-region />
@@ -347,7 +427,6 @@ export function App() {
           {screen[s.page]}
         </Suspense>
       </MotionPage>
-
       {tasksOpen && <DownloadTasks onClose={() => TasksOpen(false)} />}
       <footer className="taskbar">
         <span className="status-dot" />
@@ -381,7 +460,15 @@ export function App() {
           <PackagePlus size={13} />
           导入整合包
         </button>
-        <span className="mono">KXL {RELEASE.displayVersion}</span>
+        <button
+          className="mono"
+          title="查看本次更新日志"
+          onClick={() =>
+            window.dispatchEvent(new Event("kynex-open-changelog"))
+          }
+        >
+          KXL {RELEASE.displayVersion}
+        </button>
       </footer>
       {drag && (
         <div className="drop-overlay">
@@ -391,6 +478,7 @@ export function App() {
         </div>
       )}
       <Modals />
+      <AutomaticDiagnosis />
       <Toast />
       <ReleaseNotices ready={ready && !splash} />
       {splash && <Splash ready={ready} finish={finish} />}

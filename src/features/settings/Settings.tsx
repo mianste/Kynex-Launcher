@@ -1,4 +1,5 @@
 import { RELEASE } from "../../lib/release";
+import { normalizeUiOpacity } from "../../lib/appearance";
 import { useEffect, useRef, useState } from "react";
 import {
   Coffee,
@@ -24,16 +25,35 @@ import {
   Row,
   SearchInput,
   Badge,
+  Switch,
 } from "../../components/ui";
 import { useStore, guarded, initialSettings } from "../../store";
 import { useSelectionMotion } from "../../lib/useSelectionMotion";
 import {
   api,
+  assetUrl,
   desktop,
   external,
   pickFile,
   pickImageFile,
+  pickVideoFile,
 } from "../../lib/bridge";
+import { DeepSeekSettings } from "../diagnose/AiDiagnosis";
+
+type WeWallpaper = {
+  id: string;
+  title: string;
+  kind: string;
+  preview?: string | null;
+  video?: string | null;
+  dir: string;
+};
+type WeScan = {
+  installed: boolean;
+  workshopFound: boolean;
+  hidden?: number;
+  wallpapers: WeWallpaper[];
+};
 export function Settings() {
   const s = useStore();
   const [category, C] = useState("启动");
@@ -69,7 +89,15 @@ export function Settings() {
       live = false;
     };
   }, [s.settings.clientId]);
-  const categories = ["启动", "Java 管理", "下载", "界面", "高级", "关于"];
+  const categories = [
+    "启动",
+    "Java 管理",
+    "下载",
+    "界面",
+    "更新",
+    "高级",
+    "关于",
+  ];
   const categoryIcons = {
     启动: Rocket,
     "Java 管理": Coffee,
@@ -77,9 +105,62 @@ export function Settings() {
     界面: Palette,
     高级: SlidersHorizontal,
     关于: Info,
+    更新: Download,
   } as const;
   const show = (name: string) => (!q ? category === name : true);
   const update = s.updateSettings;
+  const opacityFrame = useRef(0);
+  const opacityPending = useRef<number | null>(null);
+  const opacityLabel = useRef<HTMLElement>(null);
+  const opacityInput = useRef<HTMLInputElement>(null);
+  // 非受控滑杆：拖动由浏览器原生更新，松手后才写回设置。
+  useEffect(() => {
+    const element = opacityInput.current;
+    const value = normalizeUiOpacity(s.settings.uiOpacity);
+    if (element && Number(element.value) !== value) {
+      element.value = String(value);
+    }
+  }, [s.settings.uiOpacity]);
+  // 拖动时直接改 CSS 变量（每帧最多一次），松手才写 store，避免整页重渲染导致掉帧。
+  function previewOpacity(value: number) {
+    opacityPending.current = value;
+    if (opacityFrame.current) return;
+    opacityFrame.current = requestAnimationFrame(() => {
+      opacityFrame.current = 0;
+      const next = opacityPending.current;
+      if (next == null) return;
+      const app = document.querySelector<HTMLElement>(".app");
+      if (app) app.dataset.appearanceChanging = "true";
+      app?.style.setProperty("--ui-alpha", `${next}%`);
+      app?.style.setProperty("--ui-blur", next === 0 ? "0px" : "26px");
+      app?.dispatchEvent(new Event("kynex-appearance-preview"));
+      if (opacityLabel.current) opacityLabel.current.textContent = `${next}%`;
+    });
+  }
+  function commitOpacity(value: number) {
+    if (opacityFrame.current) {
+      cancelAnimationFrame(opacityFrame.current);
+      opacityFrame.current = 0;
+    }
+    opacityPending.current = null;
+    const app = document.querySelector<HTMLElement>(".app");
+    app?.style.setProperty("--ui-alpha", `${value}%`);
+    app?.style.setProperty("--ui-blur", value === 0 ? "0px" : "26px");
+    app?.dispatchEvent(new Event("kynex-appearance-preview"));
+    update({ uiOpacity: value });
+    requestAnimationFrame(() => { if (app) delete app.dataset.appearanceChanging; });
+  }
+  const [we, setWe] = useState<WeScan | null>(null);
+  const [weBusy, setWeBusy] = useState(false);
+  const dynamicWallpaper = s.settings.wallpaper.startsWith("video:");
+  async function scanWallpaperEngine() {
+    setWeBusy(true);
+    try {
+      setWe(await api<WeScan>("wallpaper_engine_scan"));
+    } finally {
+      setWeBusy(false);
+    }
+  }
   async function applyWallpaper(f: File) {
     if (f.size > 5 * 1024 * 1024) throw new Error("壁纸请使用 5 MB 以内的图片");
     const url = URL.createObjectURL(f);
@@ -102,14 +183,9 @@ export function Settings() {
 
   return (
     <section className="settings-page" aria-label="设置">
-      <div className="page-head">
-        <div>
-          <h1>设置</h1>
-          <p>你的习惯，你的启动方式。</p>
-        </div>
-        <SearchInput value={q} onChange={Q} placeholder="搜索设置分类" />
-      </div>
       <div className="settings-layout">
+        <aside className="settings-sidebar" aria-label="设置分类">
+        <SearchInput value={q} onChange={Q} placeholder="搜索设置" />
         <nav className="settings-nav motion-selection-vertical" ref={nav}>
           {categories.map((c) => {
             const Icon = categoryIcons[c as keyof typeof categoryIcons];
@@ -129,6 +205,7 @@ export function Settings() {
             );
           })}
         </nav>
+        </aside>
         <div
           className="settings-content"
           ref={content}
@@ -136,7 +213,7 @@ export function Settings() {
           aria-label="设置内容"
         >
           {show("启动") &&
-            (!q || "启动 内存 窗口 Java JVM 隔离".includes(q)) && (
+            (!q || "启动 内存 窗口 Java JVM 隔离 语言".includes(q)) && (
               <Card>
                 <div className="settings-card-head">
                   <span className="settings-card-icon">
@@ -247,6 +324,26 @@ export function Settings() {
                     ]}
                   />
                 </Row>
+                <Row
+                  title="游戏语言"
+                  hint="启动前写入实例的 options.txt；1.10 及以前自动改用大写后缀。"
+                >
+                  <OptionSelect
+                    label="启动时游戏语言"
+                    className="drop-up"
+                    value={s.settings.gameLanguage}
+                    onChange={(value) =>
+                      update({
+                        gameLanguage: value as "zh_cn" | "en_us" | "none",
+                      })
+                    }
+                    options={[
+                      { value: "zh_cn", label: "简体中文" },
+                      { value: "en_us", label: "English" },
+                      { value: "none", label: "不修改" },
+                    ]}
+                  />
+                </Row>
               </Card>
             )}
           {show("Java 管理") && (!q || "Java 管理".includes(q)) && (
@@ -316,7 +413,7 @@ export function Settings() {
               <h3>下载</h3>
               <Row
                 title="游戏文件来源"
-                hint="国内镜像失败时自动回退官方源，保留文件哈希校验。"
+                hint="镜像下载失败时会改用官方地址。"
               >
                 <OptionSelect
                   label="下载镜像来源"
@@ -373,18 +470,35 @@ export function Settings() {
               </p>
               <Row
                 title="下载并发"
-                hint="核心固定最多 8 个文件并发，单文件校验失败自动重试 3 次。"
+                hint="1–16 个文件同时下载；中断后保留 .part，下次从断点继续。"
               >
-                <Badge>8 个文件</Badge>
+                <div className="setting-control">
+                  <Input
+                    aria-label="下载并发"
+                    type="number"
+                    min={1}
+                    max={16}
+                    value={s.settings.threads}
+                    onChange={(e) =>
+                      update({
+                        threads: Math.min(
+                          16,
+                          Math.max(1, Number(e.target.value) || 1),
+                        ),
+                      })
+                    }
+                  />
+                  <Badge>{s.settings.threads} 个文件</Badge>
+                </div>
               </Row>
               <Row
                 title="文件完整性"
-                hint="有官方哈希的文件必须校验成功后才写入最终位置。"
+                hint="下载后检查文件是否完整。"
               >
                 <Badge tone="ok">SHA-1 / SHA-256</Badge>
               </Row>
               <p>
-                连接测速显示当前网络的响应延迟；断点续传与可调并发尚未接入。
+                连接测速显示当前网络的响应延迟；下载中断后会自动续传，并发数可在上方调整。
               </p>
             </Card>
           )}
@@ -393,7 +507,7 @@ export function Settings() {
               <h3>外观</h3>
               <Row
                 title="界面主题"
-                hint="深色/浅色立即生效；跟随系统会自动响应 Windows 深浅色变化。"
+                hint="选择浅色、深色，或跟随系统。"
               >
                 <div className="theme-choices">
                   {(
@@ -415,7 +529,7 @@ export function Settings() {
                   ))}
                 </div>
               </Row>
-              <Row title="强调色" hint="按钮、标签、进度与选中状态即时生效。">
+              <Row title="强调色" hint="选择按钮和选中项的颜色。">
                 <div className="color-dots">
                   {["#6F9F94", "#7895A4", "#72A788", "#C59862", "#B87373"].map(
                     (color) => (
@@ -478,103 +592,289 @@ export function Settings() {
                   />
                 </label>
               </div>
-            </Card>
-          )}
-          {show("高级") && (!q || "高级 微软 Client ID 数据".includes(q)) && (
-            <Card>
-              <h3>登录与数据</h3>
               <Row
-                title="Microsoft 登录"
-                hint={
-                  msEmbedded
-                    ? "官方登录凭据已内嵌，无需用户配置。"
-                    : "开发版需要填写 Azure 应用注册的应用程序（客户端）ID。"
-                }
+                title="界面不透明度"
+                hint="0% 全透明，100% 不透明。"
               >
-                {msEmbedded ? (
-                  <Badge tone="ok">已内嵌</Badge>
-                ) : (
-                  <>
-                    <Input
-                      aria-label="Microsoft Client ID"
-                      value={msId}
-                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                      spellCheck={false}
-                      onChange={(e) => MsId(e.target.value)}
-                    />
-                    <Button
-                      onClick={() => {
-                        const value = msId.trim();
-                        if (
-                          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-                            value,
-                          )
-                        ) {
-                          s.notify(
-                            "Client ID 必须是 Azure 应用的 GUID，不能填写应用密码或密钥。",
-                          );
-                          return;
-                        }
-                        update({ clientId: value });
-                        s.notify("Microsoft Client ID 已保存");
-                      }}
-                    >
-                      保存
-                    </Button>
-                  </>
+                <input
+                  ref={opacityInput}
+                  className="opacity-range"
+                  aria-label="界面不透明度"
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  defaultValue={normalizeUiOpacity(s.settings.uiOpacity)}
+                  onInput={(e) =>
+                    previewOpacity(Number(e.currentTarget.value))
+                  }
+                  onPointerUp={(e) =>
+                    commitOpacity(Number(e.currentTarget.value))
+                  }
+                  onPointerCancel={(e) =>
+                    commitOpacity(Number(e.currentTarget.value))
+                  }
+                  onKeyUp={(e) => commitOpacity(Number(e.currentTarget.value))}
+                  onBlur={(e) => commitOpacity(Number(e.currentTarget.value))}
+                />
+                <b ref={opacityLabel}>
+                  {normalizeUiOpacity(s.settings.uiOpacity)}%
+                </b>
+              </Row>
+              <h4>动态壁纸</h4>
+              <Row
+                title="Wallpaper Engine"
+                hint="读取 Steam 创意工坊 431960 中已订阅的壁纸；只列出可以直接播放的视频壁纸，场景（.pkg）和 Web 壁纸无法在启动器内渲染，会自动隐藏。"
+              >
+                <Button
+                  busy={weBusy}
+                  onClick={() => void guarded(scanWallpaperEngine)}
+                >
+                  扫描 Wallpaper Engine
+                </Button>
+                <Button
+                  onClick={() =>
+                    void guarded(async () => {
+                      const path = await pickVideoFile();
+                      if (path) update({ wallpaper: "video:" + path });
+                    })
+                  }
+                >
+                  选择本地视频
+                </Button>
+                {dynamicWallpaper && (
+                  <Button onClick={() => update({ wallpaper: "island" })}>
+                    关闭动态壁纸
+                  </Button>
                 )}
               </Row>
-              <Row title="本地数据目录">
-                <Button onClick={() => guarded(() => api("open_folder"))}>
-                  打开
-                </Button>
-              </Row>
-              <Row
-                title="CurseForge 来源"
-                hint="已内置官方 API Key，无需用户配置；下载页可直接搜索和安装 CurseForge 资源。"
-              >
-                <Badge tone="ok">已内置</Badge>
-              </Row>
-              <Row title="恢复界面与全局默认设置" hint="不会删除实例和账号。">
-                <Button
-                  onClick={() => {
-                    update(initialSettings);
-                    s.notify("已恢复全局默认设置");
-                  }}
-                >
-                  恢复默认
-                </Button>
-              </Row>
-              <p>登录凭据仅保存到系统凭据库；日志诊断全部在本地完成。</p>
-            </Card>
-          )}
-          {show("关于") && (!q || "关于 版本 GitHub 爱发电".includes(q)) && (
-            <Card>
-              <div className="about-brand">
-                <div className="logo">K</div>
-                <div>
-                  <h2>Kynex Launcher</h2>
-                  <p>{RELEASE.label}</p>
+              {we && !we.workshopFound && (
+                <p className="hint">
+                  没有找到 Wallpaper Engine 创意工坊目录：请先通过 Steam 安装 Wallpaper Engine，并订阅至少一个动态壁纸。
+                </p>
+              )}
+              {we && we.workshopFound && we.wallpapers.length === 0 && (
+                <p className="hint">
+                  没有可以直接播放的视频壁纸
+                  {we.hidden ? `（已隐藏 ${we.hidden} 个场景/Web 或缺少视频文件的项目）` : ""}
+                  ，请订阅视频类型的动态壁纸。
+                </p>
+              )}
+              {we && we.wallpapers.length > 0 && we.hidden ? (
+                <p className="hint">
+                  已隐藏 {we.hidden} 个场景/Web 或无法播放的项目，只显示可直接播放的视频壁纸。
+                </p>
+              ) : null}
+              {we && we.wallpapers.length > 0 && (
+                <div className="we-grid">
+                  {we.wallpapers.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`we-card ${
+                        item.video &&
+                        s.settings.wallpaper === "video:" + item.video
+                          ? "on"
+                          : ""
+                      }`}
+                      title={`应用 ${item.title}（动态视频）`}
+                      onClick={() => {
+                        if (item.video)
+                          update({ wallpaper: "video:" + item.video });
+                      }}
+                    >
+                      <span className="we-preview">
+                        {item.preview ? (
+                          <img
+                            src={assetUrl(item.preview)}
+                            alt=""
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span>WE</span>
+                        )}
+                      </span>
+                      <span className="we-title">{item.title}</span>
+                      <Badge>视频</Badge>
+                    </button>
+                  ))}
                 </div>
-              </div>
-              <div className="about-links">
-                <Button
-                  onClick={() => guarded(() => external(RELEASE.supportUrl))}
-                >
-                  爱发电主页
-                </Button>
-                <Button
-                  disabled={!RELEASE.repositoryUrl}
-                  title={
-                    RELEASE.repositoryUrl ? "GitHub 仓库" : "仓库地址暂未配置"
-                  }
-                  onClick={() => guarded(() => external(RELEASE.repositoryUrl))}
-                >
-                  GitHub 仓库
-                </Button>
-              </div>
+              )}
             </Card>
           )}
+          {show("更新") &&
+            (!q || "更新 自动 手动 检测 新版 启动器".includes(q)) && (
+              <Card>
+                <h3>启动器更新</h3>
+                <Row
+                  title="启动时检测新版"
+                  hint="同一个新版只自动提醒一次，主动检测仍可再次打开更新窗口。"
+                >
+                  <Switch
+                    label="启动时检测新版"
+                    on={s.settings.checkUpdatesOnStartup !== false}
+                    change={(value) => update({ checkUpdatesOnStartup: value })}
+                  />
+                </Row>
+                <Row
+                  title="更新方式"
+                  hint="自动下载安装会在检测到新版后下载、校验并运行更新安装程序。"
+                >
+                  <OptionSelect
+                    label="启动器更新方式"
+                    value={s.settings.updateMode || "manual"}
+                    onChange={(value) =>
+                      update({ updateMode: value as "manual" | "automatic" })
+                    }
+                    options={[
+                      { value: "manual", label: "手动安装更新" },
+                      { value: "automatic", label: "自动下载安装" },
+                    ]}
+                  />
+                </Row>
+                <Row title="当前版本" hint={RELEASE.label}>
+                  <Badge>{RELEASE.displayVersion}</Badge>
+                  <Button
+                    onClick={() =>
+                      window.dispatchEvent(new Event("kynex-check-update"))
+                    }
+                  >
+                    检测新版
+                  </Button>
+                  <Button
+                    onClick={() =>
+                      window.dispatchEvent(new Event("kynex-open-changelog"))
+                    }
+                  >
+                    查看更新日志
+                  </Button>
+                </Row>
+              </Card>
+            )}
+          {show("高级") &&
+            (!q ||
+              "高级 微软 Client ID 数据 DeepSeek 日志分析 Key 密钥".includes(
+                q,
+              )) && (
+              <Card>
+                <DeepSeekSettings />
+                <h3>登录与数据</h3>
+                <Row
+                  title="Microsoft 登录"
+                  hint={
+                    msEmbedded
+                      ? "已配置，可以直接登录微软账号。"
+                      : "开发版需要填写 Azure 应用注册的应用程序（客户端）ID。"
+                  }
+                >
+                  {msEmbedded ? (
+                    <Badge tone="ok">已内嵌</Badge>
+                  ) : (
+                    <>
+                      <Input
+                        aria-label="Microsoft Client ID"
+                        value={msId}
+                        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                        spellCheck={false}
+                        onChange={(e) => MsId(e.target.value)}
+                      />
+                      <Button
+                        onClick={() => {
+                          const value = msId.trim();
+                          if (
+                            !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+                              value,
+                            )
+                          ) {
+                            s.notify(
+                              "Client ID 必须是 Azure 应用的 GUID，不能填写应用密码或密钥。",
+                            );
+                            return;
+                          }
+                          update({ clientId: value });
+                          s.notify("Microsoft Client ID 已保存");
+                        }}
+                      >
+                        保存
+                      </Button>
+                    </>
+                  )}
+                </Row>
+                <Row title="本地数据目录">
+                  <Button onClick={() => guarded(() => api("open_data_folder"))}>
+                    打开
+                  </Button>
+                </Row>
+                <Row
+                  title="CurseForge 来源"
+                  hint="公开源码未内置 API Key，请通过环境变量或本地配置提供。"
+                >
+                  <Badge>需自行配置</Badge>
+                </Row>
+                <Row title="恢复界面与全局默认设置" hint="不会删除实例和账号。">
+                  <Button
+                    onClick={() => {
+                      update(initialSettings);
+                      s.notify("已恢复全局默认设置");
+                    }}
+                  >
+                    恢复默认
+                  </Button>
+                </Row>
+                <p>
+                  登录凭据与 DeepSeek Key 保存到系统凭据库；AI
+                  诊断会发送脱敏日志到 DeepSeek。
+                </p>
+              </Card>
+            )}
+          {show("关于") &&
+            (!q || "关于 版本 GitHub 爱发电 官网 哔哩哔哩".includes(q)) && (
+              <Card>
+                <div className="about-brand">
+                  <div className="logo">K</div>
+                  <div>
+                    <h2>Kynex Launcher</h2>
+                    <p>{RELEASE.label}</p>
+                  </div>
+                </div>
+                <div className="about-links">
+                  <Button
+                    onClick={() =>
+                      guarded(() => external("https://kynexl.com.cn"))
+                    }
+                  >
+                    官方网站
+                  </Button>
+                  <Button
+                    onClick={() =>
+                      guarded(() =>
+                        external(
+                          "https://space.bilibili.com/522722745?spm_id_from=333.1007.0.0",
+                        ),
+                      )
+                    }
+                  >
+                    哔哩哔哩主页
+                  </Button>
+                  <Button
+                    onClick={() => guarded(() => external(RELEASE.supportUrl))}
+                  >
+                    爱发电主页
+                  </Button>
+                  <Button
+                    disabled={!RELEASE.repositoryUrl}
+                    title={
+                      RELEASE.repositoryUrl ? "GitHub 仓库" : "仓库地址暂未配置"
+                    }
+                    onClick={() =>
+                      guarded(() => external(RELEASE.repositoryUrl))
+                    }
+                  >
+                    GitHub 仓库
+                  </Button>
+                </div>
+              </Card>
+            )}
         </div>
       </div>
     </section>

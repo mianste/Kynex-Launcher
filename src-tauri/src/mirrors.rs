@@ -32,6 +32,11 @@ pub fn mirror_url(url: &str) -> Option<String> {
 }
 pub fn candidates(url: &str, source: &str) -> Vec<String> {
     let mut out = vec![];
+    // Public Modrinth files can stream much faster from their original CDN;
+    // keep the optional relay as fallback rather than blocking behind it.
+    if reqwest::Url::parse(url).ok().and_then(|u| u.host_str().map(str::to_owned)).as_deref() == Some("cdn.modrinth.com") {
+        out.push(url.to_string());
+    }
     if let Some(entry) = crate::curseforge::download_entry(url) {
         out.push(entry);
     }
@@ -46,7 +51,8 @@ pub fn candidates(url: &str, source: &str) -> Vec<String> {
         }
     }
     out.push(url.to_string());
-    out.dedup();
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|url| seen.insert(url.clone()));
     out
 }
 pub fn active_candidates(core: &Core, url: &str, source: &str) -> Vec<String> {
@@ -127,6 +133,12 @@ pub async fn benchmark(core: &Core) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn modrinth_cdn_precedes_relay_without_duplicate_attempts() {
+        let url = "https://cdn.modrinth.com/data/a/versions/b/test.jar";
+        assert_eq!(candidates(url,"bmclapi"), vec![url.to_owned(),"https://mod.mcimirror.top/data/a/versions/b/test.jar".into()]);
+        assert_eq!(candidates(url,"official"),vec![url]);
+    }
     #[test]
     fn loader_maven_routes_survive_unrelated_failures() {
         let temp=tempfile::tempdir().unwrap(); let c=Core::new(temp.path().into(),Arc::new(|_|{})).unwrap();mark_failed(&c);

@@ -4,7 +4,7 @@ const DEVICE: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/de
 const TOKEN: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 const TOKEN_LIVE: &str = "https://login.live.com/oauth20_token.srf";
 fn account_path(c: &Core) -> PathBuf {
-    c.root.join("accounts.json")
+    c.data_root.join("accounts.json")
 }
 pub fn list(c: &Core) -> Result<Value> {
     if !account_path(c).exists() {
@@ -80,7 +80,15 @@ async fn send_json_retry(
     Err(format!("{service} 暂时不可用：{last}"))
 }
 
-async fn exchange(c: &Core, access: &str) -> Result<(Value, String)> {
+fn now_seconds() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
+}
+pub(crate) fn appearance_token(id: &str) -> Option<String> {
+    let saved = secret(id).ok()?;
+    if saved["minecraftExpiresAt"].as_u64()? <= now_seconds() + 60 { return None; }
+    saved["minecraftToken"].as_str().filter(|s| !s.is_empty()).map(str::to_owned)
+}
+async fn exchange(c: &Core, access: &str) -> Result<(Value, String, u64)> {
     let ticket = if access.starts_with("d=") {
         access.to_string()
     } else {
@@ -154,7 +162,8 @@ async fn exchange(c: &Core, access: &str) -> Result<(Value, String)> {
             "无法获取 Minecraft 档案，请确认应用获准调用游戏服务后重试。".to_string()
         });
     }
-    Ok((profile, token))
+    let expires = now_seconds() + mc["expires_in"].as_u64().unwrap_or(0);
+    Ok((profile, token, expires))
 }
 fn xsts_hint(body: &str) -> &'static str {
     if body.contains("2148916227") {
@@ -216,7 +225,7 @@ fn configured_client(c: &Core, legacy: &str) -> Result<Option<String>> {
         }
     }
     if id.is_empty() {
-        if let Ok(value) = read_json(&c.root.join("microsoft-client.json")) {
+        if let Ok(value) = read_json(&c.data_root.join("microsoft-client.json")) {
             id = value["clientId"].as_str().unwrap_or("").trim().to_string();
         }
     }
@@ -234,7 +243,6 @@ fn embedded_client() -> Result<Option<String>> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or(KXL_OFFICIAL_MICROSOFT_CLIENT_ID);
-    if id.is_empty() { return Ok(None); }
     Uuid::parse_str(id)
         .map_err(|_| "内嵌的 Microsoft Client ID 格式无效，请开发者重新构建 KXL。".to_string())?;
     Ok(Some(id.to_string()))
@@ -390,7 +398,7 @@ pub async fn microsoft_poll(c: &Core, id: &str) -> Result<Value> {
             }
             return Ok(status);
         }
-        let (profile, _token) = exchange(c, string(&response, "access_token")?).await?;
+        let (profile, token, expires) = exchange(c, string(&response, "access_token")?).await?;
         if flow.cancelled.load(Ordering::SeqCst) {
             return Err("登录已取消".into());
         }
@@ -398,7 +406,7 @@ pub async fn microsoft_poll(c: &Core, id: &str) -> Result<Value> {
         let account_id = format!("microsoft-{uuid}");
         store_secret(
             &account_id,
-            &json!({"refresh":response["refresh_token"],"clientId":flow.client}),
+            &json!({"refresh":response["refresh_token"],"clientId":flow.client,"minecraftToken":token,"minecraftExpiresAt":expires}),
         )?;
         let account = save(
             c,
@@ -540,7 +548,7 @@ pub async fn session(c: &Core, id: &str, client: &str) -> Result<Session> {
         let old = secret(id)?;
         let client = client_id(c, old["clientId"].as_str().unwrap_or(client))?;
         let response = refresh_session(c, &client, string(&old, "refresh")?).await?;
-        let (profile, t) = exchange(c, string(&response, "access_token")?).await?;
+        let (profile, t, expires) = exchange(c, string(&response, "access_token")?).await?;
         if profile["id"] != a["uuid"] {
             return Err("刷新后账号身份发生变化，请重新登录".into());
         }
@@ -548,7 +556,7 @@ pub async fn session(c: &Core, id: &str, client: &str) -> Result<Session> {
         let appearance = appearance::microsoft_account(a.clone(),&profile)?;
         store_secret(
             id,
-            &json!({"refresh":response["refresh_token"].as_str().unwrap_or(string(&old,"refresh")?),"clientId":client}),
+            &json!({"refresh":response["refresh_token"].as_str().unwrap_or(string(&old,"refresh")?),"clientId":client,"minecraftToken":token,"minecraftExpiresAt":expires}),
         )?;
         save(c,&appearance)?;
     } else if kind == "external" {
@@ -641,7 +649,8 @@ mod tests {
         assert_eq!(poll_status("access_denied", 5)["status"], "denied");
         assert_eq!(poll_status("expired_token", 5)["status"], "expired");
     }
-
+    #[test]
+    fn public_source_has_no_official_microsoft_client() { assert!(KXL_OFFICIAL_MICROSOFT_CLIENT_ID.is_empty()); }
     #[test]
     fn invalid_app_registration_has_actionable_message() {
         let message = minecraft_login_error(

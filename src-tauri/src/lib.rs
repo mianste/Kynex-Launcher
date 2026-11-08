@@ -1,10 +1,36 @@
 mod jobs;
+mod loader_catalog;
+mod loader_processors;
+mod game_directories;
+#[cfg(test)]
+mod public_scope_tests {
+    #[test]
+    fn reserved_modules_and_actual_service_settings_are_not_public() {
+        let root=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        for relative in ["src/features/music","src/lib/gameDetection.ts","src-tauri/src/music_crypto.rs","src-tauri/src/music_native.rs","src-tauri/src/music_official.rs","src-tauri/src/games.rs","src-tauri/src/server.rs","config/microsoft-registration.json"] {
+            assert!(!root.join(relative).exists(),"Reserved file: {relative}");
+        }
+        assert!(include_str!("../../config/updater-public-key.txt").trim().is_empty());
+        let build:serde_json::Value=serde_json::from_str(include_str!("../../config/build-channel.json")).unwrap();
+        assert_eq!(build["version"],"1.3.2");
+        assert_eq!(build["identifier"],"com.keke.kynex.public");
+    }
+}
+mod ai_diagnose;
+mod mod_updates;
+mod mod_check;
+mod resource_downloads;
+mod resource_dependencies;
+mod pack_logos;
 mod asset_download;
 pub mod auth;
 mod credentials;
 mod appearance;
 pub mod curseforge;
 pub mod engine;
+pub mod game_options;
+mod icons;
+mod wallpaper_engine;
 mod metadata;
 pub mod mirrors;
 #[cfg(feature = "desktop")]
@@ -14,6 +40,8 @@ pub mod optifine;
 pub mod packs;
 pub mod release;
 pub mod resources;
+mod resource_delete;
+mod pack_export;
 pub mod skins;
 #[cfg(feature = "desktop")]
 mod updates;
@@ -30,6 +58,7 @@ pub type Progress = Arc<dyn Fn(Value) + Send + Sync>;
 #[derive(Clone)]
 pub struct Core {
     pub root: PathBuf,
+    pub data_root: PathBuf,
     pub http: reqwest::Client,
     pub progress: Progress,
     pub cancel: Arc<AtomicBool>,
@@ -38,8 +67,9 @@ pub struct Core {
     pub mirror_failed_until: Arc<std::sync::Mutex<std::time::Instant>>,
     pub download_source: Arc<std::sync::RwLock<String>>,
     pub auth_sessions:
-        Arc<std::sync::Mutex<std::collections::HashMap<String, Arc<auth::PendingLogin>>>>,
-
+        Arc<std::sync::Mutex<std::collections::HashMap<String, Arc<crate::auth::PendingLogin>>>>,
+    /// 本次任务的文件下载并发上限，由设置的 threads 控制。
+    pub threads: Arc<std::sync::atomic::AtomicUsize>,
 }
 impl Core {
     pub fn new(root: PathBuf, progress: Progress) -> Result<Self> {
@@ -49,9 +79,18 @@ impl Core {
             .and_then(|v| v["source"].as_str().map(str::to_string))
             .filter(|v| v == "official")
             .unwrap_or_else(|| "bmclapi".into());
+        let http = reqwest::Client::builder();
+        // Schannel uses the Windows certificate-chain builder, including AIA
+        // intermediates. Keep certificate and hostname verification enabled.
+        #[cfg(windows)]
+        let http = http.use_native_tls();
+        #[cfg(not(windows))]
+        let http = http.use_rustls_tls();
+        let http = http.min_tls_version(reqwest::tls::Version::TLS_1_2);
         Ok(Self {
+            data_root: root.clone(),
             root,
-            http: reqwest::Client::builder()
+            http: http
                 .user_agent(format!(
                     "Kynex Launcher/{} (independent launcher)",
                     crate::release::version()
@@ -65,11 +104,20 @@ impl Core {
             jobs: Arc::new(jobs::Jobs::default()),
             mirror_failed_until: Arc::new(std::sync::Mutex::new(std::time::Instant::now())),
             download_source: Arc::new(std::sync::RwLock::new(source)),
+            threads: Arc::new(std::sync::atomic::AtomicUsize::new(8)),
             auth_sessions: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         })
     }
     pub fn stage(&self, stage: &str, done: usize, total: usize) {
         (self.progress)(json!({"stage":stage,"done":done,"total":total,"detail":null}));
+    }
+    /// 设置本次任务的文件下载并发（1–24，默认 8）。
+    pub fn set_threads(&self, threads: usize) {
+        self.threads
+            .store(threads.clamp(1, 24), Ordering::Relaxed);
+    }
+    pub fn threads(&self) -> usize {
+        self.threads.load(Ordering::Relaxed).clamp(1, 24)
     }
     pub async fn get(&self, url: &str) -> Result<Value> {
         https(url)?;
@@ -128,13 +176,18 @@ impl Core {
         Ok(self.root.join("instances").join(safe_name(id)?))
     }
     pub fn instances(&self) -> Result<Value> {
+        game_directories::discover(self)?;
         let dir = self.root.join("instances");
         std::fs::create_dir_all(&dir).map_err(err)?;
         let mut out = vec![];
         for e in std::fs::read_dir(dir).map_err(err)?.flatten() {
             let p = e.path().join("kxl.json");
             if let Ok(s) = std::fs::read_to_string(p) {
-                if let Ok(v) = serde_json::from_str::<Value>(&s) {
+                if let Ok(mut v) = serde_json::from_str::<Value>(&s) {
+                    if v["externalSource"].as_str().is_some_and(|p|!Path::new(p).is_dir()) {continue;}
+                    if v["packIcon"].as_str().is_none() {
+                        if let Some(icon)=packs::installed_icon(&e.path()){v["packIcon"]=json!(icon);}
+                    }
                     out.push(v);
                 }
             }
@@ -143,20 +196,35 @@ impl Core {
     }
     pub async fn dispatch(&self, action: &str, p: Value) -> Result<Value> {
         match action {
+            "game_directories" => return game_directories::list(self),
+            "add_game_directory" | "select_game_directory" | "remove_game_directory" => return game_directories::change(self,action,&p).await,
+            _ => {},
+        }
+        if game_directories::game_action(action) {
+            return game_directories::context(self,&p)?.dispatch_at(action,p).await;
+        }
+        self.dispatch_at(action,p).await
+    }
+    async fn dispatch_at(&self, action: &str, p: Value) -> Result<Value> {
+        match action {
             "list_instances" => self.instances(),
+            "hydrate_pack_icons" => pack_logos::hydrate(self).await,
             "list_accounts" => auth::list(self),
             "manifest" => {
                 let m = metadata::manifest(self, p["force"].as_bool().unwrap_or(false)).await?;
                 Ok(m["versions"].clone())
             }
-            "loaders" => engine::loaders(self, string(&p, "game")?, string(&p, "loader")?).await,
+            "loaders" => loader_catalog::loaders(self, string(&p, "game")?, string(&p, "loader")?, p["force"].as_bool().unwrap_or(false)).await,
+            "icon" => icons::fetch(self, &p).await,
+            "wallpaper_engine_scan" => wallpaper_engine::scan().await,
+            "warm_loader_catalogs" => loader_catalog::warm(self).await,
             "optifine_versions" => optifine::releases(self, string(&p, "game")?).await,
-            "install" | "launch" | "import_pack" | "install_project" | "install_java" => {
+            "download_resource_file" | "update_mods" | "export_pack" | "install" | "launch" | "import_pack" | "install_project" | "install_java" => {
                 let job = self.jobs.start(action, &p);
                 (self.progress)(json!({"taskId":job.id,"stage":"排队等待","done":0,"total":1,"action":action,"payload":p}));
                 let progress = self.progress.clone();
                 let task_id = job.id.clone();
-                let task_name = p["name"].as_str().or(p["project"].as_str()).or(p["id"].as_str()).unwrap_or(match action {"install_project" => "安装资源", "import_pack" => "导入整合包", "install_java" => "安装 Java", "launch" => "启动游戏", _ => "安装游戏"}).to_string();
+                let task_name = p["name"].as_str().or(p["project"].as_str()).or(p["id"].as_str()).unwrap_or(match action {"install_project" => "安装资源", "import_pack" => "导入整合包", "export_pack" => "导出整合包", "install_java" => "安装 Java", "launch" => "启动游戏", _ => "安装游戏"}).to_string();
                 let task = Core {
                     cancel: job.cancel.clone(),
                     progress: Arc::new(move |mut value| {
@@ -171,27 +239,43 @@ impl Core {
                     let _target = jobs::wait(&task, job.target.lock()).await?;
                     let _slot = job.acquire(&task).await?;
                     task.stopped()?;
-                    task.stage(match action {"install_project" => "获取资源下载信息", "import_pack" => "读取整合包清单", "install_java" => "准备 Java 环境", "launch" => "检查启动环境", _ => "读取游戏版本配置"}, 0, 1);
+                    task.stage(match action {"install_project" => "获取资源下载信息", "import_pack" => "读取整合包清单", "export_pack" => "读取导出内容", "install_java" => "准备 Java 环境", "launch" => "检查启动环境", _ => "读取游戏版本配置"}, 0, 1);
                 let result = match action {
                     "install" => engine::install(&task, &p).await,
                     "install_java" => {
                         engine::install_java(&task, p["major"].as_u64().unwrap_or(0)).await
                     }
-                    "launch" => engine::launch(&task, &p).await,
+                    "download_resource_file" => resource_downloads::save(&task,&p).await,
+                    "update_mods" => mod_updates::apply(&task, &p).await,
+                    "export_pack" => pack_export::export(&task, &p).await,
+                    "launch" => {
+                        let config = read_json(&task.instance(string(&p,"id")?)?.join("kxl.json"))?;
+                        if config["modUpdateMode"] == "auto" { mod_updates::apply(&task, &p).await?; }
+                        engine::launch(&task, &p).await
+                    },
                     "import_pack" => packs::import(&task, &p).await,
                     "install_project" if p["kind"].as_str() == Some("modpacks") && p["source"].as_str() != Some("curseforge") => packs::install_modrinth(&task, &p).await,
                     "install_project" if p["source"].as_str() == Some("curseforge") => {
                         if p["kind"].as_str() == Some("modpacks") {
                             curseforge::install_modpack(&task, &p).await
                         } else {
-                            curseforge::install_project(&task, &p).await
+                            resource_dependencies::install(&task, &p).await
                         }
                     }
-                    _ => engine::install_project(&task, &p).await,
+                    _ => resource_dependencies::install(&task, &p).await,
                 };
                     result
                 }.await;
                 (task.progress)(json!({"stage":if result.is_ok(){"完成"}else{"任务失败"},"done":1,"total":1,"finished":true,"error":result.as_ref().err()}));
+                if let Ok(value)=&result{mod_check::after_install(self,action,&p,value);}
+                if action=="launch" && result.is_err() && !task.cancel.load(Ordering::Relaxed) {
+                    let options=read_json(&task.data_root.join("ai-options.json")).unwrap_or_else(|_|json!({}));
+                    if options["automatic"]!=false {
+                        (task.progress)(json!({"autoDiagnosis":true,"status":"analyzing","reason":"游戏启动失败，正在分析本次启动错误"}));
+                        let analysis=ai_diagnose::analyze(&task,&json!({"text":format!("Minecraft 启动准备失败：{}",result.as_ref().unwrap_err())})).await;
+                        (task.progress)(match analysis {Ok(v)=>json!({"autoDiagnosis":true,"status":"done","report":v["report"]}),Err(e)=>json!({"autoDiagnosis":true,"status":"error","error":e})});
+                    }
+                }
                 result
             }
             "cancel" => {
@@ -199,8 +283,12 @@ impl Core {
                 Ok(json!(true))
             }
             "save_instance" => {
+                let lock=self.jobs.instance_lock(string(&p,"id")?);let _guard=lock.lock().await;
                 let mut v: Value = read_json(&self.instance(string(&p, "id")?)?.join("kxl.json"))?;
                 v["settings"] = p["settings"].clone();
+                if v["settings"]["isolation"]=="custom" {
+                    v["settings"]["gameDirectory"]=json!(game_directories::writable(string(&v["settings"],"gameDirectory")?)?);
+                }
                 if let Some(settings) = v["settings"].as_object_mut() {
                     settings.remove("jvm");
                 }
@@ -236,11 +324,28 @@ impl Core {
                 write_json(&path, &instance)?;
                 Ok(instance)
             }
+            "ai_options" => {
+                let path=self.root.join("ai-options.json");
+                if let Some(value)=p["automatic"].as_bool(){write_json(&path,&json!({"automatic":value}))?;}
+                Ok(read_json(&path).unwrap_or_else(|_|json!({"automatic":true})))
+            },
+            "ai_key_status" => Ok(json!({"configured": ai_diagnose::configured(self)})),
+            "ai_key_save" => ai_diagnose::save_key(self, &p),
+            "ai_key_remove" => ai_diagnose::remove_key(self),
+            "ai_diagnose" => ai_diagnose::analyze(self, &p).await,
+            "project_versions" => mod_updates::versions(self, &p).await,
+            "resource_requirements" => resource_dependencies::preview(self, &p).await,
+            "datapack_worlds" => resource_downloads::worlds(self,&p),
+            "check_mod_updates" => mod_updates::check(self, &p).await,
+            "scan_installed_mod_updates" => mod_check::prepare_installed(self, &p),
+            "mod_update_mode" => mod_updates::mode(self, &p),
             "resources" => resources::list(self, &p),
+            "delete_resources" => resource_delete::remove(self, &p).await,
             "project_dependencies" => curseforge::dependencies(self, &p).await,
             "delete_instance" => {
                 let id = string(&p, "id")?;
                 let dir = self.instance(id)?;
+                if let Ok(config)=read_json(&dir.join("kxl.json")) {game_directories::hide_external(self,&config)?;}
                 let name = read_json(&dir.join("kxl.json"))
                     .ok()
                     .and_then(|value| value["name"].as_str().map(str::to_string))
@@ -250,8 +355,14 @@ impl Core {
             }
             "toggle_resource" => resources::toggle(self, &p),
             "resource_move" => resources::move_pack(self, &p),
-            "import_resource" => resources::import_file(self, &p),
-            "import_resource_paths" => resources::import_paths(self, &p),
+            "import_resource" => {
+                let result=resources::import_file(self,&p);
+                if let Ok(value)=&result{mod_check::after_install(self,action,&p,value);}result
+            },
+            "import_resource_paths" => {
+                let result=resources::import_paths(self,&p);
+                if let Ok(value)=&result{mod_check::after_install(self,action,&p,value);}result
+            },
             "ensure_loader_components" => resources::ensure_loader_components(self, &p).await,
             "offline_login" => auth::offline(self, string(&p, "name")?),
             "microsoft_start" => {
@@ -312,7 +423,7 @@ impl Core {
                 Ok(json!(path))
             }
             "inspect_pack" => packs::inspect(Path::new(string(&p, "path")?)),
-            "export_pack" => packs::export(self, &p),
+            "export_options" => pack_export::options(self, &p),
             "java" => engine::java_list_at(self),
             "search" => search_projects(self, &p).await,
             "news" => news::list(self, p["force"].as_bool().unwrap_or(false)).await,
@@ -351,9 +462,9 @@ impl Core {
                 json!({"os":std::env::consts::OS,"arch":std::env::consts::ARCH,"root":self.root,"java":engine::java_list_at(self)?}),
             ),
             #[cfg(feature = "desktop")]
-            "open_folder" => {
-                let path = if let Some(id) = p["id"].as_str() {
-                    self.instance(id)?
+            "open_folder" | "open_data_folder" => {
+                let path = if action=="open_data_folder" {self.data_root.clone()} else if let Some(id) = p["id"].as_str() {
+                    game_directories::running_directory(self,&read_json(&self.instance(id)?.join("kxl.json"))?)?
                 } else {
                     self.root.clone()
                 };
@@ -380,7 +491,11 @@ impl Core {
     }
 }
 
-async fn modrinth_search(core: &Core, p: &Value) -> Result<Value> {
+async fn modrinth_search(
+    core: &Core,
+    p: &Value,
+    category: Option<&str>,
+) -> Result<Value> {
     let kind = string(p, "kind")?;
     let page = p["page"].as_u64().unwrap_or(0);
     let mut facets = vec![vec![format!("project_type:{kind}")]];
@@ -391,6 +506,9 @@ async fn modrinth_search(core: &Core, p: &Value) -> Result<Value> {
         if let Some(loader) = p["loader"].as_str().filter(|value| !value.is_empty()) {
             facets.push(vec![format!("categories:{loader}")]);
         }
+    }
+    if let Some(category) = category {
+        facets.push(vec![format!("categories:{category}")]);
     }
     let facets = serde_json::to_string(&facets).map_err(err)?;
     let offset = (page * 30).to_string();
@@ -413,6 +531,18 @@ async fn modrinth_search(core: &Core, p: &Value) -> Result<Value> {
         .json()
         .await
         .map_err(err)?;
+    let query = p["query"].as_str().unwrap_or("");
+    if literal_search_required(query) {
+        let count = value["hits"].as_array_mut().map(|hits| {
+            hits.retain(|hit| literal_search_match(query, &[
+                hit["title"].as_str().unwrap_or(""),
+                hit["slug"].as_str().unwrap_or(""),
+                hit["description"].as_str().unwrap_or(""),
+            ]));
+            hits.len()
+        }).unwrap_or(0);
+        value["total_hits"] = json!(count);
+    }
     if let Some(hits) = value["hits"].as_array_mut() {
         for hit in hits {
             hit["source"] = json!("modrinth");
@@ -429,11 +559,13 @@ async fn search_projects(core: &Core, p: &Value) -> Result<Value> {
     use sha2::{Digest, Sha256};
 
     let cache_input = json!({
+        "queryPolicy": 2,
         "kind": p["kind"],
         "query": p["query"],
         "source": p["source"],
         "game": p["game"],
         "loader": p["loader"],
+        "tag": p["tag"],
         "page": p["page"],
     });
     let cache_key = format!(
@@ -445,12 +577,14 @@ async fn search_projects(core: &Core, p: &Value) -> Result<Value> {
         .join("cache")
         .join("resource-search")
         .join(format!("{cache_key}.json"));
+    let search_lock = core.jobs.file_lock(&cache);
+    let _search_guard = search_lock.lock().await;
     let fresh = std::fs::metadata(&cache)
         .and_then(|meta| meta.modified())
         .and_then(|time| time.elapsed().map_err(std::io::Error::other))
         .map(|age| age < std::time::Duration::from_secs(10 * 60))
         .unwrap_or(false);
-    if fresh {
+    if fresh && p["force"] != true {
         if let Ok(mut value) = read_json(&cache) {
             value["cached"] = json!(true);
             return Ok(value);
@@ -458,22 +592,37 @@ async fn search_projects(core: &Core, p: &Value) -> Result<Value> {
     }
     let source = p["source"].as_str().unwrap_or("all");
     let page = p["page"].as_u64().unwrap_or(0);
-    let curseforge = || {
+    // 标签形如「CurseForge 分类 ID/Modrinth 分类 slug」：
+    // "406/worldgen" 两边同时筛选，"/game-mechanics" 只筛 Modrinth，"9026/" 只筛 CurseForge。
+    let tag = p["tag"].as_str().unwrap_or("");
+    let (category_cf, category_mr) = split_tag(tag);
+    let curseforge = || async {
+        if tag.starts_with('/') {
+            return Ok(json!({"hits": [], "total": 0, "page": page, "pageSize": 30}));
+        }
         curseforge::search(
             core,
             p["kind"].as_str().unwrap_or("mod"),
             p["query"].as_str().unwrap_or(""),
             p["game"].as_str(),
             p["loader"].as_str(),
+            category_cf,
             p["curseforgeKey"].as_str().unwrap_or(""),
             page,
         )
+        .await
+    };
+    let modrinth = || async {
+        if tag.ends_with('/') {
+            return Ok(json!({"hits": [], "total": 0, "page": page, "pageSize": 30}));
+        }
+        modrinth_search(core, p, category_mr).await
     };
     let value = match source {
-        "modrinth" => modrinth_search(core, p).await,
+        "modrinth" => modrinth().await,
         "curseforge" => curseforge().await,
         "all" => {
-            let (modrinth, curseforge) = tokio::join!(modrinth_search(core, p), curseforge());
+            let (modrinth, curseforge) = tokio::join!(modrinth(), curseforge());
             if let (Err(a), Err(b)) = (&modrinth, &curseforge) {
                 return Err(format!(
                     "两个资源源都不可用。Modrinth：{a}；CurseForge：{b}"
@@ -519,6 +668,26 @@ async fn search_projects(core: &Core, p: &Value) -> Result<Value> {
     Ok(value)
 }
 
+// Search engines may drop a punctuation-only query and return their default
+// catalogue. Only show literal matches in that case, never the popular list.
+pub(crate) fn literal_search_required(query: &str) -> bool {
+    !query.trim().is_empty() && !query.chars().any(char::is_alphanumeric)
+}
+pub(crate) fn literal_search_match(query: &str, fields: &[&str]) -> bool {
+    fields.iter().any(|text| text.contains(query.trim()))
+}
+
+/// 拆分「CurseForge 分类 ID/Modrinth 分类 slug」形式的资源标签。
+/// 任一侧为空表示该来源不支持这个分类。
+fn split_tag(tag: &str) -> (Option<u64>, Option<&str>) {
+    match tag.split_once('/') {
+        Some((cf, mr)) => (
+            cf.parse::<u64>().ok(),
+            Some(mr).filter(|slug| !slug.is_empty()),
+        ),
+        None => (tag.parse::<u64>().ok(), None),
+    }
+}
 pub fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
@@ -679,6 +848,17 @@ async fn dispatch(
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn symbol_searches_do_not_display_an_unfiltered_catalogue() {
+        for query in ["+", "++", "🙂", "?", "\""] {
+            assert!(super::literal_search_required(query));
+            assert!(!super::literal_search_match(query, &["Popular mod", "Default catalogue"]));
+            assert!(super::literal_search_match(query, &[&format!("A {query} resource")]));
+        }
+        for query in ["", "  ", "a", "ab", "玉", "A&B+中🙂"] {
+            assert!(!super::literal_search_required(query));
+        }
+    }
     use super::*;
     #[test]
     fn paths() {
@@ -686,5 +866,13 @@ mod tests {
             assert!(safe_name(s).is_err());
         }
         assert!(safe_name("1.20.1-Fabric").is_ok());
+    }
+
+    #[test]
+    fn tag_splits_into_both_platforms() {
+        assert_eq!(split_tag("406/worldgen"), (Some(406), Some("worldgen")));
+        assert_eq!(split_tag("/game-mechanics"), (None, Some("game-mechanics")));
+        assert_eq!(split_tag("9026/"), (Some(9026), None));
+        assert_eq!(split_tag(""), (None, None));
     }
 }

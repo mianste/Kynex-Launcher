@@ -1,0 +1,132 @@
+.mod-update-manager {
+  margin-top: 8px;
+}
+.mod-update-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+}
+.mod-update-toolbar h3 {
+  font-size: 16px;
+}
+.mod-update-toolbar p {
+  margin-top: 4px;
+  font-size: 12px;
+}
+.mod-update-toolbar .choice-select {
+  width: 180px;
+}
+.mod-update-toolbar .actions {
+  flex-wrap: nowrap;
+}
+.mod-update-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.mod-update-note,
+.mod-update-summary {
+  margin: 12px 0;
+  font-size: 12px;
+}
+.mod-resource-list {
+  margin-top: 0;
+}
+.mod-resource-list .resource-row {
+  gap: 12px;
+  padding: 12px 0;
+}
+.mod-resource-list .resource-monogram {
+  width: 44px;
+  height: 44px;
+  flex: none;
+}
+.mod-resource-list .grow {
+  min-width: 0;
+}
+.mod-resource-list .grow > b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.mod-resource-list .grow > small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.mod-update-version strong {
+  font-weight: 600;
+  color: var(--text);
+}
+.mod-row-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  min-width: 92px;
+  justify-content: flex-end;
+}
+.mod-file-problems {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.mod-resource-list .switch {
+  flex: none;
+}
+
+.mod-resource-list .grow > .mod-update-version {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.app .mod-update-toolbar {
+  padding: 12px 0;
+}
+.mod-update-toolbar > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.mod-update-toolbar > div:first-child p {
+  margin: 0;
+}
+.app .mod-resource-list {
+  gap: 0;
+  border-top: 0;
+}
+.app .mod-resource-list .resource-row {
+  min-height: 0;
+  margin: 0;
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app .mod-resource-list .grow > b {
+  line-height: 1.4;
+}
+.app .mod-resource-list .grow > small {
+  margin: 0;
+  line-height: 1.5;
+}
+.app .mod-resource-list .grow > .mod-update-version,
+.app .mod-resource-list .grow > .mod-update-source {
+  display: inline;
+}
+.mod-update-source::before {
+  content: " · ";
+}

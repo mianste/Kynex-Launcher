@@ -18,9 +18,12 @@
   height: calc(100% - 4px);
   margin: 2px;
   border: 0;
-  border-radius: 0;
-  overflow: visible;
-  clip-path: inset(0 round var(--window-radius));
+  border-radius: var(--window-radius);
+  overflow: hidden;
+  clip-path: none;
+  /* 将视频、主题底色与内容先合成，再由同一圆角裁切，避免视频提升层露出方角。 */
+  -webkit-mask-image: linear-gradient(#fff, #fff);
+  mask-image: linear-gradient(#fff, #fff);
   box-shadow: none;
 }
 
@@ -46,7 +49,12 @@
   filter: saturate(0.65);
 }
 .app:not(.page-home) .scrim {
-  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  /* 跟随界面不透明度：面板越透明，这层压暗也越弱，背景才透得出来。 */
+  background: color-mix(
+    in srgb,
+    var(--glass) calc(var(--ui-alpha) * 0.78),
+    transparent
+  );
 }
 .app .nav {
   top: 44px;
@@ -166,6 +174,10 @@
   color: var(--text);
   min-height: 36px;
 }
+.home-header .home-music {
+  border-radius: 999px;
+  padding-inline: 16px;
+}
 .home-dashboard {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 342px;
@@ -182,7 +194,8 @@
     inset 0 1px 0 var(--glass-highlight);
   backdrop-filter: blur(32px) saturate(130%);
 }
-.home-quick-panel h2 {
+.home-quick-panel h2,
+.other-games-title h2 {
   font-size: 14px;
   font-weight: 650;
   letter-spacing: 0;
@@ -334,6 +347,47 @@
   color: var(--text2);
   margin-top: 10px;
 }
+.app .other-games {
+  margin-top: 18px;
+  padding: 15px 18px 18px;
+  border: 1px solid var(--glass-edge);
+  border-radius: 21px;
+  background: var(--glass-medium);
+  backdrop-filter: blur(30px) saturate(130%);
+  box-shadow: 0 10px 32px rgb(25 50 66 / 10%);
+}
+.app .other-games-title {
+  margin-bottom: 12px;
+  gap: 8px;
+}
+.app .other-games-title > span {
+  margin-left: auto;
+  font-size: 10px;
+}
+.app .other-games-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.app .other-game {
+  min-height: 58px;
+  border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  border-radius: 13px;
+  background: var(--glass-thin);
+  box-shadow: none;
+}
+.app .other-game-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  color: var(--accent);
+  background: var(--accent-low);
+}
+.app .other-game-text b {
+  font-size: 12px;
+}
+.app .other-game-text small {
+  font-size: 10px;
+}
 .app .taskbar {
   height: 34px;
   border: 0;
@@ -392,6 +446,9 @@
 .app .tabs button.on {
   color: var(--text);
 }
+.app .music-player-bar .music-controls .music-play {
+  color: var(--on-accent, white);
+}
 .app .modal {
   border-radius: 24px;
   background: var(--glass-thick);
@@ -399,6 +456,40 @@
 .app .instance-select-menu {
   border-radius: 13px;
   background: var(--glass-thick);
+}
+.app .music-panel {
+  border-radius: 24px;
+  background: var(--glass-thick);
+}
+.app .music-platform-grid > button,
+.app .music-platform-grid > button:nth-child(even) {
+  border-radius: 17px;
+  background: var(--glass-medium);
+}
+.app .music-track,
+.app .music-track:nth-child(even) {
+  border-radius: 10px;
+}
+.app .music-platform-login {
+  border-radius: 15px;
+  background: var(--glass-medium);
+}
+.app .music-platform-login > span:nth-child(2) {
+  display: block;
+  flex: 1;
+  margin-left: 10px;
+}
+.app .music-shell.open {
+  inset: 108px 22px 46px;
+}
+.app.page-home .music-shell.compact {
+  display: none;
+}
+.app .music-sidebar {
+  font-size: 12px;
+}
+.app .music-sidebar-title {
+  letter-spacing: 0;
 }
 .loader-icon {
   display: inline-grid;
@@ -423,6 +514,76 @@
 .app .loader-grid > button .loader-icon {
   width: 48px;
   height: 48px;
+}
+.music-remote-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.music-platform-orb {
+  overflow: hidden;
+}
+.music-platform-orb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.music-cloud-library {
+  margin-top: 24px;
+}
+.app .music-platform-login {
+  margin: 0 0 16px;
+}
+.app .music-platform-grid > button {
+  min-height: 88px;
+}
+.app .music-platform-grid small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.music-cloud-library h3 {
+  font-size: 15px;
+}
+.music-cloud-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.music-cloud-grid > button {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--glass-medium);
+  border: 1px solid var(--line);
+  text-align: left;
+}
+.music-cloud-grid img {
+  width: 42px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.music-cloud-grid > button > span {
+  flex: 1;
+  min-width: 0;
+}
+.music-cloud-grid b {
+  display: block;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.music-cloud-grid small {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
 }
 .app .page-content .card,
 .app .resource-row,
@@ -462,6 +623,16 @@
   }
   .app .launch-card {
     padding: 18px;
+  }
+  .app .other-games-grid {
+    gap: 7px;
+  }
+  .app .other-game {
+    padding: 8px;
+  }
+  .app .other-game-icon {
+    width: 28px;
+    height: 28px;
   }
 }
 @media (max-height: 620px) {
@@ -512,13 +683,24 @@
   .app .text-button {
     margin-top: 7px;
   }
+  .app .other-games {
+    margin-top: 12px;
+    padding-block: 11px;
+  }
+  .app .other-games-title {
+    margin-bottom: 8px;
+  }
+  .app .other-game {
+    min-height: 50px;
+  }
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   .app .home-quick-panel,
   .app .launch-card,
   .app .account-tile,
+  .app .other-games,
   .app .nav {
-    background: var(--surface);
+    background: var(--glass);
     backdrop-filter: none;
   }
 }
@@ -526,9 +708,6 @@
 /* Black dark theme: neutral blacks, no teal cast. */
 :root[data-theme="dark"] .app .scrim {
   background: rgb(0 0 0 / 52%);
-}
-:root[data-theme="dark"] .app:not(.page-home) .scrim {
-  background: color-mix(in srgb, #000 88%, transparent);
 }
 :root[data-theme="dark"] .app .wallpaper {
   filter: saturate(0.55) brightness(0.7);
@@ -546,6 +725,7 @@
 :root[data-theme="dark"] .app .server-library-card,
 :root[data-theme="dark"] .app .news-feature,
 :root[data-theme="dark"] .app .news-card,
+:root[data-theme="dark"] .app .other-game,
 :root[data-theme="dark"] .app .skin-upload-area,
 :root[data-theme="dark"] .app .skin-saved-entry,
 :root[data-theme="dark"] .app .launch-card {
@@ -728,7 +908,7 @@
 }
 :root[data-theme="light"] .settings-page .input,
 :root[data-theme="light"] .settings-page .search {
-  background: #fff;
+  background: var(--glass);
   border-color: #a8bccb;
   color: #243f51;
 }
@@ -781,6 +961,108 @@
 .wall-upload:hover {
   background: var(--accent-low);
 }
+.app .home-header .home-music {
+  min-height: 52px;
+  gap: 10px;
+  padding: 7px 18px 7px 8px;
+  border-radius: 18px 18px 18px 8px;
+  background: var(--glass-medium);
+  color: var(--text);
+  border: 1px solid var(--line);
+  text-align: left;
+  box-shadow:
+    0 5px 16px rgb(20 40 55 / 13%),
+    inset 0 1px 0 var(--glass-highlight);
+}
+.home-music-symbol {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: var(--accent-low);
+  color: var(--text);
+}
+.home-music b {
+  display: block;
+  font-size: 12px;
+}
+.home-music small {
+  display: block;
+  font-size: 10px;
+  color: var(--text2);
+  margin-top: 2px;
+}
+.app .music-online {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-height: 0;
+}
+.app .music-panel.platform-mode .music-workspace {
+  grid-template-columns: 150px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+.app .music-panel.platform-mode .music-content {
+  overflow: hidden;
+  padding: 14px;
+}
+.app .music-panel.platform-mode .music-player-bar {
+  display: none;
+}
+.music-online-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+}
+.music-online-toolbar select {
+  min-height: 35px;
+  max-width: 150px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--glass-medium);
+  color: var(--text);
+  padding: 6px 10px;
+}
+.music-online-toolbar > button:not(.btn) {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 35px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--glass-thin);
+}
+.music-online .music-platform-search {
+  margin: 0;
+  flex: none;
+  min-height: 38px;
+}
+.music-online-status {
+  font-size: 11px;
+  color: var(--text2);
+  min-height: 16px;
+  flex: none;
+}
+.music-webview-host {
+  flex: 1;
+  min-height: 160px;
+  background: white;
+  border-radius: 0;
+  overflow: hidden;
+}
+.music-webview-host .music-empty {
+  color: #3e5668;
+}
+.app .music-panel.platform-mode .music-sidebar {
+  overflow-y: auto;
+}
+.app:not(.page-home) .music-shell.compact {
+  display: none;
+}
 
 /* Motion is attached to content, not the glass shell, keeping backdrop sampling stable. */
 .app .page-head > div {
@@ -806,6 +1088,17 @@
 .app .nav > button:active {
   transform: scale(0.96);
   transition-duration: 80ms;
+}
+.app .music-panel {
+  animation: none;
+}
+.app .music-panel:not(.platform-mode) .music-panel-head > div,
+.app .music-panel:not(.platform-mode) .music-content > :first-child {
+  animation: content-arrive 220ms var(--motion-fluent) both;
+}
+.app .music-panel.platform-mode {
+  transform: none;
+  animation: none;
 }
 .app .switch i {
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -856,6 +1149,7 @@
 .app .tabs button,
 .app .source-tabs button,
 .app .instance-select-trigger,
+.app .home-header .home-music,
 .app .theme-choices button,
 .app .window-presets button {
   backdrop-filter: none;
@@ -891,6 +1185,15 @@
   background: var(--accent);
   color: var(--on-accent, white);
 }
+.app .home-header .home-music,
+.app .home-header .home-music:hover {
+  background: var(--control-bg);
+  filter: none;
+  backdrop-filter: none;
+}
+.app .home-music-symbol {
+  background: var(--control-selected);
+}
 .motion-selection::after,
 .motion-selection-vertical::after {
   content: "";
@@ -925,6 +1228,61 @@
 }
 .settings-page .settings-nav button.on::before {
   display: none;
+}
+.app .native-mode .music-content {
+  overflow: hidden;
+  min-height: 0;
+  padding: 18px;
+}
+.app .native-mode .music-workspace {
+  grid-template-columns: 190px minmax(0, 1fr);
+}
+.app .native-mode .music-sidebar {
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.app .native-mode .music-sidebar::-webkit-scrollbar {
+  display: none;
+}
+.app:has(.music-shell.open) .page-content {
+  overflow: hidden;
+}
+.native-music {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+.native-music-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.native-music-toolbar select {
+  border: 1px solid var(--line);
+  background: var(--control-bg);
+  color: var(--text);
+  border-radius: 9px;
+  padding: 8px 10px;
+}
+.native-music .music-platform-search {
+  margin: 0;
+  flex: none;
+  background: var(--control-bg);
+  border: 1px solid var(--line);
+}
+.native-music-error {
+  font-size: 12px;
+  color: var(--bad);
+}
+.official-music-login {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  gap: 8px;
 }
 .official-login-heading {
   display: flex;
@@ -1023,6 +1381,78 @@
   font-size: 11px;
   color: var(--text2);
 }
+.native-playlist-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.native-playlist-grid button {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  gap: 5px;
+  min-width: 0;
+  padding-bottom: 8px;
+}
+.native-playlist-grid img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 16px;
+}
+.native-playlist-grid b {
+  font-size: 12px;
+}
+.native-playlist-grid small {
+  color: var(--text2);
+  font-size: 10px;
+}
+.music-artwork {
+  display: grid;
+  place-items: center;
+  flex: none;
+  overflow: hidden;
+  background: var(--control-selected);
+  color: var(--text2);
+}
+.music-artwork img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.music-artwork--song {
+  width: 38px;
+  height: 38px;
+  border-radius: 7px;
+}
+.music-artwork--playlist {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 16px;
+}
+.music-artwork--sidebar {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
+.music-artwork--avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+.music-artwork--player {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+.native-playlist-grid .music-artwork img {
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+.music-cover:has(.music-artwork) {
+  padding: 0;
+}
 .native-login {
   position: relative;
   display: flex;
@@ -1093,11 +1523,43 @@
   border-radius: 50%;
 }
 /* New motion, limited to meaningful state transitions. */
+.app .music-panel.native-mode {
+  animation: music-native-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: 85% 0;
+}
+.app .music-exiting .music-panel.native-mode {
+  animation: music-native-out 140ms ease-in both;
+  pointer-events: none;
+}
 .task-stage {
   animation: task-stage-in 160ms ease-out;
 }
 .taskbar progress::-webkit-progress-value {
   transition: width 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.native-playlist-grid img {
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .native-playlist-grid button:hover img {
+    transform: translateY(-2px);
+  }
+}
+@keyframes music-native-in {
+  from {
+    opacity: 0;
+    transform: translateY(-7px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes music-native-out {
+  to {
+    opacity: 0;
+    transform: translateY(-7px) scale(0.985);
+  }
 }
 @keyframes task-stage-in {
   from {
@@ -1174,14 +1636,14 @@
   cursor: not-allowed;
 }
 .choice-popover {
-  z-index: 200;
+  z-index: 1200;
   padding: 6px;
   overflow-y: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--line);
   border-radius: 16px;
   color: var(--text);
-  background: var(--surface);
+  background: var(--glass);
   box-shadow:
     0 14px 42px rgb(0 0 0 / 22%),
     inset 0 1px 0 var(--glass-highlight);
@@ -1214,7 +1676,7 @@
   margin: 16px 0;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: var(--surface);
+  background: var(--glass);
 }
 .install-addon-heading {
   display: flex;
@@ -1259,10 +1721,44 @@
   width: 15px;
   flex: none;
 }
+.choice-group {
+  position: sticky;
+  top: -6px;
+  z-index: 1;
+  padding: 10px 12px 4px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  opacity: 0.8;
+  background: var(--glass);
+}
+.choice-option.indent b {
+  padding-left: 14px;
+  opacity: 0.92;
+}
 .field > .choice-select,
 .setting-row-controls > .choice-select,
 .resource-filters .choice-select {
   width: 100%;
+}
+.native-music-provider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  margin-right: 12px;
+  color: var(--text);
+}
+.native-music-provider b {
+  font-size: 14px;
+}
+.music-track .choice-select {
+  width: 130px;
+}
+.music-track .choice-trigger {
+  min-height: 32px;
+  padding: 5px 9px;
 }
 .setting-row-controls .drop-up {
   flex: 1;
@@ -1303,4 +1799,320 @@
   .motion-selection-vertical::after {
     transition: none;
   }
+}
+
+
+/* 玻璃模糊随界面不透明度一起降低：0% 时不再磨砂，避免切页时短暂“糊成一片”。 */
+.app .glass,
+.app .news-feature,
+.app .card,
+.app .filters,
+.app .project-card,
+.app .news-card,
+.app .nav,
+.app .modal,
+.app .dialog,
+.app .instance-card {
+  backdrop-filter: blur(var(--ui-blur, 26px)) saturate(130%);
+  -webkit-backdrop-filter: blur(var(--ui-blur, 26px)) saturate(130%);
+}
+
+
+/* Resolve opacity-dependent colors on the node that owns --ui-alpha.
+   Inherited colors resolved on :root would otherwise lag behind the slider. */
+.app {
+  --glass: color-mix(in srgb, var(--surface) var(--ui-alpha), transparent);
+  --glass-thin: var(--glass);
+  --glass-medium: var(--glass);
+  --glass-thick: var(--glass);
+  --control-bg: var(--glass);
+  --control-hover: color-mix(in srgb, var(--surface) min(100%, calc(var(--ui-alpha) + 8%)), transparent);
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+}
+
+/* One wallpaper treatment on every page, for both static images and video. */
+:root[data-theme] .app > .wallpaper,
+:root[data-theme] .app > .wallpaper-video {
+  opacity: 1;
+  filter: none;
+}
+:root[data-theme] .app > .scrim {
+  background: transparent;
+}
+
+/* Theme-specific legacy fills must follow the same opacity as light panels. */
+:root[data-theme] .app .nav,
+:root[data-theme] .app .window-controls,
+:root[data-theme] .app .taskbar,
+:root[data-theme] .app .card,
+:root[data-theme] .app .filters,
+:root[data-theme] .app .project-card,
+:root[data-theme] .app .resource-row,
+:root[data-theme] .app .selected-account,
+:root[data-theme] .app .server-library-card,
+:root[data-theme] .app .news-feature,
+:root[data-theme] .app .news-card,
+:root[data-theme] .app .other-game,
+:root[data-theme] .app .skin-upload-area,
+:root[data-theme] .app .skin-saved-entry,
+:root[data-theme] .app .launch-card,
+:root[data-theme] .app .instance-card {
+  background: var(--glass);
+  transition-property: transform, box-shadow, border-color;
+}
+
+/* Music uses the same global material; only glyph contrast is protected. */
+.app .music-panel {
+  --text3: var(--text2);
+  background: var(--glass);
+  backdrop-filter: blur(var(--ui-blur, 26px));
+  -webkit-backdrop-filter: blur(var(--ui-blur, 26px));
+}
+.app .home-quick-panel,
+.app .other-games,
+.app .account-tile,
+.app .music-sidebar,
+.app .music-player-bar,
+.app .modal,
+.app .dialog {
+  background: var(--glass);
+  backdrop-filter: blur(var(--ui-blur, 26px));
+  -webkit-backdrop-filter: blur(var(--ui-blur, 26px));
+}
+.app button,
+.app input,
+.app select,
+.app textarea {
+  text-shadow: inherit;
+}
+/* A transparent music workspace must not put two pages of text on top of each other. */
+.app:has(.music-shell.open) .page-content {
+  visibility: hidden;
+}
+.app .btn.primary {
+  text-shadow: none;
+}
+.app .btn.primary svg {
+  filter: none;
+}
+.app .choice-popover,
+.app .choice-group,
+.app .install-addon,
+.app .export-options,
+.app .export-advanced,
+.app .resource-selection-bar,
+.app .download-task-card {
+  background: var(--glass);
+  backdrop-filter: blur(var(--ui-blur, 26px));
+  -webkit-backdrop-filter: blur(var(--ui-blur, 26px));
+}
+.app .pcl-resource-page {
+  --resource-panel: var(--glass);
+}
+
+/* Opaque mode applies to complete content surfaces, including resource lists. */
+.app .download-main {
+  background: var(--glass);
+  padding: 12px;
+  border-radius: 12px;
+  --text2: var(--reading-muted);
+  --text3: var(--reading-muted);
+}
+.app .download-main .timeline,
+.app .download-main .project-results {
+  padding: 8px 12px;
+}
+.app .download-main .section-tools { padding: 8px 12px; }
+.app .launch-copy { padding: 0; margin: 0; }
+.app .launch-copy .launch-meta { margin-bottom: 12px; }
+.app .home-shortcuts > button > .shortcut-copy {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  color: var(--text);
+}
+.app .btn.primary,
+.app .nav > button.on,
+.app .settings-nav button.on {
+  -webkit-text-stroke: 0;
+}
+.app .home-layout small {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.app .other-games-title > span { font-size: 12px; }
+.app [data-adaptive-ink="true"] {
+  color: var(--adaptive-ink) !important;
+  -webkit-text-stroke: 0;
+  text-shadow: 0 1px 1px var(--adaptive-edge);
+}
+
+/* Page headings are removed; only the existing search/action toolbar remains. */
+.app .page-head {
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 40px;
+  margin-bottom: 16px;
+}
+
+/* Hide the native scroll indicator, retaining mouse wheel and keyboard access. */
+.app.page-home .page-content {
+  overflow: hidden !important;
+  scrollbar-width: none;
+  scrollbar-gutter: auto;
+}
+.app.page-home .page-content::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+.app.page-home .home-layout {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 16px;
+}
+.app.page-home .home-header { margin: 0; }
+.app.page-home .home-dashboard,
+.app.page-home .home-quick-panel,
+.app.page-home .launch-column {
+  min-height: 0;
+}
+.app.page-home .home-quick-panel { padding: 18px 22px; }
+.app.page-home .other-games { margin-top: 0; padding: 12px 18px 14px; }
+.app.page-home .other-games-title { margin-bottom: 8px; }
+.app.page-home .other-game { min-height: 56px; }
+
+/* Settings: compact category navigation, aligned form columns, one scroll owner. */
+.settings-page .settings-layout {
+  grid-template-columns: 172px minmax(0, 1fr);
+  gap: 20px;
+  align-items: stretch;
+}
+.settings-sidebar {
+  align-self: start;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 16px;
+  background: var(--glass);
+}
+.settings-sidebar .search {
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.settings-sidebar .search input { width: 100%; min-width: 0; }
+.settings-sidebar .search input::placeholder { font-size: 12px; }
+.settings-page .settings-nav { gap: 4px; padding: 0; }
+.settings-page .settings-nav button {
+  min-height: 42px;
+  padding: 10px 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.settings-page .settings-content {
+  padding: 0 8px 12px 0;
+  min-width: 0;
+}
+.settings-page .settings-content > .card {
+  border-radius: 16px;
+  padding: 20px 24px;
+}
+.settings-page .settings-card-head { padding-bottom: 16px; }
+.settings-page .setting-row {
+  grid-template-columns: minmax(170px, 0.85fr) minmax(260px, 1.15fr);
+  column-gap: 24px;
+  min-height: 82px;
+  padding: 16px 0;
+}
+.settings-page .setting-label {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+.settings-page .setting-label small {
+  font-size: 12px;
+  line-height: 1.6;
+  max-width: 250px;
+}
+.settings-page .setting-row-controls {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+.settings-page .setting-row-controls > .choice-select { width: 100%; }
+.settings-page .opacity-range { flex: 1; min-width: 120px; width: auto; }
+.settings-page .setting-control { width: 100%; }
+.settings-page .settings-layout .setting-row-controls .btn { flex-shrink: 0; }
+:root[data-theme] .app .settings-page .setting-row { background: transparent; }
+.settings-page .setting-row-controls:has(> input[type="color"]) {
+  flex-wrap: nowrap;
+}
+.settings-page .setting-row-controls > input[type="color"] {
+  flex: 0 0 36px;
+  width: 36px;
+}
+.settings-page .setting-row-controls:has(> input[type="color"]) > .input {
+  flex: 1;
+  min-width: 0;
+  width: 0;
+}
+
+/* The native drag strip is clear wallpaper, never a frosted full-width bar. */
+.app > .chrome,
+.app .drag-region {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  border: 0;
+}
+.app .window-controls {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+
+/* 启动页隐藏滚动条，滚轮/键盘滚动保持可用。 */
+.app.page-home,
+.app.page-home .home-layout,
+.app.page-home .home-dashboard,
+.app.page-home .home-layout * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.app.page-home *::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+html:has(.app.page-home),
+body:has(.app.page-home) {
+  scrollbar-width: none;
+}
+.app [data-adaptive-ink=true] {
+  text-shadow:
+    0 1px 2px var(--adaptive-edge),
+    0 0 1px var(--adaptive-edge);
+}
+
+
+/* 视频壁纸下关闭所有磨砂：blur 与视频解码叠加是掉帧的主因。 */
+.app.video-wallpaper *,
+.app.video-wallpaper *::before,
+.app.video-wallpaper *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+
+/* 下拉菜单与其他面板使用同一个透明度。 */
+.app .choice-popover,
+.app .instance-select-menu {
+  background: var(--glass);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 28%);
 }

@@ -1,0 +1,36 @@
+{
+  "version": "1.3.0-beta.1.3.0",
+  "productName": "Kynex Launcher",
+  "identifier": "com.keke.kynex.beta",
+  "mainBinaryName": "Kynex Launcher Beta",
+  "bundle": {
+    "windows": {
+      "nsis": {
+        "installerHooks": "nsis/beta-hooks.nsh"
+      }
+    }
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Kynex Launcher Beta",
+        "width": 1080,
+        "height": 720,
+        "minWidth": 1080,
+        "minHeight": 720,
+        "maxWidth": 1080,
+        "maxHeight": 720,
+        "center": true,
+        "decorations": false,
+        "maximizable": false,
+        "transparent": true,
+        "shadow": false,
+        "resizable": false,
+        "visible": false,
+        "dragDropEnabled": true,
+        "backgroundColor": "#00000000"
+      }
+    ]
+  }
+}

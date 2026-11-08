@@ -24,38 +24,57 @@ export function ReleaseNotices({ ready }: { ready: boolean }) {
     total: 0,
   });
   const started = useRef(false);
+  const inFlight = useRef(false);
+  const manualRequest = useRef(false);
+  const autoStarted = useRef("");
+  const promptKey = `kynex-update-prompted-${RELEASE.channel}`;
   const modal = useStore((state) => state.modal);
-  const check = useCallback(async (manual = false) => {
-    if (!desktop) {
-      if (manual) useStore.getState().notify("请在桌面版检查更新");
-      return;
-    }
-    setChecking(true);
-    try {
-      const result = await api<UpdateCheck>("check_update");
-      if (result.status === "available" && result.update) {
-        setUpdate(result.update);
-        setError("");
-      } else if (manual)
-        useStore
-          .getState()
-          .notify(
-            result.status === "unconfigured"
-              ? "更新源尚未配置"
-              : "当前已经是最新版本",
-          );
-    } catch {
-      if (manual) useStore.getState().notify("检查更新失败，请稍后重试");
-    } finally {
-      setChecking(false);
-    }
-  }, []);
+  const check = useCallback(
+    async (manual = false) => {
+      if (!desktop) {
+        if (manual) useStore.getState().notify("请在桌面版检查更新");
+        return;
+      }
+      if (inFlight.current) return;
+      inFlight.current = true;
+      setChecking(true);
+      try {
+        const result = await api<UpdateCheck>("check_update");
+        if (result.status === "available" && result.update) {
+          let seen: string[] = [];
+          try {
+            const raw = JSON.parse(localStorage.getItem(promptKey) || "[]");
+            if (Array.isArray(raw)) seen = raw;
+          } catch {}
+          if (manual || !seen.includes(result.update.version)) {
+            manualRequest.current = manual;
+            setUpdate(result.update);
+            setError("");
+          }
+        } else if (manual)
+          useStore
+            .getState()
+            .notify(
+              result.status === "unconfigured"
+                ? "更新源尚未配置"
+                : "当前已经是最新版本",
+            );
+      } catch {
+        if (manual) useStore.getState().notify("检查更新失败，请稍后重试");
+      } finally {
+        setChecking(false);
+        inFlight.current = false;
+      }
+    },
+    [promptKey],
+  );
   useEffect(() => {
     if (!ready || !desktop || started.current) return;
     started.current = true;
     if (localStorage.getItem(RELEASE_SEEN_KEY) !== RELEASE.version)
       setLog(true);
-    void check();
+    if (useStore.getState().settings.checkUpdatesOnStartup !== false)
+      void check();
   }, [ready, check]);
   useEffect(() => {
     const openLog = () => setLog(true);
@@ -86,6 +105,9 @@ export function ReleaseNotices({ ready }: { ready: boolean }) {
       stop?.();
     };
   }, []);
+  useEffect(() => {
+    if (log && !modal) localStorage.setItem(RELEASE_SEEN_KEY, RELEASE.version);
+  }, [log, modal]);
   const closeLog = () => {
     localStorage.setItem(RELEASE_SEEN_KEY, RELEASE.version);
     setLog(false);
@@ -100,6 +122,27 @@ export function ReleaseNotices({ ready }: { ready: boolean }) {
       setInstalling(false);
     }
   }
+  useEffect(() => {
+    if (!update || log || modal) return;
+    let seen: string[] = [];
+    try {
+      const value = JSON.parse(localStorage.getItem(promptKey) || "[]");
+      if (Array.isArray(value)) seen = value;
+    } catch {}
+    if (!seen.includes(update.version))
+      localStorage.setItem(
+        promptKey,
+        JSON.stringify([...seen, update.version]),
+      );
+    if (
+      !manualRequest.current &&
+      useStore.getState().settings.updateMode === "automatic" &&
+      autoStarted.current !== update.version
+    ) {
+      autoStarted.current = update.version;
+      void install();
+    }
+  }, [update, log, modal, promptKey]);
   if (modal) return null;
   return (
     <>
@@ -112,6 +155,7 @@ export function ReleaseNotices({ ready }: { ready: boolean }) {
       {log && (
         <Modal
           title="更新日志"
+          className="changelog-modal"
           onClose={closeLog}
           footer={
             <Button primary onClick={closeLog}>
@@ -129,7 +173,6 @@ export function ReleaseNotices({ ready }: { ready: boolean }) {
                 {RELEASE.channel === "beta" ? "开发者预览版" : "正式版"}
               </span>
               <h2>{RELEASE.displayVersion}</h2>
-              <p>新旅程，准备就绪。</p>
             </div>
           </div>
           <ul className="release-changes">

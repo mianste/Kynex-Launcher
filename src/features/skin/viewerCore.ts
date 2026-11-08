@@ -52,28 +52,33 @@ export class IdleRotation {
   lastInput: number;
   lastFrame: number;
   interacting = false;
+  active = false;
+  speed = 0;
   constructor(
-    private v: Pick<SkinViewer, "autoRotate" | "autoRotateSpeed">,
+    private rotation: { y: number },
     now: number,
   ) {
     this.lastInput = this.lastFrame = now;
-    v.autoRotate = false;
-    v.autoRotateSpeed = 0;
   }
   activity(now: number) {
     this.lastInput = now;
-    this.v.autoRotate = false;
-    this.v.autoRotateSpeed = 0;
+    this.active = false;
+    this.speed = 0;
+  }
+  resume(now: number) {
+    this.interacting = false;
+    this.lastInput = now - 3000;
+    this.lastFrame = now;
   }
   frame(now: number, enabled: boolean) {
     const dt = Math.min(0.1, Math.max(0, (now - this.lastFrame) / 1000));
     this.lastFrame = now;
     const active = enabled && !this.interacting && now - this.lastInput >= 3000;
-    this.v.autoRotate = active;
-    this.v.autoRotateSpeed = active
-      ? this.v.autoRotateSpeed +
-        (0.32 - this.v.autoRotateSpeed) * (1 - Math.exp(-dt / 0.35))
+    this.active = active;
+    this.speed = active
+      ? this.speed + (0.32 - this.speed) * (1 - Math.exp(-dt / 0.35))
       : 0;
+    this.rotation.y += dt * this.speed;
   }
 }
 export function supportsWebGL(): boolean {

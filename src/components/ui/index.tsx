@@ -29,6 +29,7 @@ export function Button({
       {...props}
       className={`btn ${primary ? "primary" : ""} ${props.className ?? ""}`}
       disabled={props.disabled || busy}
+      aria-busy={busy || undefined}
     >
       {busy && <LoaderCircle className="spin" size={16} />} {children}
     </button>
@@ -118,14 +119,44 @@ export function SearchInput({
   onChange: (s: string) => void;
   placeholder?: string;
 }) {
+  // 中文输入法组合期间不触发检索，等 compositionend 再一次性提交最终文字，
+  // 避免只输入一两个字符时被拼音中间态覆盖、看起来“搜索没反应”。
+  const [draft, setDraft] = useState(value);
+  const composing = useRef(false);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
   return (
     <label className="search">
       <Search size={16} />
       <input
         aria-label={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+        value={draft}
         placeholder={placeholder}
+        onCompositionStart={() => {
+          composing.current = true;
+        }}
+        onCompositionEnd={(event) => {
+          composing.current = false;
+          const next = event.currentTarget.value;
+          setDraft(next);
+          onChange(next);
+        }}
+        onBlur={(event) => {
+          composing.current = false;
+          onChange(event.currentTarget.value);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+            composing.current = false;
+            onChange(event.currentTarget.value);
+          }
+        }}
+        onChange={(event) => {
+          const next = event.target.value;
+          setDraft(next);
+          if (!composing.current) onChange(next);
+        }}
       />
     </label>
   );
@@ -162,16 +193,19 @@ export function Switch({
   on,
   change,
   label,
+  disabled = false,
 }: {
   on: boolean;
   change: (on: boolean) => void;
   label: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       className={`switch ${on ? "on" : ""}`}
       role="switch"
+      disabled={disabled}
       aria-checked={on}
       aria-label={label}
       onClick={() => change(!on)}
@@ -299,12 +333,14 @@ export function Modal({
   children,
   footer,
   wide = false,
+  className = "",
   onClose,
 }: {
   title: string;
   children: ReactNode;
   footer?: ReactNode;
   wide?: boolean;
+  className?: string;
   onClose?: () => void;
 }) {
   const hide = useStore((s) => s.hide);
@@ -340,13 +376,13 @@ export function Modal({
   }, [close]);
   return createPortal(
     <div
-        className={`overlay ${exiting ? "is-exiting" : ""}`}
+      className={`overlay ${exiting ? "is-exiting" : ""}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) close();
       }}
     >
       <div
-        className={`modal ${wide ? "wide" : ""}`}
+        className={`modal ${wide ? "wide" : ""} ${className}`}
         ref={ref}
         role="dialog"
         aria-modal="true"
@@ -361,8 +397,8 @@ export function Modal({
         <div className="modal-body">{children}</div>
         {footer && <footer>{footer}</footer>}
       </div>
-      </div>,
-      document.querySelector(".app") ?? document.body
+    </div>,
+    document.querySelector(".app") ?? document.body,
   );
 }
 export function Toast() {

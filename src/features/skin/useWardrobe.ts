@@ -7,6 +7,7 @@ import { cachedTexture, loadTexture } from "./textureCache";
 import { defaultSkin } from "./textures";
 import { readLocalSkins, saveLocalSkins, type LocalSkin } from "./library";
 import { nameSkin, putSkin, sameAppearance } from "./wardrobeState";
+import { markAppearanceFresh, syncAppearance } from "./appearanceSync";
 export function useWardrobe() {
   const s = useStore(),
     account = s.accounts.find((x) => x.id === s.accountId);
@@ -64,17 +65,18 @@ export function useWardrobe() {
   }, [base]);
   const [syncing, Syncing] = useState(false);
   function updateAccount(value: Account) {
+    markAppearanceFresh(value.id);
     useStore.setState((state) => ({
       accounts: state.accounts.map((a) => (a.id === value.id ? value : a)),
     }));
   }
-  async function sync() {
+  async function sync(force = true) {
     if (!desktop || !account || account.kind === "offline") return;
     const id = account.id;
     Syncing(true);
     ErrorText("");
     try {
-      updateAccount(await api<Account>("sync_appearance", { accountId: id }));
+      updateAccount(await syncAppearance(id, force));
     } catch (error) {
       if (mounted.current && useStore.getState().accountId === id)
         ErrorText(String(error).replace(/^Error: /, ""));
@@ -85,7 +87,7 @@ export function useWardrobe() {
   }
   useEffect(() => {
     Syncing(false);
-    void sync();
+    void sync(false);
   }, [account?.id]);
   useEffect(() => {
     let active = true;
