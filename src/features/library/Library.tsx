@@ -320,6 +320,7 @@ export function InstanceDetail() {
   const resourceRequests = useRef(new Map<string, Promise<void>>());
   const resourceRows = useRef(new Map<string, Resource[]>());
   const displayedResourceScope = useRef("");
+  const detailedResourceScopes = useRef(new Set<string>());
   const refreshResources = useCallback(async () => {
     if (!i || !tabKinds[tab] || !desktop) return;
     const scope = `${i.id}:${tabKinds[tab]}:${tab === "数据包" ? dataWorld : ""}`;
@@ -347,7 +348,19 @@ export function InstanceDetail() {
       Loading(false);
     }
     }
+    if (!detailedResourceScopes.current.has(scope) && tab !== "存档") {
+      const initial = resourceRows.current.get(scope) || [];
+      for (let offset = 0; offset < initial.length; offset += 32) {
+        if (resourceScope.current !== scope) return;
+        const preview = await api<Resource[]>("resources", { ...payload, previewNames: initial.slice(offset, offset + 32).map(row => row.name) });
+        const byName = new Map(preview.map(row => [row.name, row]));
+        const merged = (resourceRows.current.get(scope) || initial).map(row => byName.get(row.name) || row);
+        resourceRows.current.set(scope, merged);
+        if (resourceScope.current === scope) R(merged);
+      }
+    }
     const value = await api<Resource[]>("resources", payload);
+    detailedResourceScopes.current.add(scope);
     if (resourceRows.current.size > 12) resourceRows.current.clear();
     resourceRows.current.set(scope, value);
     if (resourceScope.current !== scope) return;

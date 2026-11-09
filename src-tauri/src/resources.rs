@@ -4,10 +4,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Seek};
 type ModMetadata = (Vec<String>, Vec<String>, Vec<String>, String, String);
 static RESOURCE_READERS: std::sync::OnceLock<rayon::ThreadPool> = std::sync::OnceLock::new();
+static HASH_READERS: std::sync::OnceLock<rayon::ThreadPool> = std::sync::OnceLock::new();
 type DetailCache = (usize, std::collections::HashMap<String, Value>);
 static DETAIL_CACHE: std::sync::OnceLock<std::sync::Mutex<DetailCache>> = std::sync::OnceLock::new();
 pub(crate) fn readers() -> &'static rayon::ThreadPool {
-    RESOURCE_READERS.get_or_init(|| rayon::ThreadPoolBuilder::new().num_threads(2).thread_name(|n|format!("resource-reader-{n}")).build().expect("resource reader pool"))
+    RESOURCE_READERS.get_or_init(|| rayon::ThreadPoolBuilder::new().num_threads(1).thread_name(|n|format!("resource-reader-{n}")).build().expect("resource reader pool"))
+}
+// Background fingerprint work must not occupy the reader needed by visible icons.
+pub(crate) fn hash_readers()->&'static rayon::ThreadPool {
+    HASH_READERS.get_or_init(||rayon::ThreadPoolBuilder::new().num_threads(1).thread_name(|n|format!("mod-fingerprint-{n}")).build().expect("mod fingerprint pool"))
 }
 // The absolute path prevents collisions between game directories. Sub-second
 // timestamps and length invalidate changed files; missing icons are cached too.
@@ -238,6 +243,11 @@ pub fn list(core: &Core, p: &Value) -> Result<Value> {
         }
         return Ok(json!(rows));
     }
+    let preview=p["previewNames"].as_array();
+    if let Some(names)=preview {
+        let names:std::collections::HashSet<&str>=names.iter().take(64).filter_map(Value::as_str).collect();
+        rows.retain(|row|row["name"].as_str().is_some_and(|name|names.contains(name)));
+    }
     let lock = read_json(
         &core
             .instance(string(p, "id")?)?
@@ -313,7 +323,7 @@ pub fn list(core: &Core, p: &Value) -> Result<Value> {
             let enabled = row["enabled"] == true;
             let mut problems = vec![];
             if let Some((ids, requires, breaks, version, icon)) = metas.get(&name) {
-                if enabled {
+                if enabled && preview.is_none() {
                     for id in ids {
                         if providers.get(id).map(|v| v.len() > 1).unwrap_or(false) {
                             problems.push(format!("重复模组：{id}"));
@@ -652,15 +662,17 @@ mod tests {
         let changed:String=cached_resource(&c,&one,"icons",||"new".to_string());assert_eq!(changed,"new");
         let failed:Result<String>=try_cached_resource(&c,&one,"hash-failure",||Err("temporary read error".into()));assert!(failed.is_err());
         assert_eq!(try_cached_resource(&c,&one,"hash-failure",||Ok("retry".to_string())).unwrap(),"retry");
-        assert_eq!(readers().current_num_threads(),2);
+        assert_eq!(readers().current_num_threads()+hash_readers().current_num_threads(),2);
     }
     #[test]
     fn basic_list_does_not_open_mod_archives_and_details_follow_file_changes() {
         let t=tempfile::tempdir().unwrap();let c=Core::new(t.path().into(),Arc::new(|_|{})).unwrap();let dir=c.instance("demo").unwrap();
         write_json(&dir.join("kxl.json"),&json!({"id":"demo","settings":{"isolation":"all"}})).unwrap();std::fs::create_dir_all(dir.join("mods")).unwrap();
-        let path=dir.join("mods/a.jar");std::fs::write(&path,mod_jar("a","1",None)).unwrap();
+        let path=dir.join("mods/a.jar");std::fs::write(&path,mod_jar("a","1",Some("b"))).unwrap();
+        std::fs::write(dir.join("mods/b.jar"),mod_jar("b","1",None)).unwrap();
         let p=json!({"id":"demo","kind":"mods"});let mut basic=p.clone();basic["basic"]=json!(true);
         assert!(list(&c,&basic).unwrap()[0]["version"].is_null());assert!(!c.root.join("cache/local-resource-details").exists());
+        let mut preview=p.clone();preview["previewNames"]=json!(["a.jar"]);let part=list(&c,&preview).unwrap();assert_eq!(part.as_array().unwrap().len(),1);assert!(part[0]["problems"].as_array().unwrap().is_empty());
         assert_eq!(list(&c,&p).unwrap()[0]["version"],"1");assert_eq!(list(&c,&p).unwrap()[0]["version"],"1");
         std::fs::write(&path,mod_jar("a","changed-version",None)).unwrap();assert_eq!(list(&c,&p).unwrap()[0]["version"],"changed-version");
     }
@@ -675,11 +687,13 @@ mod tests {
             if !Path::new(&running).join(kind).is_dir(){continue;}
             let p=json!({"id":"bench","kind":kind});let mut basic=p.clone();basic["basic"]=json!(true);
             let now=std::time::Instant::now();let first=list(&c,&basic).unwrap();let first_ms=now.elapsed().as_millis();
+            let mut part=p.clone();part["previewNames"]=json!(first.as_array().unwrap().iter().take(32).map(|r|r["name"].clone()).collect::<Vec<_>>());
+            let now=std::time::Instant::now();let icons=list(&c,&part).unwrap();let icon_ms=now.elapsed().as_millis();
             let now=std::time::Instant::now();let details=list(&c,&p).unwrap();let cold_ms=now.elapsed().as_millis();
             let now=std::time::Instant::now();let warm=list(&c,&p).unwrap();let warm_ms=now.elapsed().as_millis();assert_eq!(details,warm);assert_eq!(first.as_array().unwrap().len(),details.as_array().unwrap().len());
-            reports.push(json!({"kind":kind,"files":first.as_array().unwrap().len(),"firstListMs":first_ms,"coldDetailsMs":cold_ms,"warmDetailsMs":warm_ms}));
+            reports.push(json!({"kind":kind,"files":first.as_array().unwrap().len(),"firstListMs":first_ms,"firstIconBatchMs":icon_ms,"firstBatchIcons":icons.as_array().unwrap().iter().filter(|r|r["icon_url"].is_string()).count(),"remainingDetailsMs":cold_ms,"warmDetailsMs":warm_ms}));
         }
-        let value=json!({"readOnlyOriginalFiles":true,"readerThreads":readers().current_num_threads(),"lists":reports});println!("{value}");
+        let value=json!({"readOnlyOriginalFiles":true,"readerThreads":readers().current_num_threads()+hash_readers().current_num_threads(),"lists":reports});println!("{value}");
         if let Ok(path)=std::env::var("KXL_RESOURCE_BENCH_REPORT"){write_json(Path::new(&path),&value).unwrap();}
     }
 
