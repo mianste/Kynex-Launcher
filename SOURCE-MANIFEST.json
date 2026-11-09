@@ -97,7 +97,7 @@
     "src/features/library/Library.tsx": "3a3cec9187fbde1bf5d928f9537d9f7a2e34826110cb1c2a8f3e6cab2249e451",
     "src/features/library/modUpdates.css": "bcd999e3e562e4014edea37faef6b2b9b8c64f2d2e1a1cf762b72802e753f053",
     "src/features/library/ResourceDeleteDialog.tsx": "aa989f149cec45261c7c0792f347cf7bdad5b85d41d2a9f18b0bc903d8ed04b1",
-    "src/features/library/resourceManagement.css": "229d605b701072c0261cb2c119d39650f6c09867d8be624fa8551fac73b26f8a",
+    "src/features/library/resourceManagement.css": "368ea7b8de4f7d6b8aed6c05c74b22567bfe1ac4ad7a3001cd03a9dde2dc2ce0",
     "src/features/library/useResourceDragSelection.ts": "dae4c17a7ef4796d690b4c704d1a53de8f4a741dc8eaa7e86410bc68d467a9d2",
     "src/features/news/News.tsx": "1fc0ac5d7f5b75a0795c5434e67687b40af69fc0ac36a0ff93da93b802f8f843",
     "src/features/news/newsLoading.css": "f123e9a750e2d4ef19765595ee69d6909e77d059eedec5e88dc1afb81fb1fc4a",

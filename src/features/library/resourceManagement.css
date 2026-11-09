@@ -29,13 +29,14 @@
 .app .pcl-resource-page .resource-list { gap: 2px; background: transparent; }
 .pcl-resource-page .resource-list { user-select: none; }
 .pcl-resource-page[data-selecting="true"] .resource-selection-bar { pointer-events: none; }
-.app .pcl-resource-page .resource-list .resource-row {
+:root[data-theme] .app .pcl-resource-page .resource-list .resource-row {
   min-height: 56px; margin: 0; padding: 6px; gap: 10px;
   border: 1px solid transparent; border-radius: 4px;
   box-shadow: none; background: transparent; cursor: pointer;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
 }
-.app .pcl-resource-page .resource-list .resource-row:hover,
-.app .pcl-resource-page .resource-list .resource-row.selected { background: var(--accent-low); border-color: var(--accent-mid); }
+:root[data-theme] .app .pcl-resource-page .resource-list .resource-row:hover,
+:root[data-theme] .app .pcl-resource-page .resource-list .resource-row.selected { background: color-mix(in srgb, var(--accent) calc(var(--ui-alpha) * 0.12), transparent); border-color: var(--accent-mid); }
 .app .pcl-resource-page .resource-selection-content { display:flex; align-items:center; gap:10px; flex:1; min-width:0; border:0; background:none; padding:0; color:inherit; font:inherit; box-shadow:none; text-align:left; cursor:pointer; }
 .resource-selection-content:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:4px; }
 .app .pcl-resource-page .resource-monogram { width: 34px; height: 34px; border-radius: 4px; }
