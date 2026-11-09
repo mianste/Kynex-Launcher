@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Package } from "lucide-react";
 import { api, desktop } from "../../lib/bridge";
 
 // 模块级缓存：后端取回的 data URL 会复用，避免重复请求。
@@ -46,8 +47,8 @@ function proxyUrl(url: string): string {
 }
 
 /**
- * 资源图标按顺序尝试：远程原图 → 图片代理 → 后端磁盘缓存，全部失败才显示文字占位。
- * 图片加载中或失败时文字占位盖在图片上方，不会再出现白色空方块。
+ * 资源图标按顺序尝试：远程原图 → 图片代理 → 后端磁盘缓存。
+ * 加载中和失败时显示通用图标，不在资源图片上叠加名称。
  */
 export function ProjectIcon({
   url,
@@ -56,16 +57,17 @@ export function ProjectIcon({
   url?: string | null;
   name: string;
 }) {
+  return <ProjectIconImage key={url ?? ""} url={url} name={name} />;
+}
+
+function ProjectIconImage({ url, name }: { url?: string | null; name: string }) {
   const link = url ?? "";
   const [src, Src] = useState(link);
   const [loaded, Loaded] = useState(false);
   const step = useRef(0);
 
-  useEffect(() => {
-    step.current = 0;
-    Loaded(false);
-    Src(link);
-  }, [link]);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   function fallback() {
     Loaded(false);
@@ -80,7 +82,7 @@ export function ProjectIcon({
     }
     if (step.current === 1 && desktop) {
       step.current = 2;
-      void loadIcon(link).then((data) => Src(data || ""));
+      void loadIcon(link).then((data) => { if (mounted.current) Src(data || ""); });
       return;
     }
     step.current = 3;
@@ -88,18 +90,19 @@ export function ProjectIcon({
   }
 
   return (
-    <div className="project-icon">
+    <div className="project-icon" role="img" aria-label={`${name} 图标`}>
       {src ? (
         <img
           src={src}
           alt=""
           decoding="async"
           className={loaded ? "loaded" : ""}
+          style={{ opacity: loaded ? 1 : 0 }}
           onLoad={() => Loaded(true)}
           onError={fallback}
         />
       ) : null}
-      {(!loaded || !src) && <span>{name.slice(0, 2)}</span>}
+      {(!loaded || !src) && <Package size={24} aria-hidden="true" />}
     </div>
   );
 }
