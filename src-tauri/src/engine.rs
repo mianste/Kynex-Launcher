@@ -639,7 +639,7 @@ fn unique_instance_name(core: &Core, base: &str) -> Result<String> {
 pub async fn install(core: &Core, p: &Value) -> Result<Value> {
     core.set_threads(p["settings"]["threads"].as_u64().unwrap_or(8) as usize);
     let name = string(p, "name")?.to_string();
-    safe_name(&name)?;
+    instance_display_name(&name)?;
     let game = string(p, "version")?;
     safe_name(game)?;
     let loader = p["loader"].as_str().unwrap_or("vanilla");

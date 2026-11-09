@@ -64,7 +64,7 @@ pub async fn check(app: &tauri::AppHandle, core: &Core) -> Result<Value> {
         return Err("更新通道与当前版本不匹配".into());
     }
     update.timeout = Some(Duration::from_secs(300));
-    let info = json!({"version":update.version,"notes":update.body.clone().unwrap_or_default(),"date":update.date.map(|v|v.to_string())});
+    let info = json!({"version":update.raw_json["displayVersion"].as_str().unwrap_or(&update.version),"notes":update.body.clone().unwrap_or_default(),"date":update.date.map(|v|v.to_string())});
     *state.pending.lock().map_err(err)? = Some(update);
     Ok(json!({"status":"available","update":info}))
 }

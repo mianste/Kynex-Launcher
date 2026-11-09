@@ -165,6 +165,12 @@ fn embedded_icon(zip: &mut zip::ZipArchive<std::fs::File>, info: &Value) -> Opti
             candidates.push(if root.is_empty(){name.into()}else{format!("{root}/{name}")});
         }
     }
+    let mut menu_assets: Vec<_> = zip.file_names().filter_map(|name| {
+        let score = menu_logo_score(info["name"].as_str().unwrap_or(""), name);
+        (score > 0).then(|| (score, name.to_string()))
+    }).collect();
+    menu_assets.sort_by(|a,b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    candidates.extend(menu_assets.into_iter().map(|(_,name)|name));
     for name in candidates {
         let Ok(mut file)=zip.by_name(&name) else {continue};
         if file.size()>2*1024*1024 {continue;}
@@ -179,7 +185,34 @@ pub(crate) fn installed_icon(dir:&Path)->Option<String> {
             if let Ok(bytes)=std::fs::read(path){if let Some(image)=resources::image_data(bytes){return Some(image);}}
         }
     }
+    let title=read_json(&dir.join("kxl.json")).ok().and_then(|v|v["name"].as_str().map(str::to_string)).unwrap_or_default();
+    let assets=dir.join("config/fancymenu/assets");
+    let mut candidates:Vec<_>=std::fs::read_dir(&assets).ok().into_iter().flatten().flatten().filter_map(|entry|{
+        let name=entry.file_name().to_string_lossy().to_string();
+        let score=menu_logo_score(&title,&format!("config/fancymenu/assets/{name}"));
+        (score>0).then(||(score,entry.path()))
+    }).collect();
+    candidates.sort_by(|a,b|b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    for (_,path) in candidates {
+        // Resolve links before reading; a menu asset must stay inside the instance.
+        if path.canonicalize().ok().zip(dir.canonicalize().ok()).is_none_or(|(p,d)|!p.starts_with(d)){continue;}
+        if std::fs::metadata(&path).ok().is_some_and(|m|m.is_file()&&m.len()<=2*1024*1024){
+            if let Ok(bytes)=std::fs::read(path){if let Some(image)=resources::image_data(bytes){return Some(image);}}
+        }
+    }
     None
+}
+fn menu_logo_score(title:&str,path:&str)->u8 {
+    let path=path.to_ascii_lowercase();
+    if !(path.starts_with("config/fancymenu/assets/")||path.contains("/config/fancymenu/assets/")){return 0;}
+    let file=Path::new(&path);
+    if !matches!(file.extension().and_then(|s|s.to_str()),Some("png"|"jpg"|"jpeg"|"webp")){return 0;}
+    let stem=file.file_stem().and_then(|s|s.to_str()).unwrap_or("");
+    if ["background","loading","mojang","minecraft","_color","_gray","discord","patreon","github","reddit","akliz"].iter().any(|s|stem.contains(s)){return 0;}
+    let compact=|s:&str|s.chars().filter(|c|c.is_alphanumeric()).flat_map(char::to_lowercase).collect::<String>();
+    let name=compact(stem);let title=compact(title);
+    if name.chars().count()>=4 && title.contains(&name){100}
+    else if stem=="logo"||stem=="icon"||stem=="pack_logo"||stem=="pack_icon"{80}else{0}
 }
 fn inspect_archive(path: &Path) -> Result<Value> {
     let mut z = archive(path)?;
@@ -918,7 +951,8 @@ mod tests {
         let existing = core.instance("existing").unwrap();
         write_json(&existing.join("kxl.json"), &json!({"id":"existing","name":"已有实例"})).unwrap();
         std::fs::write(existing.join("keep.txt"), b"untouched").unwrap();
-        for format in ["modrinth", "curseforge"] {
+        let titles = ["All the Mods 10: To the Sky ATM10SKY".to_string(), "中文整合包".repeat(30)];
+        for (format, title) in ["modrinth", "curseforge"].into_iter().zip(titles) {
             let path = temp.path().join(format!("{format}.zip"));
             let mut zip = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
             let (entry, value) = if format == "modrinth" {
@@ -933,7 +967,11 @@ mod tests {
             zip.start_file("icon.png",zip::write::SimpleFileOptions::default()).unwrap();
             zip.write_all(include_bytes!("../../src/assets/loaders/minecraft.png")).unwrap();
             zip.finish().unwrap();
-            let installed = import(&core, &json!({"path":path,"id":"existing","name":format,"settings":{"isolation":"shared"}})).await.unwrap();
+            let installed = import(&core, &json!({"path":path,"id":"existing","name":title,"settings":{"isolation":"shared"}})).await.unwrap();
+            assert_eq!(installed["name"], title);
+            let again = import(&core, &json!({"path":path,"name":title})).await.unwrap();
+            assert_eq!(again["name"], format!("{title} (2)"));
+            assert_ne!(again["id"], installed["id"]);
             assert!(installed["packIcon"].as_str().unwrap().starts_with("data:image/png;base64,"));
             assert_eq!(installed["modpack"],true);
             let saved=read_json(&core.instance(installed["id"].as_str().unwrap()).unwrap().join("kxl.json")).unwrap();
@@ -944,7 +982,7 @@ mod tests {
             assert_eq!(std::fs::read(core.instance(installed["id"].as_str().unwrap()).unwrap().join("config/pack.txt")).unwrap(), b"pack-config");
             assert_eq!(std::fs::read(existing.join("keep.txt")).unwrap(), b"untouched");
         }
-        assert_eq!(core.instances().unwrap().as_array().unwrap().len(), 3);
+        assert_eq!(core.instances().unwrap().as_array().unwrap().len(), 5);
     }
     #[test]
     fn export_standard_formats_roundtrip() {
@@ -1047,4 +1085,23 @@ mod tests {
   fixture(&path,&[]);assert!(inspect(&path).unwrap()["packIcon"].is_null());
  }
  #[test]fn installed_internal_icon_is_found_for_existing_instances(){let t=tempfile::tempdir().unwrap();assert!(installed_icon(t.path()).is_none());std::fs::create_dir(t.path().join("PCL")).unwrap();std::fs::write(t.path().join("PCL/Logo.png"),include_bytes!("../../src/assets/loaders/minecraft.png")).unwrap();assert!(installed_icon(t.path()).unwrap().starts_with("data:image/png;base64,"));}
+ #[test]fn menu_pack_logos_work_for_archives_and_existing_instances(){
+  let t=tempfile::tempdir().unwrap();let path=t.path().join("pack.zip");let png=include_bytes!("../../src/assets/loaders/minecraft.png");
+  let mut z=zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
+  write_entry(&mut z,"manifest.json",&json!({"name":"ATM10SKY","minecraft":{"version":"1.21.1","modLoaders":[]},"files":[],"overrides":"overrides"})).unwrap();
+  for name in ["background.png","discord_color.png","10sky.png"]{z.start_file(format!("overrides/config/fancymenu/assets/{name}"),zip::write::SimpleFileOptions::default()).unwrap();z.write_all(if name=="10sky.png"{png}else{b"not-the-logo"}).unwrap();}z.finish().unwrap();
+  assert_eq!(inspect(&path).unwrap()["packIcon"],resources::image_data(png.to_vec()).unwrap());
+  let dir=t.path().join("instance");std::fs::create_dir_all(dir.join("config/fancymenu/assets")).unwrap();write_json(&dir.join("kxl.json"),&json!({"name":"ATM10SKY"})).unwrap();std::fs::write(dir.join("config/fancymenu/assets/10sky.png"),png).unwrap();
+  assert_eq!(installed_icon(&dir),resources::image_data(png.to_vec()));
+  for (title,file) in [("Other Adventure","adventure.png"),("中文冒险整合包","中文冒险.png"),("Unknown","logo.png")]{assert!(menu_logo_score(title,&format!("config/fancymenu/assets/{file}"))>0);}
+  assert_eq!(menu_logo_score("Pack","config/fancymenu/assets/background.png"),0);
+ }
+ #[test]
+ #[ignore = "reads a user supplied pack archive without installing or changing it"]
+ fn reported_archive_contains_the_official_menu_logo(){
+  let path=PathBuf::from(std::env::var("KXL_ICON_TEST_PACK").unwrap());
+  let info=inspect(&path).unwrap();assert_eq!(info["name"],"ATM10SKY");
+  let mut zip=archive(&path).unwrap();let mut file=zip.by_name("overrides/config/fancymenu/assets/10sky.png").unwrap();let mut bytes=Vec::new();file.read_to_end(&mut bytes).unwrap();
+  assert_eq!(info["packIcon"],resources::image_data(bytes).unwrap());
+ }
 }

@@ -1,8 +1,8 @@
 # Kynex Launcher（KXL）
 
-Windows 上的 Minecraft 启动器。当前正式版是 **v1.3.2**，当前公开源码也已更新到 v1.3.2。
+Windows 上的 Minecraft 启动器。当前正式版是 **v1.3.3**，当前公开源码也已更新到 v1.3.3。
 
-[下载完整安装器](https://github.com/mianste/Kynex-Launcher/releases/tag/v1.3.2) · [更新日志](CHANGELOG.md) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
+[下载完整安装器](https://github.com/mianste/Kynex-Launcher/releases/tag/v1.3.3) · [更新日志](CHANGELOG.md) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
 
 ## 有哪些功能
 
@@ -16,9 +16,9 @@ Windows 上的 Minecraft 启动器。当前正式版是 **v1.3.2**，当前公�
 
 ## 下载安装
 
-在 [v1.3.2 发布页](https://github.com/mianste/Kynex-Launcher/releases/tag/v1.3.2) 下载 `Kynex.Launcher.v1.3.2.Setup.exe`，运行安装器即可。支持 Windows 10 / 11 x64。
+在 [v1.3.3 发布页](https://github.com/mianste/Kynex-Launcher/releases/tag/v1.3.3) 下载 `Kynex.Launcher.v1.3.3.Setup.exe`，运行安装器即可。支持 Windows 10 / 11 x64。
 
-原更新签名私钥已丢失，本版启用了新签名。旧版用户需要手动覆盖安装 v1.3.2 一次，之后继续自动更新。安装时会保留原有用户资料。
+v1.3.2 用户可直接自动更新。更早版本的原更新私钥已丢失，需手动覆盖安装 v1.3.3 一次，之后继续自动更新。安装时会保留原有用户资料。
 
 完整安装版的新更新源是 [stable-v2.json](https://github.com/mianste/Kynex-Launcher/releases/download/updater-stable/stable-v2.json)。旧 `stable.json` 保留原内容。
 
@@ -70,3 +70,7 @@ pnpm tauri build
 公开代码采用 [MIT License](LICENSE)，第三方资料见 [许可说明](docs/THIRD-PARTY-NOTICES.txt)。未公开模块不属于本仓库的许可范围。
 
 本项目与 Mojang、Microsoft、PCL 和 HMCL 无关联。请通过官方渠道购买 Minecraft。
+
+本次 v1.3.3 修复整合包名称带冒号或较长中文时无法安装的问题。
+
+本版也修复了整合包菜单图标识别；已安装实例会共用新的图标识别规则。

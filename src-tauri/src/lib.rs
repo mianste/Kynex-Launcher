@@ -711,6 +711,15 @@ pub fn hidden_async(cmd: &mut tokio::process::Command) -> &mut tokio::process::C
 pub fn string<'a>(p: &'a Value, k: &str) -> Result<&'a str> {
     p[k].as_str().ok_or_else(|| format!("缺少参数 {k}"))
 }
+/// Instance titles are JSON metadata; their directories use validated UUIDs.
+/// Do not apply Windows filename restrictions to names from pack catalogues.
+pub fn instance_display_name(s: &str) -> Result<&str> {
+    if s.trim().is_empty() || s.chars().count() > 512 || s.chars().any(char::is_control) {
+        Err("名称不能为空、超过 512 个字或包含控制字符".into())
+    } else {
+        Ok(s)
+    }
+}
 pub fn safe_name(s: &str) -> Result<&str> {
     if s.is_empty()
         || s.len() > 128
@@ -860,6 +869,18 @@ mod tests {
         }
     }
     use super::*;
+    #[test]
+    fn instance_titles_are_not_filesystem_paths() {
+        for title in ["All the Mods 10: To the Sky ATM10SKY", "CON", "整合包 / 冒险：第一章"] {
+            assert_eq!(instance_display_name(title).unwrap(), title);
+            assert!(safe_name(title).is_err());
+        }
+        assert!(instance_display_name(&"中".repeat(100)).is_ok());
+        for title in ["", "  ", "bad\nname", "bad\0name"] {
+            assert!(instance_display_name(title).is_err());
+        }
+        assert!(instance_display_name(&"中".repeat(513)).is_err());
+    }
     #[test]
     fn paths() {
         for s in ["../evil", "a/b", "C:\\x", "..", "NUL", "a."] {
