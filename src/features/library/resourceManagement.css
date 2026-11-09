@@ -40,6 +40,7 @@
 .resource-selection-content:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:4px; }
 .app .pcl-resource-page .resource-monogram { width: 34px; height: 34px; border-radius: 4px; }
 .pcl-resource-page .resource-row .grow { min-width: 0; }
+.pcl-resource-page .resource-row { content-visibility: auto; contain-intrinsic-size: auto 72px; }
 .pcl-resource-page .resource-row .grow > b,
 .pcl-resource-page .resource-row .grow > small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pcl-resource-page .resource-row .grow > b { font-size: 13px; font-weight: 500; }

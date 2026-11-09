@@ -2,6 +2,47 @@ use crate::*;
 use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Seek};
+type ModMetadata = (Vec<String>, Vec<String>, Vec<String>, String, String);
+static RESOURCE_READERS: std::sync::OnceLock<rayon::ThreadPool> = std::sync::OnceLock::new();
+type DetailCache = (usize, std::collections::HashMap<String, Value>);
+static DETAIL_CACHE: std::sync::OnceLock<std::sync::Mutex<DetailCache>> = std::sync::OnceLock::new();
+pub(crate) fn readers() -> &'static rayon::ThreadPool {
+    RESOURCE_READERS.get_or_init(|| rayon::ThreadPoolBuilder::new().num_threads(2).thread_name(|n|format!("resource-reader-{n}")).build().expect("resource reader pool"))
+}
+// The absolute path prevents collisions between game directories. Sub-second
+// timestamps and length invalidate changed files; missing icons are cached too.
+fn cached_resource<T: serde::Serialize + serde::de::DeserializeOwned>(core:&Core,path:&Path,kind:&str,load:impl FnOnce()->T)->T {
+    try_cached_resource(core,path,kind,||Ok(load())).expect("infallible resource reader")
+}
+pub(crate) fn try_cached_resource<T: serde::Serialize + serde::de::DeserializeOwned>(core:&Core,path:&Path,kind:&str,load:impl FnOnce()->Result<T>)->Result<T> {
+    use sha2::{Digest,Sha256};
+    let Ok(stat)=std::fs::metadata(path) else {return load()};
+    if !stat.is_file(){return load();}
+    let stamp=json!([stat.len(),stat.modified().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|t|t.as_nanos().to_string())]);
+    let key=format!("{:x}",Sha256::digest(format!("v1:{kind}:{}",path.display()).as_bytes()));
+    let memory_key=format!("{}:{key}:{stamp}",core.root.display());
+    let memory=DETAIL_CACHE.get_or_init(||std::sync::Mutex::new((0,std::collections::HashMap::new())));
+    if let Some(value)=memory.lock().unwrap().1.get(&memory_key).cloned(){if let Ok(value)=serde_json::from_value(value){return Ok(value);}}
+    let cache=core.root.join("cache/local-resource-details").join(format!("{key}.json"));
+    let remember=|value:Value| {
+        let bytes=serde_json::to_vec(&value).map(|v|v.len()).unwrap_or(0);
+        if bytes>32*1024*1024{return;}
+        let mut memory=memory.lock().unwrap();
+        if memory.0+bytes>32*1024*1024 || memory.1.len()>=4096 {memory.0=0;memory.1.clear();}
+        memory.0+=bytes;memory.1.insert(memory_key.clone(),value);
+    };
+    if let Ok(v)=read_json(&cache){if v["stamp"]==stamp {if let Ok(value)=serde_json::from_value(v["value"].clone()){remember(v["value"].clone());return Ok(value);}}}
+    let value=load()?;
+    // A replacement while parsing must never be saved with the old fingerprint.
+    if std::fs::metadata(path).ok().is_some_and(|after|after.len()==stat.len() && after.modified().ok()==stat.modified().ok()) {
+        let record=json!({"stamp":stamp,"value":value});
+        remember(record["value"].clone());
+        if let Some(parent)=cache.parent(){let _=std::fs::create_dir_all(parent);}
+        let temporary=cache.with_extension(format!("{}.tmp",uuid::Uuid::new_v4()));
+        if let Ok(bytes)=serde_json::to_vec(&record){if std::fs::write(&temporary,bytes).is_ok(){let _=std::fs::rename(&temporary,&cache);}let _=std::fs::remove_file(temporary);}
+    }
+    Ok(value)
+}
 fn root(core: &Core, id: &str) -> Result<PathBuf> {
     let mut config = read_json(&core.instance(id)?.join("kxl.json"))?;
     config["id"]=json!(id);
@@ -189,6 +230,14 @@ pub fn list(core: &Core, p: &Value) -> Result<Value> {
         .unwrap_or_default();
     let kind = string(p, "kind")?;
     let dir = crate::engine::resource_dir(core,p)?;
+    if p["basic"]==true {
+        if kind=="resourcepacks" {
+            let order=order_from(&dir.parent().unwrap().join("options.txt"));
+            for row in &mut rows {let index=order.iter().position(|v|v==&format!("file/{}",row["name"].as_str().unwrap_or("")));row["enabled"]=json!(index.is_some());row["order"]=json!(index.unwrap_or(usize::MAX));}
+            rows.sort_by_key(|v|v["order"].as_u64().unwrap_or(u64::MAX));
+        }
+        return Ok(json!(rows));
+    }
     let lock = read_json(
         &core
             .instance(string(p, "id")?)?
@@ -218,6 +267,7 @@ pub fn list(core: &Core, p: &Value) -> Result<Value> {
         rows.sort_by_key(|v| v["order"].as_u64().unwrap_or(u64::MAX));
     }
     if kind == "mods" {
+        if p["basic"]==true {return Ok(json!(rows));}
         let mut metas = BTreeMap::new();
         let mut providers: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         // 并行读取 jar 元数据（含 .disabled）；只有启用的模组参与依赖与冲突判断。
@@ -225,22 +275,28 @@ pub fn list(core: &Core, p: &Value) -> Result<Value> {
             String,
             bool,
             (Vec<String>, Vec<String>, Vec<String>, String, String),
-        )> = rows
+        )> = readers().install(|| rows
             .par_iter()
             .filter_map(|row| {
                 let name = string(row, "name").ok()?.to_string();
                 let enabled = row["enabled"] == true;
-                let file = std::fs::File::open(dir.join(&name)).ok()?;
-                let mut archive = zip::ZipArchive::new(file).ok()?;
+                let clean=name.strip_suffix(".disabled").unwrap_or(&name).to_lowercase();
+                if row["dir"]==true || !(clean.ends_with(".jar")||clean.ends_with(".litemod")){return None;}
+                let path=dir.join(&name);
+                let meta:ModMetadata=cached_resource(core,&path,"mods",||{
+                let Ok(file) = std::fs::File::open(&path) else{return Default::default()};
+                let Ok(mut archive) = zip::ZipArchive::new(file) else{return Default::default()};
                 let mut meta = metadata(&mut archive, false);
                 // 很多模组没有在 fabric.mod.json/mods.toml 里声明图标，
                 // 退回到 jar 内任意层级的 icon.png / logo.png / pack.png。
                 if meta.4.is_empty() {
                     meta.4 = icon_from_anywhere(&mut archive).unwrap_or_default();
                 }
+                meta
+                });
                 Some((name, enabled, meta))
             })
-            .collect();
+            .collect());
         for (name, enabled, meta) in found {
             if enabled {
                 for id in &meta.0 {
@@ -299,49 +355,17 @@ pub fn list(core: &Core, p: &Value) -> Result<Value> {
             row["problems"] = json!(problems);
         }
     } else if matches!(kind, "resourcepacks" | "shaderpacks" | "datapacks") {
-        // 本地图标按“文件名 + 修改时间”缓存，第二次打开列表不再重复解压。
-        let cache_path = core.root.join("cache/local-icons.json");
-        let mut icon_cache = read_json(&cache_path).unwrap_or_else(|_| json!({}));
-        let mut dirty = false;
+        if p["basic"]==true {return Ok(json!(rows));}
         for row in &mut rows {
             let name = string(row, "name")?.to_string();
             let clean = name.strip_suffix(".disabled").unwrap_or(&name);
             let path = dir.join(&name);
-            let modified = std::fs::metadata(&path)
-                .and_then(|meta| meta.modified())
-                .ok()
-                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|time| time.as_secs())
-                .unwrap_or(0);
-            let key = format!("{kind}:{name}:{modified}");
-            let cached = icon_cache[&key]
-                .as_str()
-                .filter(|value| !value.is_empty())
-                .map(str::to_string);
-            let icon = match cached {
-                Some(icon) => icon,
-                None => {
-                    let icon = packaged_icon(&path, kind);
-                    if !icon.is_empty() {
-                        icon_cache[&key] = json!(icon);
-                        dirty = true;
-                    }
-                    icon
-                }
-            };
+            let icon:String=cached_resource(core,&path,kind,||packaged_icon(&path,kind));
             if !icon.is_empty() {
                 row["icon_url"] = json!(icon);
             } else if let Some(icon) = remote_icons.get(clean) {
                 row["icon_url"] = json!(icon);
             }
-        }
-        if dirty
-            && icon_cache
-                .as_object()
-                .map(|entries| entries.len() < 4000)
-                .unwrap_or(false)
-        {
-            let _ = write_json(&cache_path, &icon_cache);
         }
     }
     Ok(json!(rows))
@@ -613,6 +637,50 @@ mod tests {
         assert_eq!(conflicts, vec!["c"]);
         assert_eq!(v, "1.0");
         assert!(icon.starts_with("data:image/png;base64,"));
+    }
+    #[test]
+    fn detail_cache_keeps_empty_results_and_invalidates_changed_files_and_paths() {
+        let t=tempfile::tempdir().unwrap();let c=Core::new(t.path().join("app"),Arc::new(|_|{})).unwrap();
+        let one=t.path().join("one/same.zip");let two=t.path().join("two/same.zip");
+        for p in [&one,&two]{std::fs::create_dir_all(p.parent().unwrap()).unwrap();std::fs::write(p,b"one").unwrap();}
+        let calls=std::sync::atomic::AtomicUsize::new(0);
+        let load=||{calls.fetch_add(1,Ordering::Relaxed);String::new()};
+        assert_eq!(cached_resource(&c,&one,"icons",load),"");
+        assert_eq!(cached_resource(&c,&one,"icons",load),"");assert_eq!(calls.load(Ordering::Relaxed),1);
+        let other:String=cached_resource(&c,&two,"icons",||"other".to_string());assert_eq!(other,"other");
+        std::fs::write(&one,b"changed length").unwrap();
+        let changed:String=cached_resource(&c,&one,"icons",||"new".to_string());assert_eq!(changed,"new");
+        let failed:Result<String>=try_cached_resource(&c,&one,"hash-failure",||Err("temporary read error".into()));assert!(failed.is_err());
+        assert_eq!(try_cached_resource(&c,&one,"hash-failure",||Ok("retry".to_string())).unwrap(),"retry");
+        assert_eq!(readers().current_num_threads(),2);
+    }
+    #[test]
+    fn basic_list_does_not_open_mod_archives_and_details_follow_file_changes() {
+        let t=tempfile::tempdir().unwrap();let c=Core::new(t.path().into(),Arc::new(|_|{})).unwrap();let dir=c.instance("demo").unwrap();
+        write_json(&dir.join("kxl.json"),&json!({"id":"demo","settings":{"isolation":"all"}})).unwrap();std::fs::create_dir_all(dir.join("mods")).unwrap();
+        let path=dir.join("mods/a.jar");std::fs::write(&path,mod_jar("a","1",None)).unwrap();
+        let p=json!({"id":"demo","kind":"mods"});let mut basic=p.clone();basic["basic"]=json!(true);
+        assert!(list(&c,&basic).unwrap()[0]["version"].is_null());assert!(!c.root.join("cache/local-resource-details").exists());
+        assert_eq!(list(&c,&p).unwrap()[0]["version"],"1");assert_eq!(list(&c,&p).unwrap()[0]["version"],"1");
+        std::fs::write(&path,mod_jar("a","changed-version",None)).unwrap();assert_eq!(list(&c,&p).unwrap()[0]["version"],"changed-version");
+    }
+    #[test]
+    #[ignore = "read-only benchmark against an installed large pack; cache is isolated"]
+    fn reported_large_pack_resource_timing() {
+        let t=tempfile::tempdir().unwrap();let c=Core::new(t.path().into(),Arc::new(|_|{})).unwrap();
+        let running=std::env::var("KXL_RESOURCE_BENCH_DIR").unwrap();
+        write_json(&c.instance("bench").unwrap().join("kxl.json"),&json!({"id":"bench","settings":{"isolation":"custom","gameDirectory":running}})).unwrap();
+        let mut reports=vec![];
+        for kind in ["mods","resourcepacks","shaderpacks","saves","datapacks"] {
+            if !Path::new(&running).join(kind).is_dir(){continue;}
+            let p=json!({"id":"bench","kind":kind});let mut basic=p.clone();basic["basic"]=json!(true);
+            let now=std::time::Instant::now();let first=list(&c,&basic).unwrap();let first_ms=now.elapsed().as_millis();
+            let now=std::time::Instant::now();let details=list(&c,&p).unwrap();let cold_ms=now.elapsed().as_millis();
+            let now=std::time::Instant::now();let warm=list(&c,&p).unwrap();let warm_ms=now.elapsed().as_millis();assert_eq!(details,warm);assert_eq!(first.as_array().unwrap().len(),details.as_array().unwrap().len());
+            reports.push(json!({"kind":kind,"files":first.as_array().unwrap().len(),"firstListMs":first_ms,"coldDetailsMs":cold_ms,"warmDetailsMs":warm_ms}));
+        }
+        let value=json!({"readOnlyOriginalFiles":true,"readerThreads":readers().current_num_threads(),"lists":reports});println!("{value}");
+        if let Ok(path)=std::env::var("KXL_RESOURCE_BENCH_REPORT"){write_json(Path::new(&path),&value).unwrap();}
     }
 
     fn mod_jar(id: &str, version: &str, depends: Option<&str>) -> Vec<u8> {

@@ -343,7 +343,13 @@ impl Core {
             "check_mod_updates" => mod_updates::check(self, &p).await,
             "scan_installed_mod_updates" => mod_check::prepare_installed(self, &p),
             "mod_update_mode" => mod_updates::mode(self, &p),
-            "resources" => resources::list(self, &p),
+            "resources" => {
+                let core=self.clone();
+                if p["basic"]==true {return tokio::task::spawn_blocking(move || resources::list(&core,&p)).await.map_err(err)?;}
+                let lock=core.jobs.file_lock(&core.root.join("resource-list-worker"));
+                let _guard=lock.lock().await;
+                tokio::task::spawn_blocking(move || resources::list(&core,&p)).await.map_err(err)?
+            },
             "delete_resources" => resource_delete::remove(self, &p).await,
             "project_dependencies" => curseforge::dependencies(self, &p).await,
             "delete_instance" => {

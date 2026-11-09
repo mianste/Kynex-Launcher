@@ -317,20 +317,54 @@ export function InstanceDetail() {
     });
   }, [visibleSignature]);
   const ensuredLoaders = useRef(new Set<string>());
+  const resourceRequests = useRef(new Map<string, Promise<void>>());
+  const resourceRows = useRef(new Map<string, Resource[]>());
+  const displayedResourceScope = useRef("");
   const refreshResources = useCallback(async () => {
     if (!i || !tabKinds[tab] || !desktop) return;
     const scope = `${i.id}:${tabKinds[tab]}:${tab === "数据包" ? dataWorld : ""}`;
-    const value = await api<Resource[]>("resources", {
+    const pending = resourceRequests.current.get(scope);
+    if (pending) {
+      const cached = resourceRows.current.get(scope);
+      if (cached && resourceScope.current === scope) {
+        R(cached); LoadedResources(scope); Loading(false); displayedResourceScope.current = scope;
+      }
+      return pending;
+    }
+    const payload = {
       id: i.id,
       kind: tabKinds[tab],
       world: tab === "数据包" ? dataWorld || undefined : undefined,
-    });
+    };
+    const request = (async () => {
+    if (displayedResourceScope.current !== scope) {
+    const first = resourceRows.current.get(scope) ?? await api<Resource[]>("resources", { ...payload, basic: true });
+    resourceRows.current.set(scope, first);
+    if (resourceScope.current === scope) {
+      R(first);
+      displayedResourceScope.current = scope;
+      LoadedResources(scope);
+      Loading(false);
+    }
+    }
+    const value = await api<Resource[]>("resources", payload);
+    if (resourceRows.current.size > 12) resourceRows.current.clear();
+    resourceRows.current.set(scope, value);
     if (resourceScope.current !== scope) return;
     E("");
     R((before) =>
-      JSON.stringify(before) === JSON.stringify(value) ? before : value,
+      before.length === value.length && before.every((row,n) => {
+        const other = value[n];
+        return row.name === other.name && row.size === other.size && row.modified === other.modified &&
+          row.enabled === other.enabled && row.version === other.version && row.icon_url === other.icon_url &&
+          row.order === other.order && JSON.stringify(row.modIds) === JSON.stringify(other.modIds) &&
+          JSON.stringify(row.problems) === JSON.stringify(other.problems);
+      }) ? before : value,
     );
     LoadedResources(scope);
+    })().finally(() => resourceRequests.current.delete(scope));
+    resourceRequests.current.set(scope, request);
+    return request;
   }, [i?.id, tab, dataWorld]);
   const importPaths = useCallback(
     async (paths: string[]) => {
@@ -358,16 +392,21 @@ export function InstanceDetail() {
       let live = true;
       LoadedResources("");
       Loading(true);
-      const update = () =>
-        refreshResources()
+      let running = false;
+      const update = () => {
+        if (running || !live || document.hidden) return;
+        running = true;
+        return refreshResources()
           .catch((reason) => {
             if (live) E(String(reason));
           })
           .finally(() => {
             if (live) Loading(false);
+            running = false;
           });
+      };
       void update();
-      const timer = window.setInterval(update, 1500);
+      const timer = window.setInterval(update, 10000);
       window.addEventListener("focus", update);
       return () => {
         live = false;
@@ -377,6 +416,7 @@ export function InstanceDetail() {
     } else {
       R([]);
       LoadedResources("");
+      displayedResourceScope.current = "";
     }
   }, [i?.id, tab, refreshResources]);
   useEffect(() => {
@@ -510,7 +550,7 @@ export function InstanceDetail() {
                   <SelectionContent className="resource-selection-content"
                     {...(managed ? { type: "button" as const, "aria-label": `选择 ${r.name}`, "aria-pressed": selectedResources.includes(r.name), disabled: resourceBusy || updates?.applying, onClick: () => selectResource(r.name) } : {})}>
                   <div className="resource-monogram">
-                    <span>{r.name.slice(0, 2).toUpperCase()}</span>
+                    {!r.icon_url && <span><Box size={20} /></span>}
                     {r.icon_url && (
                       <img
                         src={r.icon_url}
@@ -929,7 +969,7 @@ export function InstanceDetail() {
               disabled={!!deleteRequest}
               revision={modResources
                 .map(
-                  (r) => `${r.name}:${r.size}:${r.version}:${r.modified ?? ""}`,
+                  (r) => `${r.name}:${r.size}:${r.modified ?? ""}`,
                 )
                 .join("|")}
             >

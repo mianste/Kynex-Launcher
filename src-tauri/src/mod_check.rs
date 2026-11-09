@@ -736,10 +736,17 @@ pub async fn check(core: &Core, p: &Value) -> Result<Value> {
         .unwrap_or("vanilla")
         .to_lowercase();
     let dir = engine::resource_dir(core, &json!({"id":p["id"],"kind":"mods"}))?;
+    let cache_core=core.clone();
     let (local,mut rows)=tokio::task::spawn_blocking(move||->Result<(Vec<Local>,Vec<Value>)>{
         if !dir.exists(){return Ok((vec![],vec![]));}
         let paths=std::fs::read_dir(&dir).map_err(err)?.flatten().filter(|e|e.file_type().is_ok_and(|t|t.is_file()) && mod_file(&e.file_name().to_string_lossy())).map(|e|e.path()).collect::<Vec<_>>();
-        let scans=paths.par_iter().map(|path|{let name=path.file_name().unwrap().to_string_lossy().to_string();match std::fs::read(path){Ok(bytes)=>Ok(Local{name,sha:format!("{:x}",Sha1::digest(&bytes)),fingerprint:fingerprint(&bytes)}),Err(e)=>Err(json!({"file":name,"status":"error","detail":format!("无法读取模组：{e}")}))}}).collect::<Vec<_>>();
+        let scans=resources::readers().install(||paths.par_iter().map(|path|{
+            let name=path.file_name().unwrap().to_string_lossy().to_string();
+            let hashes:Result<(String,u32)>=resources::try_cached_resource(&cache_core,path,"mod-hashes",||{
+                let bytes=std::fs::read(path).map_err(err)?;Ok((format!("{:x}",Sha1::digest(&bytes)),fingerprint(&bytes)))
+            });
+            match hashes{Ok((sha,fingerprint))=>Ok(Local{name,sha,fingerprint}),Err(e)=>Err(json!({"file":name,"status":"error","detail":format!("无法读取模组：{e}")}))}
+        }).collect::<Vec<_>>());
         let mut local=vec![];let mut errors=vec![];for s in scans{match s{Ok(v)=>local.push(v),Err(e)=>errors.push(e)}}Ok((local,errors))
     }).await.map_err(err)??;
     let now = SystemTime::now()

@@ -32,3 +32,10 @@
 原包实测发现，中转地址可能长时间卡在 TACZ 大文件。Modrinth 文件优先使用官方 CDN，中转地址保留为失败备用，不更改项目来源或查询条件。该 57,465,167 字节文件经真实 Rust 下载器约 1.9 秒完成并通过 SHA-1 校验，速度仅代表本次网络环境。整合包文件按 SHA-1 缓存，重试或装到其他实例时校验后复用；再用不可用地址测试相同文件，确认可从缓存安装。
 
 验证结果：`ui-report/revision/reported-packs.json`、`large-mod-cache.json`、`signed-installer.json`、`mrpack-cdn.json`。桌面核心 147 项通过，13 项外部网络或交互测试默认跳过；其中本次涉及的两个原包导入、签名样本、旧 CDN 和大文件缓存测试已分别显式运行通过。
+
+
+## v1.3.3 本地资源加载
+
+参考 PCL 官方 [LocalResourceLoaders.vb](https://github.com/Hex-Dragon/PCL2/blob/main/Plain%20Craft%20Launcher%202/Modules/Resource/LocalResourceLoaders.vb) 的列表与后续信息分开加载方式，以及 [LocalResourceFile.vb](https://github.com/Hex-Dragon/PCL2/blob/main/Plain%20Craft%20Launcher%202/Modules/Resource/LocalResourceFile.vb) 的本地文件处理。仅参考流程，未复制代码。
+
+本项目独立实现基础列表、后台详细信息、路径/长度/高精度修改时间缓存、两线程读取池和页面请求合并。缓存不用于替代安装下载的签名或哈希校验。
