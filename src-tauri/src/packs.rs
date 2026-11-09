@@ -179,17 +179,20 @@ fn embedded_icon(zip: &mut zip::ZipArchive<std::fs::File>, info: &Value) -> Opti
     None
 }
 pub(crate) fn installed_icon(dir:&Path)->Option<String> {
+    let title=read_json(&dir.join("kxl.json")).ok().and_then(|v|v["name"].as_str().map(str::to_string)).unwrap_or_default();
+    installed_icon_named(dir,&title)
+}
+pub(crate) fn installed_icon_named(dir:&Path,title:&str)->Option<String> {
     for name in ["icon.png","icon.jpg","icon.webp","pack.png","PCL/Logo.png"] {
         let path=dir.join(name);
         if std::fs::metadata(&path).ok().is_some_and(|m|m.is_file() && m.len()<=2*1024*1024) {
             if let Ok(bytes)=std::fs::read(path){if let Some(image)=resources::image_data(bytes){return Some(image);}}
         }
     }
-    let title=read_json(&dir.join("kxl.json")).ok().and_then(|v|v["name"].as_str().map(str::to_string)).unwrap_or_default();
     let assets=dir.join("config/fancymenu/assets");
     let mut candidates:Vec<_>=std::fs::read_dir(&assets).ok().into_iter().flatten().flatten().filter_map(|entry|{
         let name=entry.file_name().to_string_lossy().to_string();
-        let score=menu_logo_score(&title,&format!("config/fancymenu/assets/{name}"));
+        let score=menu_logo_score(title,&format!("config/fancymenu/assets/{name}"));
         (score>0).then(||(score,entry.path()))
     }).collect();
     candidates.sort_by(|a,b|b.0.cmp(&a.0).then(a.1.cmp(&b.1)));

@@ -186,7 +186,11 @@ impl Core {
                 if let Ok(mut v) = serde_json::from_str::<Value>(&s) {
                     if v["externalSource"].as_str().is_some_and(|p|!Path::new(p).is_dir()) {continue;}
                     if v["packIcon"].as_str().is_none() {
-                        if let Some(icon)=packs::installed_icon(&e.path()){v["packIcon"]=json!(icon);}
+                        let icon=packs::installed_icon(&e.path()).or_else(||{
+                            let running=game_directories::running_directory(self,&v).ok()?;
+                            packs::installed_icon_named(&running,v["name"].as_str().unwrap_or(""))
+                        });
+                        if let Some(icon)=icon {v["packIcon"]=json!(icon);}
                     }
                     out.push(v);
                 }
@@ -880,6 +884,14 @@ mod tests {
             assert!(instance_display_name(title).is_err());
         }
         assert!(instance_display_name(&"中".repeat(513)).is_err());
+    }
+    #[test]
+    fn custom_running_directory_pack_logo_is_used_in_the_shared_instance_list() {
+        let temp=tempfile::tempdir().unwrap();let c=Core::new(temp.path().join("launcher"),Arc::new(|_|{})).unwrap();
+        let running=temp.path().join("external-game");std::fs::create_dir_all(running.join("config/fancymenu/assets")).unwrap();
+        std::fs::write(running.join("config/fancymenu/assets/10sky.png"),include_bytes!("../../src/assets/loaders/minecraft.png")).unwrap();
+        write_json(&c.instance("test").unwrap().join("kxl.json"),&json!({"id":"test","name":"ATM10SKY","settings":{"isolation":"custom","gameDirectory":running}})).unwrap();
+        assert!(c.instances().unwrap()[0]["packIcon"].as_str().unwrap().starts_with("data:image/png;base64,"));
     }
     #[test]
     fn paths() {
