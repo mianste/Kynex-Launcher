@@ -39,3 +39,5 @@
 参考 PCL 官方 [LocalResourceLoaders.vb](https://github.com/Hex-Dragon/PCL2/blob/main/Plain%20Craft%20Launcher%202/Modules/Resource/LocalResourceLoaders.vb) 的列表与后续信息分开加载方式，以及 [LocalResourceFile.vb](https://github.com/Hex-Dragon/PCL2/blob/main/Plain%20Craft%20Launcher%202/Modules/Resource/LocalResourceFile.vb) 的本地文件处理。仅参考流程，未复制代码。
 
 本项目独立实现基础列表、后台详细信息、路径/长度/高精度修改时间缓存、两线程读取池和页面请求合并。缓存不用于替代安装下载的签名或哈希校验。
+
+模组图标单独读取根清单，不先解包嵌套 JAR；回退图标只遍历 ZIP 中央目录的文件名，不逐项读取文件头。Forge/NeoForge 的 `logoFile` 字段参考 [NeoForged 官方文档](https://docs.neoforged.net/docs/1.21.8/gettingstarted/modfiles/) 和 [Forge 官方文档](https://docs.minecraftforge.net/en/latest/gettingstarted/modfiles/)。

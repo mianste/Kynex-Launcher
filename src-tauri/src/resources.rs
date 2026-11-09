@@ -187,23 +187,25 @@ fn image_from_archive<R: Read + Seek>(
 fn icon_from_anywhere<R: Read + Seek>(
     archive: &mut zip::ZipArchive<R>,
 ) -> Option<String> {
-    for index in 0..archive.len() {
-        let mut file = archive.by_index(index).ok()?;
-        if file.size() > 2 * 1024 * 1024 {
-            continue;
-        }
-        let name = file.name().to_ascii_lowercase();
-        if !(name.ends_with("pack.png")
+    // file_names reads the in-memory central directory. by_index would seek to
+    // every local header, even for thousands of unrelated textures in large mods.
+    let names:Vec<String>=archive.file_names().filter(|name|{
+        let name=name.to_ascii_lowercase();
+        name.ends_with("pack.png")
             || name.ends_with("icon.png")
-            || name.ends_with("logo.png"))
-        {
-            continue;
-        }
-        let mut bytes = Vec::with_capacity(file.size() as usize);
-        file.read_to_end(&mut bytes).ok()?;
-        if let Some(icon) = image_data(bytes) {
-            return Some(icon);
-        }
+            || name.ends_with("logo.png")
+    }).map(str::to_string).collect();
+    for name in names {
+        if let Some(icon)=image_from_archive(archive,&name){return Some(icon);}
+    }
+    None
+}
+fn forge_declared_icon<R:Read+Seek>(archive:&mut zip::ZipArchive<R>)->Option<String> {
+    static LOGO:std::sync::OnceLock<regex::Regex>=std::sync::OnceLock::new();
+    let pattern=LOGO.get_or_init(||regex::Regex::new(r#"(?m)^\s*logoFile\s*=\s*["']([^"'\r\n]+)["']"#).unwrap());
+    for name in ["META-INF/neoforge.mods.toml","META-INF/mods.toml"] {
+        let text={let Ok(mut file)=archive.by_name(name)else{continue};if file.size()>1024*1024{continue;}let mut text=String::new();if file.read_to_string(&mut text).is_err(){continue;}text};
+        for value in pattern.captures_iter(&text){if let Some(image)=image_from_archive(archive,&value[1]){return Some(image);}}
     }
     None
 }
@@ -293,10 +295,11 @@ pub fn list(core: &Core, p: &Value) -> Result<Value> {
                 let clean=name.strip_suffix(".disabled").unwrap_or(&name).to_lowercase();
                 if row["dir"]==true || !(clean.ends_with(".jar")||clean.ends_with(".litemod")){return None;}
                 let path=dir.join(&name);
-                let meta:ModMetadata=cached_resource(core,&path,"mods",||{
+                let meta:ModMetadata=cached_resource(core,&path,if preview.is_some(){"mod-preview-v2"}else{"mods-v2"},||{
                 let Ok(file) = std::fs::File::open(&path) else{return Default::default()};
                 let Ok(mut archive) = zip::ZipArchive::new(file) else{return Default::default()};
-                let mut meta = metadata(&mut archive, false);
+                let mut meta = metadata(&mut archive, preview.is_some());
+                if meta.4.is_empty(){meta.4=forge_declared_icon(&mut archive).unwrap_or_default();}
                 // 很多模组没有在 fabric.mod.json/mods.toml 里声明图标，
                 // 退回到 jar 内任意层级的 icon.png / logo.png / pack.png。
                 if meta.4.is_empty() {
@@ -647,6 +650,28 @@ mod tests {
         assert_eq!(conflicts, vec!["c"]);
         assert_eq!(v, "1.0");
         assert!(icon.starts_with("data:image/png;base64,"));
+    }
+    #[test]
+    fn forge_and_neoforge_logos_follow_the_declared_path() {
+        use std::io::Write;
+        for manifest in ["META-INF/mods.toml","META-INF/neoforge.mods.toml"] {
+            let mut z=zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+            z.start_file(manifest,zip::write::SimpleFileOptions::default()).unwrap();z.write_all(b"[[mods]]\nmodId='example'\nlogoFile = 'assets/example/brand-image.png' # official logo\n").unwrap();
+            z.start_file("assets/example/brand-image.png",zip::write::SimpleFileOptions::default()).unwrap();z.write_all(b"\x89PNG\r\n\x1a\nfixture").unwrap();
+            let mut archive=zip::ZipArchive::new(z.finish().unwrap()).unwrap();assert!(forge_declared_icon(&mut archive).unwrap().starts_with("data:image/png;base64,"));
+        }
+    }
+    #[test]
+    fn fallback_icons_do_not_seek_through_unrelated_archive_entries() {
+        use std::io::Write;
+        struct Counted {inner:std::io::Cursor<Vec<u8>>,seeks:Arc<std::sync::atomic::AtomicUsize>}
+        impl Read for Counted {fn read(&mut self,b:&mut[u8])->std::io::Result<usize>{self.inner.read(b)}}
+        impl Seek for Counted {fn seek(&mut self,p:std::io::SeekFrom)->std::io::Result<u64>{self.seeks.fetch_add(1,Ordering::Relaxed);self.inner.seek(p)}}
+        let mut z=zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        for n in 0..1000{z.start_file(format!("assets/textures/{n}.png"),zip::write::SimpleFileOptions::default()).unwrap();z.write_all(b"texture").unwrap();}
+        z.start_file("assets/logo.png",zip::write::SimpleFileOptions::default()).unwrap();z.write_all(b"\x89PNG\r\n\x1a\nlogo").unwrap();
+        let seeks=Arc::new(std::sync::atomic::AtomicUsize::new(0));let mut archive=zip::ZipArchive::new(Counted{inner:z.finish().unwrap(),seeks:seeks.clone()}).unwrap();seeks.store(0,Ordering::Relaxed);
+        assert!(icon_from_anywhere(&mut archive).is_some());assert!(seeks.load(Ordering::Relaxed)<20);
     }
     #[test]
     fn detail_cache_keeps_empty_results_and_invalidates_changed_files_and_paths() {
