@@ -1,5 +1,5 @@
 .pcl-resource-page {
-  --resource-panel: color-mix(in srgb, var(--surface) 95%, transparent);
+  --resource-panel: var(--glass);
   padding-bottom: 12px;
 }
 .app .pcl-resource-page .section-tools {
@@ -26,7 +26,7 @@
 .app .pcl-resource-page .mod-update-filters { padding-bottom: 8px; border: 0; gap: 4px; }
 .app .pcl-resource-page .mod-update-filters .chip { padding: 4px 10px; box-shadow: none; background: transparent; border-color: transparent; }
 .app .pcl-resource-page .mod-update-filters .chip.on { color: var(--on-accent); background: var(--accent) !important; }
-.app .pcl-resource-page .resource-list { gap: 2px; }
+.app .pcl-resource-page .resource-list { gap: 2px; background: transparent; }
 .pcl-resource-page .resource-list { user-select: none; }
 .pcl-resource-page[data-selecting="true"] .resource-selection-bar { pointer-events: none; }
 .app .pcl-resource-page .resource-list .resource-row {
