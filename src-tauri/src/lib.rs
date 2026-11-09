@@ -12,7 +12,7 @@ mod public_scope_tests {
         }
         assert!(include_str!("../../config/updater-public-key.txt").trim().is_empty());
         let build:serde_json::Value=serde_json::from_str(include_str!("../../config/build-channel.json")).unwrap();
-        assert_eq!(build["version"],"1.3.2");
+        assert_eq!(build["version"],env!("CARGO_PKG_VERSION"));
         assert_eq!(build["identifier"],"com.keke.kynex.public");
     }
 }

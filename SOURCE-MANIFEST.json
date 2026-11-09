@@ -183,7 +183,7 @@
     "src-tauri/src/game_options.rs": "f6fb2f983785f075218462b955bd63d87d8321e68ff402c9ff4ca636800218da",
     "src-tauri/src/icons.rs": "b3281c98b358e83b8883c03c89ca444d713f68043a4bf162ddb8d19f06683f83",
     "src-tauri/src/jobs.rs": "2a2e7d5b23345271e8fc942ae0e64c1d132d7f7787e05afd0bb73df7ffe0632d",
-    "src-tauri/src/lib.rs": "8da03f9c0de06f416800023054180b02167a4782607d9efb843d515edf7f90c0",
+    "src-tauri/src/lib.rs": "b29505655c704d21b765904b7e0aff7ab1850339f5f6411eef1f9e44a42f31c6",
     "src-tauri/src/loader_catalog.rs": "0b6a70019271d99b80104c9127115b3b20114044707be2a8919dbee3b95d97ff",
     "src-tauri/src/loader_processors.rs": "15d802d30c0bfdd78f4d82e8a84d468d313e29fb6d720257873d50eb3821cfef",
     "src-tauri/src/main.rs": "3f736efaf1afd9b35bdddce998eebd7388789362c7ec6f49a871ece488e223b5",
