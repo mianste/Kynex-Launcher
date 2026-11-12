@@ -8,13 +8,63 @@
   box-shadow: none;
   clip-path: none;
   --corner-mask:
-    linear-gradient(#000 0 0) center / calc(100% - 2 * var(--window-radius)) 100% no-repeat,
-    linear-gradient(#000 0 0) center / 100% calc(100% - 2 * var(--window-radius)) no-repeat,
-    radial-gradient(circle at 100% 100%, #000 calc(var(--window-radius) - var(--corner-aa)), transparent var(--window-radius)) top left / var(--window-radius) var(--window-radius) no-repeat,
-    radial-gradient(circle at 0 100%, #000 calc(var(--window-radius) - var(--corner-aa)), transparent var(--window-radius)) top right / var(--window-radius) var(--window-radius) no-repeat,
-    radial-gradient(circle at 100% 0, #000 calc(var(--window-radius) - var(--corner-aa)), transparent var(--window-radius)) bottom left / var(--window-radius) var(--window-radius) no-repeat,
-    radial-gradient(circle at 0 0, #000 calc(var(--window-radius) - var(--corner-aa)), transparent var(--window-radius)) bottom right / var(--window-radius) var(--window-radius) no-repeat;
+    linear-gradient(#000 0 0) center / calc(100% - 2 * var(--window-radius))
+      100% no-repeat,
+    linear-gradient(#000 0 0) center / 100%
+      calc(100% - 2 * var(--window-radius)) no-repeat,
+    radial-gradient(
+        circle at 100% 100%,
+        #000 calc(var(--window-radius) - var(--corner-aa) / 2),
+        transparent calc(var(--window-radius) + var(--corner-aa) / 2)
+      )
+      top left / var(--window-radius) var(--window-radius) no-repeat,
+    radial-gradient(
+        circle at 0 100%,
+        #000 calc(var(--window-radius) - var(--corner-aa) / 2),
+        transparent calc(var(--window-radius) + var(--corner-aa) / 2)
+      )
+      top right / var(--window-radius) var(--window-radius) no-repeat,
+    radial-gradient(
+        circle at 100% 0,
+        #000 calc(var(--window-radius) - var(--corner-aa) / 2),
+        transparent calc(var(--window-radius) + var(--corner-aa) / 2)
+      )
+      bottom left / var(--window-radius) var(--window-radius) no-repeat,
+    radial-gradient(
+        circle at 0 0,
+        #000 calc(var(--window-radius) - var(--corner-aa) / 2),
+        transparent calc(var(--window-radius) + var(--corner-aa) / 2)
+      )
+      bottom right / var(--window-radius) var(--window-radius) no-repeat;
   -webkit-mask: var(--corner-mask);
   mask: var(--corner-mask);
 }
-html, body, #root { background: transparent; }
+html,
+body,
+#root {
+  background: transparent;
+}
+
+/* The outer mask alone shapes the window; the footer must not clip it a second time. */
+.app > .taskbar {
+  border-radius: 0;
+}
+/* Align the entire painted frame to device pixels, with a transparent safety
+   gutter so no child border or shadow can protrude beyond any straight edge. */
+.app {
+  --window-edge-inset: 2px;
+  position: absolute;
+  inset: var(--window-edge-inset);
+  width: auto;
+  height: auto;
+  margin: 0;
+}
+.app > .taskbar {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  box-shadow: none;
+}

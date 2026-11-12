@@ -1,0 +1,32 @@
+use crate::*;
+use super::{state,plan::PackPlan,policy,snapshot,verify};
+#[derive(Clone,Debug,PartialEq,serde::Serialize)]#[serde(rename_all="snake_case")]
+pub enum Failure {MissingDependency,Java,Memory,Duplicate,Incompatible,Mixin,Corrupt,Graphics,Unknown}
+pub fn classify(log:&str)->Failure{let s=log.to_lowercase();if s.contains("outofmemoryerror")||s.contains("java heap space"){Failure::Memory}else if s.contains("unsupportedclassversionerror")||s.contains("requires java"){Failure::Java}else if s.contains("duplicate")&&s.contains("mod"){Failure::Duplicate}else if s.contains("requires")&&s.contains("mod")||s.contains("missing depend"){Failure::MissingDependency}else if s.contains("zipend")||s.contains("zip end")||s.contains("invalid loc header")||s.contains("invalid or corrupt"){Failure::Corrupt}else if s.contains("mixin")&&s.contains("error"){Failure::Mixin}else if s.contains("glfw")||s.contains("opengl")&&s.contains("failed"){Failure::Graphics}else if s.contains("incompatible")||s.contains("wrong mod loader"){Failure::Incompatible}else{Failure::Unknown}}
+pub fn next_memory(current:u64)->u64{(current+2048).clamp(512,65536)}
+async fn fix(core:&Core,id:&str,plan:&PackPlan,failure:&Failure)->Result<String>{
+ let root=core.instance(id)?;match failure{
+  Failure::Memory=>{let file=policy::under(&root,"kxl.json")?;let mut c=read_json(&file)?;let old=c["settings"]["memory"].as_u64().unwrap_or(plan.memory_mb);let next=next_memory(old);if next==old{return Err("内存已达到上限，建议减少模组或资源负担。".into());}c["settings"]["memory"]=json!(next);write_json(&file,&c)?;Ok(format!("内存由 {old} MB 调整为 {next} MB（本次 +{} MB）",next-old))},
+  Failure::Java=>{let file=policy::under(&root,"kxl.json")?;let mut c=read_json(&file)?;c["settings"]["java"]=json!("");write_json(&file,&c)?;Ok("清除不兼容的手动 Java，按游戏版本重新匹配。".into())},
+  Failure::MissingDependency|Failure::Corrupt=>{for r in &plan.mods{core.stopped()?;resource_dependencies::install(core,&super::tools::payload(id,r,"mods")).await?;}Ok("根据已核验项目重新校验资源及必需前置；损坏文件按哈希重新下载。".into())},
+  Failure::Duplicate=>{let rows=resources::list(core,&json!({"id":id,"kind":"mods"}))?;let mut ids=std::collections::HashSet::new();let mut duplicates=Vec::new();for row in rows.as_array().into_iter().flatten().filter(|v|v["enabled"]==true){let repeated=row["modIds"].as_array().into_iter().flatten().filter_map(Value::as_str).any(|id|!ids.insert(id.to_owned()));if repeated{if let Some(name)=row["name"].as_str(){duplicates.push(name.to_owned());}}}if duplicates.is_empty(){return Err("未能可靠定位重复文件，请手动核对模组列表。".into());}if duplicates.len()>5{return Err("需要一次禁用超过 5 个模组，必须由用户单独确认。".into());}for name in &duplicates{let source=policy::under(&root,&format!("mods/{name}"))?;let target=policy::under(&root,&format!("mods/{name}.disabled"))?;std::fs::rename(source,target).map_err(err)?;}Ok(format!("已禁用重复模组：{}",duplicates.join("、")))},
+  Failure::Graphics=>Err("图形驱动或 OpenGL 问题：请手动检查显卡驱动与光影配置，工坊不会修改系统驱动。".into()),
+  Failure::Mixin|Failure::Incompatible|Failure::Unknown=>Err("未找到可靠的自动修复方式。可以使用安全模式或经确认的二分排查；也可以回滚。".into())
+ }
+}
+pub async fn run(core:&Core,task:&mut state::Task,plan:&PackPlan,account:&str,settings:&Value)->Result<String>{
+ run_with(&mut Host{core,task,plan,account,settings}).await
+}
+type FutureResult<'a>=std::pin::Pin<Box<dyn std::future::Future<Output=Result<String>>+Send+'a>>;
+trait RepairHost{fn verify(&mut self)->FutureResult<'_>;fn repair(&mut self,failure:Failure)->FutureResult<'_>;}
+struct Host<'a>{core:&'a Core,task:&'a mut state::Task,plan:&'a PackPlan,account:&'a str,settings:&'a Value}
+impl RepairHost for Host<'_>{
+ fn verify(&mut self)->FutureResult<'_>{Box::pin(async{self.core.stopped()?;verify::run(self.core,&self.task.instance_id,self.account,self.settings).await})}
+ fn repair(&mut self,failure:Failure)->FutureResult<'_>{Box::pin(async move{let sid=snapshot::create(self.core,&self.task.instance_id)?;self.task.snapshots.push(sid);self.task.status="repairing".into();state::save(self.core,self.task,"repair")?;let changed=fix(self.core,&self.task.instance_id,self.plan,&failure).await?;self.task.audit.push(state::Audit{tool:"repair_instance".into(),result:changed.clone(),elapsed_ms:0});state::save(self.core,self.task,"repair")?;Ok(changed)})}
+}
+async fn run_with<H:RepairHost>(host:&mut H)->Result<String>{let mut reports=Vec::new();for attempt in 0..=3{match host.verify().await{Ok(value)=>{reports.push(format!("验证已通过：{value}"));return Ok(reports.join("\n"));},Err(error)=>{let failure=classify(&error);let label=match failure{Failure::MissingDependency=>"缺失前置",Failure::Java=>"Java 版本",Failure::Memory=>"内存不足",Failure::Duplicate=>"重复模组",Failure::Incompatible=>"版本或加载器不匹配",Failure::Mixin=>"Mixin 冲突",Failure::Corrupt=>"下载损坏",Failure::Graphics=>"图形驱动",Failure::Unknown=>"未知原因"};reports.push(format!("第 {} 次验证发现：{label}。{}",attempt+1,verify::summary(&error)));if attempt==3{return Err(format!("已达到最多 3 次修复，仍未通过；可回滚。\n{}",reports.join("\n")));}let changed=host.repair(failure).await.map_err(|e|format!("{e}\n{}",reports.join("\n")))?;reports.push(format!("本次修改：{changed}"));}}}Err("修复未完成".into())}
+#[cfg(test)]mod tests{use super::*;
+ #[test]fn classifications(){for(log,kind)in[("java.lang.OutOfMemoryError",Failure::Memory),("UnsupportedClassVersionError",Failure::Java),("Duplicate mod id",Failure::Duplicate),("missing dependency",Failure::MissingDependency),("Zip END header not found",Failure::Corrupt),("Mixin ERROR",Failure::Mixin),("GLFW failed",Failure::Graphics),("Incompatible mod",Failure::Incompatible),("unknown",Failure::Unknown)]{assert_eq!(classify(log),kind);}assert_eq!(next_memory(4096),6144);assert_eq!(next_memory(65000),65536);assert_eq!(next_memory(65536),65536);}
+ struct Mock{attempts:usize,fixes:usize,pass_after:usize}impl RepairHost for Mock{fn verify(&mut self)->FutureResult<'_>{self.attempts+=1;Box::pin(async{if self.attempts>self.pass_after{Ok("主菜单标记".into())}else{Err("java.lang.OutOfMemoryError".into())}})}fn repair(&mut self,_:Failure)->FutureResult<'_>{self.fixes+=1;Box::pin(async{Ok("增加内存".into())})}}
+ #[tokio::test]async fn repair_loop_is_bounded_and_reports_resolution(){let mut host=Mock{attempts:0,fixes:0,pass_after:2};let report=run_with(&mut host).await.unwrap();assert_eq!(host.fixes,2);assert!(report.contains("验证已通过"));let mut bad=Mock{attempts:0,fixes:0,pass_after:9};assert!(run_with(&mut bad).await.unwrap_err().contains("最多 3 次"));assert_eq!(bad.fixes,3);assert_eq!(bad.attempts,4);}
+}

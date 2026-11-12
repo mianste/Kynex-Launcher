@@ -11,14 +11,13 @@ import {
   Layers,
   ArrowLeft,
   ArrowRight,
-  Search,
   Pencil,
   Trash2,
   Shirt,
 } from "lucide-react";
 import { Button, Tabs, Switch, Modal, Input, Field } from "../../components/ui";
 import { MotionPresence } from "../../components/ui/Motion";
-import { api, desktop, pickImageFile } from "../../lib/bridge";
+import { api, desktop, pickImageFile, saveFile } from "../../lib/bridge";
 import { defaultSkin } from "./textures";
 import {
   MinecraftViewer,
@@ -30,7 +29,7 @@ import { SkinSprite } from "./SkinSprite";
 import { SkinImport } from "./SkinImport";
 import { useWardrobe } from "./useWardrobe";
 import { decodeCape } from "./cape";
-import { cachedCape, loadCape } from "./textureCache";
+import { cachedCape, loadCape, loadTexture } from "./textureCache";
 import { sameAppearance } from "./wardrobeState";
 import type { Account } from "../../lib/types";
 import type { LocalSkin } from "./library";
@@ -146,11 +145,12 @@ export function Skin() {
   const [importOpen, ImportOpen] = useState(false),
     [dropped, Dropped] = useState<File>(),
     [drag, Drag] = useState(false),
-    [query, Query] = useState(""),
     [edit, Edit] = useState<LocalSkin | null>(null),
     [editError, EditError] = useState(""),
     [deleting, Deleting] = useState(false);
   const [manualModel, ManualModel] = useState(false);
+  const [exporting, Exporting] = useState(false);
+  const [exportResult, ExportResult] = useState<{ error: boolean; text: string } | null>(null);
   const [detectedModel, DetectedModel] = useState(w.selected.model);
   useEffect(() => {
     DetectedModel(w.selected.model);
@@ -207,9 +207,7 @@ export function Skin() {
       RenderError("");
     }, []),
     imageError = useCallback((s: string) => RenderError(s), []);
-  const entries = [defaultEntry, ...w.skins].filter((e) =>
-    e.name.toLowerCase().includes(query.toLowerCase()),
-  );
+  const entries = [defaultEntry, ...w.skins];
   function select(entry: LocalSkin) {
     ManualModel(false);
     DetectedModel(entry.model);
@@ -247,11 +245,37 @@ export function Skin() {
       }
     })();
   }
-  function exportSkin() {
-    const a = document.createElement("a");
-    a.href = w.selected.texture;
-    a.download = "KXL-skin.png";
-    a.click();
+  async function exportSkin() {
+    if (exporting) return;
+    const selected = w.selected;
+    Exporting(true);
+    ExportResult(null);
+    try {
+      const name = (selected.name || "KXL-skin").replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").replace(/[. ]+$/, "") || "KXL-skin";
+      const filename = name + ".png";
+      const path = desktop ? await saveFile(filename, [{ name: "PNG 皮肤", extensions: ["png"] }]) : null;
+      if (desktop && !path) return;
+      const texture = await loadTexture(selected.texture);
+      if (desktop) {
+        const saved = await api<string>("skin_export", { path, texture });
+        ExportResult({ error: false, text: `皮肤已导出到：${saved}` });
+      } else {
+        const blob = await (await fetch(texture)).blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.append(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        ExportResult({ error: false, text: "皮肤已交给浏览器下载。" });
+      }
+    } catch (e) {
+      ExportResult({ error: true, text: `导出失败：${String(e).replace(/^Error: /, "")}` });
+    } finally {
+      Exporting(false);
+    }
   }
   const saved = w.skins.some((x) => x.id === w.selected.id);
   return (
@@ -268,7 +292,7 @@ export function Skin() {
               同步账号外观
             </Button>
           )}
-          <Button primary onClick={openImport}>
+          <Button data-guide="skin-import" primary onClick={openImport}>
             <Plus size={16} />
             导入皮肤
           </Button>
@@ -602,11 +626,12 @@ export function Skin() {
               <button disabled={!w.dirty || w.applying} onClick={w.reset}>
                 还原皮肤
               </button>
-              <button onClick={exportSkin}>
+              <button disabled={exporting} onClick={() => void exportSkin()}>
                 <Download size={13} />
-                导出 PNG
+                {exporting ? "正在导出…" : "导出 PNG"}
               </button>
             </div>
+            {exportResult && <p className={"skin-export-result" + (exportResult.error ? " error" : "")} role={exportResult.error ? "alert" : "status"}>{exportResult.text}</p>}
           </div>
         </aside>
       </section>
@@ -627,15 +652,6 @@ export function Skin() {
             <h3>我的皮肤</h3>
             <span>{w.skins.length} / 24</span>
           </div>
-          <label className="wardrobe-search">
-            <Search size={14} />
-            <input
-              aria-label="搜索皮肤"
-              placeholder="搜索皮肤…"
-              value={query}
-              onChange={(e) => Query(e.target.value)}
-            />
-          </label>
         </header>
         <div className="wardrobe-strip">
           <button className="wardrobe-add" onClick={openImport}>
@@ -653,20 +669,20 @@ export function Skin() {
               <button
                 className="wardrobe-card-select"
                 aria-label={"预览 " + entry.name}
+                title={entry.name + " · " + entry.model}
                 aria-pressed={sameAppearance(entry, w.selected)}
                 onClick={() => select(entry)}
               >
                 <div className="wardrobe-card-scene">
                   <SkinSprite texture={entry.texture} model={entry.model} />
                   {sameAppearance(entry, w.equipped) && (
-                    <span className="wardrobe-wearing">
+                    <span className="wardrobe-wearing" title="已应用">
                       <Check size={10} />
-                      已应用
+                      <span className="sr-only">已应用</span>
                     </span>
                   )}
                 </div>
                 <strong>{entry.name}</strong>
-                <small>{entry.model}</small>
               </button>
               {entry.id !== "default" && (
                 <button

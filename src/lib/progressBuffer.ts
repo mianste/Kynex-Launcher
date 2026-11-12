@@ -14,7 +14,8 @@ export function progressBuffer(apply: (events: Task[]) => void) {
   }
   return {
     push(event: Task) {
-      const id = event.taskId || "legacy";
+      const id = event.taskId;
+      if (!id) return;
       pending.set(id, { ...pending.get(id), ...event });
       if (event.finished || event.error) flush();
       else if (!timer) timer = setTimeout(flush, 100);

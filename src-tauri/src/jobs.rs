@@ -3,10 +3,13 @@ use std::collections::HashMap;
 use std::sync::{Mutex, Weak};
 use tokio::sync::{Mutex as AsyncMutex, OwnedSemaphorePermit, Semaphore};
 
+pub const TRANSLATION_CONCURRENCY: usize = 3;
+
 pub struct Jobs {
     slots: Arc<Semaphore>,
     pub download_slots: Semaphore,
     pub mod_scan_slots: Semaphore,
+    pub translation_slots: Semaphore,
     active: Mutex<HashMap<String, Arc<AtomicBool>>>,
     locks: Mutex<HashMap<String, Weak<AsyncMutex<()>>>>,
     mod_scans: Mutex<HashMap<String, (u64, bool)>>,
@@ -17,6 +20,7 @@ impl Default for Jobs {
             slots: Arc::new(Semaphore::new(3)),
             download_slots: Semaphore::new(24),
             mod_scan_slots: Semaphore::new(2),
+            translation_slots: Semaphore::new(TRANSLATION_CONCURRENCY),
             active: Mutex::new(HashMap::new()),
             locks: Mutex::new(HashMap::new()),
             mod_scans: Mutex::new(HashMap::new()),

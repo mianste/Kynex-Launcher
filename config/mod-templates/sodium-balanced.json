@@ -1,0 +1,1 @@
+{"version":1,"id":"sodium-balanced","name":"Sodium 均衡显示","description":"检测到 Sodium 后调整游戏公共显示选项，不依赖 Sodium 私有配置结构。","risk":"low","match":{"modIds":["sodium"]},"patches":[{"file":"options.txt","format":"properties","set":{"renderDistance":10,"simulationDistance":6,"maxFps":144}}]}

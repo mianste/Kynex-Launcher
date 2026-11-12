@@ -12,6 +12,7 @@ import type {
 import { defaultInstanceSettings } from "../lib/types";
 import { api, desktop, setGameDirectoryContext } from "../lib/bridge";
 import { previewInstances } from "../lib/mock";
+import { normalizeHexColor } from "../lib/appearance";
 import { useModUpdateState } from "../lib/modUpdateState";
 export const initialSettings: Settings = {
   ...defaultInstanceSettings,
@@ -19,8 +20,9 @@ export const initialSettings: Settings = {
   checkUpdatesOnStartup: true,
   accent: "#3D7C88",
   wallpaper: "island",
-  uiOpacity: 0,
+  uiOpacity: 100,
   theme: "light",
+  customThemeColor: "#f7fafc",
   clientId: "",
   curseforgeKey: "",
   threads: 8,
@@ -63,6 +65,7 @@ const allowed: Page[] = [
   "library",
   "instance",
   "discover",
+  "workshop",
   "news",
   "account",
   "skin",
@@ -206,13 +209,14 @@ export const useStore = create<State>()(
     }),
     {
       name: "kynex-v092",
-      version: 6,
+      version: 7,
       migrate: (persisted, fromVersion) => {
         const old = persisted as Partial<State>;
         if (old.settings)
           delete (old.settings as unknown as Record<string, unknown>).jvm;
         return {
           selected: old.selected ?? "",
+          directorySelections: old.directorySelections ?? {},
           accountId: old.accountId ?? "",
           skin: old.skin ?? "",
           skinAccountId: old.skinAccountId ?? old.accountId ?? "",
@@ -220,15 +224,14 @@ export const useStore = create<State>()(
           settings: {
             ...initialSettings,
             ...old.settings,
-            // This update enables the requested fully transparent theme once.
-            // Later slider changes remain saved normally.
-            uiOpacity: 0,
             theme:
               old.settings?.theme === "dark" ||
               old.settings?.theme === "system" ||
-              old.settings?.theme === "light"
+              old.settings?.theme === "light" ||
+              old.settings?.theme === "custom"
                 ? old.settings.theme
                 : initialSettings.theme,
+            customThemeColor: normalizeHexColor(old.settings?.customThemeColor) ?? initialSettings.customThemeColor,
             accent:
               fromVersion < 5 &&
               old.settings?.accent?.toLowerCase() === "#7c5cff"

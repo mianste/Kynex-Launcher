@@ -25,20 +25,26 @@
   animation: none;
   opacity: 1;
   transform: none;
-  transform-origin: var(--choice-origin, top) center;
-  transition: transform 160ms var(--motion-ease), opacity 120ms;
-}
-@starting-style {
-  .app .choice-popover { opacity: 0; transform: translateY(-3px) scale(0.985); }
-}
-.app .choice-popover.is-closing {
-  opacity: 0;
-  transform: translateY(-3px) scale(0.985);
-  pointer-events: none;
-  transition-duration: 100ms;
+  /* The menu and the page cutout must paint together from the first frame.
+     A fade from zero opacity exposes a wallpaper-shaped hole underneath. */
+  transition: none;
 }
 .app .choice-option { transition: background-color 100ms, color 100ms; }
-.app .choice-option[data-active="true"] { transition-duration: 0ms; }
+.app .choice-option[data-active="true"] {
+  background: color-mix(in srgb, var(--accent) 20%, var(--glass));
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.app .choice-selected-mark {
+  flex: none;
+  color: var(--accent);
+  animation: kxl-state-enter 160ms var(--motion-ease);
+}
+.app :is(.assistant-message, .assistant-history-list, .assistant-images figure, .ai-connection-result) {
+  animation: kxl-content-enter 160ms var(--motion-ease);
+}
+.app :is(.assistant-context-tags, .agent-actions) button[aria-pressed="true"] {
+  transition: background-color var(--motion-feedback), border-color var(--motion-feedback);
+}
 .app .modal {
   animation: kxl-dialog-enter 220ms var(--motion-ease);
   transform-origin: center;

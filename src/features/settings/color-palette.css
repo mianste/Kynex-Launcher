@@ -1,0 +1,115 @@
+.app .settings-page .theme-choices {
+  flex-wrap: wrap;
+}
+.app .color-palette {
+  flex: 1 1 230px;
+  min-width: 0;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--glass);
+}
+.color-palette > summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 11px;
+  border-radius: 11px;
+  cursor: pointer;
+  list-style: none;
+  font-variant-numeric: tabular-nums;
+}
+.color-palette > summary::-webkit-details-marker {
+  display: none;
+}
+.color-palette > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.color-palette > summary > svg {
+  margin-left: auto;
+  transition: transform 160ms var(--motion-ease);
+}
+.color-palette[open] > summary > svg {
+  transform: rotate(180deg);
+}
+.color-sample {
+  display: inline-block;
+  flex: 0 0 23px;
+  height: 23px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.color-palette-editor {
+  display: grid;
+  gap: 11px;
+  padding: 10px 11px 12px;
+  border-top: 1px solid var(--line);
+  animation: kxl-content-enter 160ms var(--motion-ease);
+}
+.color-palette-editor > label {
+  display: grid;
+  grid-template-columns: 2.5em minmax(0, 1fr) 3em;
+  align-items: center;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.color-palette-editor > label > span:last-child {
+  text-align: right;
+}
+.app .color-range {
+  width: 100%;
+  height: 12px;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  appearance: none;
+  cursor: pointer;
+}
+.color-range.hue {
+  background: linear-gradient(
+    to right,
+    #f00,
+    #ff0,
+    #0f0,
+    #0ff,
+    #00f,
+    #f0f,
+    #f00
+  );
+}
+.color-range.saturation {
+  background: linear-gradient(
+    to right,
+    #808080,
+    hsl(var(--palette-hue) 100% 50%)
+  );
+}
+.color-range.lightness {
+  background: linear-gradient(
+    to right,
+    #000,
+    hsl(var(--palette-hue) 100% 50%),
+    #fff
+  );
+}
+.color-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--text);
+  border-radius: 50%;
+  background: var(--surface);
+}
+.color-palette-apply {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.app .settings-page .color-palette-apply .input {
+  flex: 1 1 6em;
+  min-width: 6em;
+  width: auto;
+}

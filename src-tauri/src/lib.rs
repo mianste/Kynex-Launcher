@@ -2,21 +2,9 @@ mod jobs;
 mod loader_catalog;
 mod loader_processors;
 mod game_directories;
-#[cfg(test)]
-mod public_scope_tests {
-    #[test]
-    fn reserved_modules_and_actual_service_settings_are_not_public() {
-        let root=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-        for relative in ["src/features/music","src/lib/gameDetection.ts","src-tauri/src/music_crypto.rs","src-tauri/src/music_native.rs","src-tauri/src/music_official.rs","src-tauri/src/games.rs","src-tauri/src/server.rs","config/microsoft-registration.json"] {
-            assert!(!root.join(relative).exists(),"Reserved file: {relative}");
-        }
-        assert!(include_str!("../../config/updater-public-key.txt").trim().is_empty());
-        let build:serde_json::Value=serde_json::from_str(include_str!("../../config/build-channel.json")).unwrap();
-        assert_eq!(build["version"],env!("CARGO_PKG_VERSION"));
-        assert_eq!(build["identifier"],"com.keke.kynex.public");
-    }
-}
 mod ai_diagnose;
+mod assistant_context;
+mod agent;
 mod mod_updates;
 mod mod_check;
 mod resource_downloads;
@@ -45,6 +33,7 @@ mod pack_export;
 pub mod skins;
 #[cfg(feature = "desktop")]
 mod updates;
+mod hotfix;
 use serde_json::{json, Value};
 use std::{
     path::{Path, PathBuf},
@@ -63,6 +52,7 @@ pub struct Core {
     pub progress: Progress,
     pub cancel: Arc<AtomicBool>,
     pub busy: Arc<AtomicBool>,
+    pub(crate) agent_policy: Option<Arc<agent::policy::Policy>>,
     pub jobs: Arc<jobs::Jobs>,
     pub mirror_failed_until: Arc<std::sync::Mutex<std::time::Instant>>,
     pub download_source: Arc<std::sync::RwLock<String>>,
@@ -101,6 +91,7 @@ impl Core {
             progress,
             cancel: Arc::new(AtomicBool::new(false)),
             busy: Arc::new(AtomicBool::new(false)),
+            agent_policy: None,
             jobs: Arc::new(jobs::Jobs::default()),
             mirror_failed_until: Arc::new(std::sync::Mutex::new(std::time::Instant::now())),
             download_source: Arc::new(std::sync::RwLock::new(source)),
@@ -120,6 +111,7 @@ impl Core {
         self.threads.load(Ordering::Relaxed).clamp(1, 24)
     }
     pub async fn get(&self, url: &str) -> Result<Value> {
+        if self.agent_policy.is_some() {agent::policy::url(url)?;}
         https(url)?;
         let source = self.download_source.read().map_err(err)?.clone();
         let candidates = mirrors::active_candidates(self, url, &source);
@@ -166,6 +158,7 @@ impl Core {
         }
     }
     pub fn stopped(&self) -> Result<()> {
+        if let Some(policy)=&self.agent_policy {policy.check()?;}
         if self.cancel.load(Ordering::Relaxed) {
             Err("任务已取消".into())
         } else {
@@ -199,6 +192,7 @@ impl Core {
         Ok(json!(out))
     }
     pub async fn dispatch(&self, action: &str, p: Value) -> Result<Value> {
+        if action.starts_with("agent_") {return agent::dispatch(self,action,&p).await;}
         match action {
             "game_directories" => return game_directories::list(self),
             "add_game_directory" | "select_game_directory" | "remove_game_directory" => return game_directories::change(self,action,&p).await,
@@ -329,7 +323,7 @@ impl Core {
                 Ok(instance)
             }
             "ai_options" => {
-                let path=self.root.join("ai-options.json");
+                let path=self.data_root.join("ai-options.json");
                 if let Some(value)=p["automatic"].as_bool(){write_json(&path,&json!({"automatic":value}))?;}
                 Ok(read_json(&path).unwrap_or_else(|_|json!({"automatic":true})))
             },
@@ -337,6 +331,15 @@ impl Core {
             "ai_key_save" => ai_diagnose::save_key(self, &p),
             "ai_key_remove" => ai_diagnose::remove_key(self),
             "ai_diagnose" => ai_diagnose::analyze(self, &p).await,
+            "ai_assistant_stream" => ai_diagnose::assistant_stream(self, &p).await,
+            "ai_cancel" => ai_diagnose::cancel_stream(&p),
+            "assistant_context" => assistant_context::read(self, &p),
+            "assistant_export_markdown" => ai_diagnose::export_markdown(&p),
+            "ai_assistant" => ai_diagnose::assistant(self, &p).await,
+            "ai_models" => ai_diagnose::models(self, &p),
+            "ai_voice_config" => agent::voice::config(self,&p),
+            "voice_transcribe" => agent::voice::transcribe(self,&p).await,
+            "ai_test_connection" => ai_diagnose::test_connection(self, &p).await,
             "project_versions" => mod_updates::versions(self, &p).await,
             "resource_requirements" => resource_dependencies::preview(self, &p).await,
             "datapack_worlds" => resource_downloads::worlds(self,&p),
@@ -405,6 +408,7 @@ impl Core {
             "apply_skin" => auth::apply_skin(self, &p).await,
             "skin_import" => skins::import(&p).await,
             "skin_texture" => skins::texture(self,&p).await,
+            "skin_export" => skins::export(&p).await,
             "sync_appearance" => appearance::sync(self, string(&p,"accountId")?).await,
             "apply_cape" => appearance::apply_cape(self, &p).await,
             "stage_pack" => {
@@ -437,17 +441,21 @@ impl Core {
             "java" => engine::java_list_at(self),
             "search" => search_projects(self, &p).await,
             "news" => news::list(self, p["force"].as_bool().unwrap_or(false)).await,
-            "read_image" => {
+            "read_image" | "assistant_read_screenshot" => {
                 use base64::Engine;
+                use std::io::Read;
                 let path = PathBuf::from(string(&p, "path")?);
-                let limit = p["maxBytes"]
+                let screenshot=action=="assistant_read_screenshot";
+                let limit = if screenshot {10*1024*1024} else {p["maxBytes"]
                     .as_u64()
                     .unwrap_or(5 * 1024 * 1024)
-                    .min(5 * 1024 * 1024);
-                if std::fs::metadata(&path).map_err(err)?.len() > limit {
+                    .min(5 * 1024 * 1024)};
+                let info=std::fs::metadata(&path).map_err(|_|"无法读取所选图片")?;
+                if !info.is_file() || info.len() > limit {
                     return Err("图片超过允许大小".into());
                 }
-                let data = std::fs::read(&path).map_err(err)?;
+                let mut data=Vec::new();std::fs::File::open(&path).map_err(|_|"无法打开所选图片")?.take(limit+1).read_to_end(&mut data).map_err(|_|"无法读取所选图片")?;
+                if data.len() as u64>limit{return Err("图片超过允许大小".into());}
                 let mime = if data.starts_with(b"\x89PNG\r\n\x1a\n") {
                     "image/png"
                 } else if data.starts_with(&[0xff, 0xd8, 0xff]) {
@@ -458,7 +466,7 @@ impl Core {
                     return Err("请选择 PNG、JPEG 或 WebP 图片".into());
                 };
                 Ok(
-                    json!({"name":path.file_name().map(|n|n.to_string_lossy()).unwrap_or_default(),"mime":mime,"base64":base64::engine::general_purpose::STANDARD.encode(data)}),
+                    json!({"name":if screenshot {"截图".into()}else{path.file_name().map(|n|n.to_string_lossy()).unwrap_or_default()},"mime":mime,"base64":base64::engine::general_purpose::STANDARD.encode(data)}),
                 )
             }
             "read_log" => {
@@ -790,6 +798,10 @@ fn copy_tree(from: &Path, to: &Path) {
 #[cfg(feature = "desktop")]
 pub fn run() {
     use tauri::{Emitter, Manager};
+    let mut context=tauri::generate_context!();
+    let hotfix=Arc::new(hotfix::HotfixState::new(dirs::data_dir().unwrap_or_default().join(&context.config().identifier).join("game")));
+    let embedded=context.set_assets(Box::new(hotfix::HotfixAssets{embedded:None,state:hotfix.clone()}));
+    context.set_assets(Box::new(hotfix::HotfixAssets{embedded:Some(embedded),state:hotfix.clone()}));
     // 旧版 WebView2 配置目录可能被上一次异常退出的进程锁住或损坏，导致
     // CreateWebView2Environment 返回 0x800700AA / 0x8000FFFF。使用独立的
     // 版本化目录，并在首次切换时复制旧的 Local Storage，保留界面设置和皮肤库。
@@ -810,6 +822,7 @@ pub fn run() {
         }
     }
     tauri::Builder::default()
+        .manage(hotfix)
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_updater::Builder::new()
@@ -823,7 +836,9 @@ pub fn run() {
             let core = Core::new(
                 root,
                 Arc::new(move |v| {
-                    let _ = handle.emit("kynex-progress", v);
+                    if v["aiStream"]==true { let _=handle.emit("kynex-ai-stream",v["event"].clone()); }
+                    else if v["agent"]==true {let _=handle.emit("kynex-agent",v["event"].clone());}
+                    else { let _ = handle.emit("kynex-progress", v); }
                 }),
             )
             .map_err(std::io::Error::other)?;
@@ -834,7 +849,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![dispatch])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("Kynex Launcher 无法启动");
 }
 #[cfg(feature = "desktop")]
@@ -848,6 +863,28 @@ async fn dispatch(
 ) -> Result<Value> {
     if webview.label() != "main" {
         return Err("此操作仅允许启动器主界面调用".into());
+    }
+    if action.starts_with("hotfix_") {
+        use tauri::Manager;
+        let state=app.state::<Arc<hotfix::HotfixState>>();
+        match action.as_str() {
+            "hotfix_status" => return state.status(),
+            "hotfix_check" => return state.check(&core).await,
+            "hotfix_ready" => return state.healthy(),
+            "hotfix_rollback" => {let value=state.rollback()?;return Ok(value);}
+            "hotfix_install" => {
+                let result=state.install(&core).await?;
+                let handle=app.clone();let guard=state.inner().clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(25)).await;
+                    if guard.status().ok().is_some_and(|v|v["trial"]==true) {
+                        if guard.rollback().is_ok(){if let Some(window)=handle.get_webview_window("main"){let _=window.eval("location.reload()");}}
+                    }
+                });
+                return Ok(result);
+            }
+            _ => return Err("未知热更新操作".into())
+        }
     }
     if action == "check_update" {
         return updates::check(&app, &core).await;

@@ -12,7 +12,12 @@ import {
 } from "../../lib/release";
 import { useStore } from "../../store";
 
+import { Onboarding, GUIDE_KEY } from "../assistant/Onboarding";
+
 export function ReleaseNotices({ ready }: { ready: boolean }) {
+  const [guide, setGuide] = useState(false);
+  const [guidePage, setGuidePage] = useState("home");
+  const [guideSection, setGuideSection] = useState<string | undefined>();
   const [log, setLog] = useState(false);
   const [update, setUpdate] = useState<AvailableUpdate | null>(null);
   const [checking, setChecking] = useState(false);
@@ -78,12 +83,19 @@ export function ReleaseNotices({ ready }: { ready: boolean }) {
   }, [ready, check]);
   useEffect(() => {
     const openLog = () => setLog(true);
+    const openGuide = (e: Event) => {
+      setGuidePage((e as CustomEvent).detail?.page || "home");
+      setGuideSection((e as CustomEvent).detail?.section);
+      setGuide(true);
+    };
+    window.addEventListener("kynex-open-guide", openGuide);
     const manualCheck = () => {
       void check(true);
     };
     window.addEventListener("kynex-open-changelog", openLog);
     window.addEventListener("kynex-check-update", manualCheck);
     return () => {
+      window.removeEventListener("kynex-open-guide", openGuide);
       window.removeEventListener("kynex-open-changelog", openLog);
       window.removeEventListener("kynex-check-update", manualCheck);
     };
@@ -111,6 +123,10 @@ export function ReleaseNotices({ ready }: { ready: boolean }) {
   const closeLog = () => {
     localStorage.setItem(RELEASE_SEEN_KEY, RELEASE.version);
     setLog(false);
+    setGuidePage("home");
+    setGuideSection(undefined);
+    // The tour takes priority even while an update check is pending.
+    if (localStorage.getItem(GUIDE_KEY) !== "done") setGuide(true);
   };
   async function install() {
     setInstalling(true);
@@ -123,7 +139,14 @@ export function ReleaseNotices({ ready }: { ready: boolean }) {
     }
   }
   useEffect(() => {
-    if (!update || log || modal) return;
+    if (
+      !update ||
+      log ||
+      guide ||
+      modal ||
+      localStorage.getItem(GUIDE_KEY) !== "done"
+    )
+      return;
     let seen: string[] = [];
     try {
       const value = JSON.parse(localStorage.getItem(promptKey) || "[]");
@@ -142,10 +165,23 @@ export function ReleaseNotices({ ready }: { ready: boolean }) {
       autoStarted.current = update.version;
       void install();
     }
-  }, [update, log, modal, promptKey]);
+  }, [update, log, guide, modal, promptKey]);
+  useEffect(() => {
+    if (!ready || log || modal || !started.current) return;
+    // Don't pre-empt a changelog scheduled by the startup effect.
+    if (localStorage.getItem(RELEASE_SEEN_KEY) !== RELEASE.version) return;
+    if (localStorage.getItem(GUIDE_KEY) !== "done") setGuide(true);
+  }, [ready, log, update, checking, modal]);
   if (modal) return null;
   return (
     <>
+      {guide && !log && (
+        <Onboarding
+          initialPage={guidePage}
+          initialSection={guideSection}
+          close={() => setGuide(false)}
+        />
+      )}
       {checking && (
         <span className="release-checking" role="status">
           <RefreshCw size={13} className="spin" />
@@ -182,7 +218,7 @@ export function ReleaseNotices({ ready }: { ready: boolean }) {
           </ul>
         </Modal>
       )}
-      {!log && update && (
+      {!log && !guide && update && (
         <Modal
           title="发现新版本"
           onClose={() => {

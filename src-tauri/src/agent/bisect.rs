@@ -1,0 +1,19 @@
+use crate::*;
+use super::{policy,snapshot};
+use std::{pin::Pin,future::Future};
+pub trait Launcher {fn check<'a>(&'a mut self,enabled:&'a[String])->Pin<Box<dyn Future<Output=Result<bool>>+Send+'a>>;}
+pub async fn find<L:Launcher>(launcher:&mut L,mut candidates:Vec<String>)->Result<(Vec<String>,usize)>{let mut attempts=0;while candidates.len()>1&&attempts<8{let split=candidates.len().div_ceil(2);let half=candidates[..split].to_vec();let passed=launcher.check(&half).await?;attempts+=1;candidates=if passed{candidates[split..].to_vec()}else{half};}Ok((candidates,attempts))}
+struct Probe<'a>{core:&'a Core,id:&'a str,account:&'a str,settings:&'a Value,files:Vec<String>,attempts:usize}
+fn switch(root:&Path,all:&[String],enabled:&[String])->Result<()>{for name in all{let path=policy::under(root,&format!("mods/{name}"))?;let disabled=policy::under(root,&format!("mods/{name}.disabled"))?;if enabled.contains(name){if disabled.exists(){std::fs::rename(disabled,path).map_err(err)?;}}else if path.exists(){std::fs::rename(path,disabled).map_err(err)?;}}Ok(())}
+impl Launcher for Probe<'_>{fn check<'a>(&'a mut self,enabled:&'a[String])->Pin<Box<dyn Future<Output=Result<bool>>+Send+'a>>{Box::pin(async move{self.core.stopped()?;self.attempts+=1;if self.attempts>8{return Err("二分达到 8 次启动预算，已停止。".into());}(self.core.progress)(json!({"stage":format!("排查验证 第 {}/8 次",self.attempts),"done":self.attempts-1,"total":8}));switch(&self.core.instance(self.id)?,&self.files,enabled)?;let result=tokio::time::timeout(std::time::Duration::from_secs(90),super::verify::run(self.core,self.id,self.account,self.settings)).await.map_err(|_|"二分单次启动超过 90 秒")?;match result{Ok(_)=>Ok(true),Err(e)=>{if super::repair::classify(&e)==super::repair::Failure::MissingDependency{return Err("此分组缺少模组前置，无法据此认定冲突模组，已停止并恢复。".into());}Ok(false)}}})}}
+pub async fn run(core:&Core,id:&str,account:&str,settings:&Value,bisect:bool,confirmed:bool)->Result<Value>{
+ if !confirmed{return Err("安全模式/二分需要单独确认；二分可能启动 5–8 次，约 10–15 分钟。".into());}let root=core.instance(id)?;let files:Vec<_>=std::fs::read_dir(policy::under(&root,"mods")?).map_err(err)?.flatten().filter(|e|e.file_type().is_ok_and(|t|t.is_file())&&e.path().extension().is_some_and(|s|s=="jar")).map(|e|e.file_name().to_string_lossy().into_owned()).collect();if files.len()>80{return Err("二分模组数量超过 80 个预算，请先分组。".into());}
+ let sid=snapshot::create(core,id)?;let mut probe=Probe{core,id,account,settings,files:files.clone(),attempts:0};let result=tokio::time::timeout(std::time::Duration::from_secs(15*60),async{let base=probe.check(&[]).await?;if !base{return Err("禁用模组后仍启动失败，原因可能在 Java、加载器或环境，请先处理基础问题。".into());}if !bisect{return Ok(json!({"safeModePassed":true,"restored":true,"snapshotId":sid}));}let (suspects,attempts)=find(&mut probe,files.clone()).await?;Ok(json!({"suspects":suspects,"attempts":attempts+1,"snapshotId":sid,"evidence":"禁用全部模组后通过；按分组启动结果缩小范围，不证明唯一根因。"}))}).await.unwrap_or_else(|_|Err("二分超过 15 分钟".into()));
+ let before=snapshot::restore(core,id,&sid)?;
+ if let Ok(v)=&result{if bisect{let suspects:Vec<String>=serde_json::from_value(v["suspects"].clone()).map_err(err)?;if suspects.len()==1{let enabled=files.iter().filter(|n|!suspects.contains(n)).cloned().collect::<Vec<_>>();switch(&root,&files,&enabled)?;}}}
+ result.map(|mut v|{v["restoreSnapshotId"]=json!(before);v})
+}
+#[cfg(test)]mod tests{use super::*;
+ struct Mock{calls:usize}impl Launcher for Mock{fn check<'a>(&'a mut self,enabled:&'a[String])->Pin<Box<dyn Future<Output=Result<bool>>+Send+'a>>{self.calls+=1;Box::pin(async move{Ok(!enabled.iter().any(|s|s=="bad"))})}}
+ #[tokio::test]async fn bounded_injected_launcher(){let mut mock=Mock{calls:0};let (result,count)=find(&mut mock,vec!["a".into(),"bad".into(),"c".into(),"d".into()]).await.unwrap();assert_eq!(result,vec!["bad"]);assert!(count<=8);assert_eq!(count,mock.calls);}
+}

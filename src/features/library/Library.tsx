@@ -1,3 +1,4 @@
+import { useGuideSection, isGuideActive } from "../../lib/guideNavigation";
 import { InstanceIcon } from "../../components/ui/LoaderIcon";
 import { GameDirectoryBar } from "./GameDirectoryBar";
 import { ResourceDeleteDialog, type DeleteRequest } from "./ResourceDeleteDialog";
@@ -62,6 +63,7 @@ export function Library() {
   const s = useStore();
   const [q, Q] = useState("");
   const [type, T] = useState("全部");
+  useGuideSection("library", T);
   const [worlds, W] = useState<
     { name: string; id: string; instance: string; version: string }[]
   >([]);
@@ -97,6 +99,7 @@ export function Library() {
       <GameDirectoryBar />
       <div className="page-head">
         <div className="actions">
+          <Button onClick={() => s.setPage("workshop")}>AI 整合包工坊</Button>
           <SearchInput
             value={q}
             onChange={Q}
@@ -109,7 +112,7 @@ export function Library() {
           </Button>
         </div>
       </div>
-      <div className="chips">
+      <div className="chips" data-guide="library-categories">
         {["全部", "实例", "存档"].map((t) => (
           <Chip key={t} active={t === type} onClick={() => T(t)}>
             {t}
@@ -251,6 +254,7 @@ export function InstanceDetail() {
   const s = useStore();
   const i = s.instances.find((i) => i.id === s.selected);
   const [tab, T] = useState("概览");
+  useGuideSection("instance", T);
   const [, NamesReady] = useState(0);
   useEffect(() => {
     let live = true;
@@ -433,7 +437,7 @@ export function InstanceDetail() {
     }
   }, [i?.id, tab, refreshResources]);
   useEffect(() => {
-    if (!desktop || !i || tab !== "Mod" || ensuredLoaders.current.has(i.id))
+    if (isGuideActive() || !desktop || !i || tab !== "Mod" || ensuredLoaders.current.has(i.id))
       return;
     ensuredLoaders.current.add(i.id);
     void api<{
@@ -826,7 +830,6 @@ export function InstanceDetail() {
           "存档",
           "光影",
           "数据包",
-          "服务器",
           "设置",
         ]}
         value={tab}
@@ -855,9 +858,9 @@ export function InstanceDetail() {
             <p>每个实例都有自己的模组、配置与世界。</p>
             <div className="stack">
               <Button onClick={() => s.show("export", i.id)}>导出整合包</Button>
-              <Button onClick={() => T("存档")}>一键读档</Button>
-              <Button onClick={() => s.setPage("diagnose")}>
-                诊断游戏日志
+              <Button onClick={() => T("存档")}>管理存档</Button>
+              <Button onClick={() => window.dispatchEvent(new Event("kynex-open-assistant"))}>
+                AI 助手 / 日志分析
               </Button>
 
             </div>
@@ -871,15 +874,6 @@ export function InstanceDetail() {
             编辑版本设置
           </Button>
         </Card>
-      ) : tab === "服务器" ? (
-        <Empty
-          title="连接你的服务器"
-          detail="支持域名、IPv4、IPv6 与 SRV 解析。"
-        >
-          <Button primary onClick={() => s.show("server")}>
-            输入服务器地址
-          </Button>
-        </Empty>
       ) : (
         <div
           className={`resource-dropzone ${managed ? "pcl-resource-page" : ""} ${selectedResources.length ? "has-selection" : ""} ${dragging ? "dragging" : ""}`}

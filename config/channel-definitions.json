@@ -1,12 +1,12 @@
 {
   "stable": {
-    "version": "1.3.3",
-    "displayVersion": "v1.3.3",
-    "label": "公开构建 v1.3.3",
+    "version": "1.4.1",
+    "displayVersion": "v1.4.1",
+    "label": "公开构建 v1.4.1",
     "productName": "Kynex Launcher Public",
     "identifier": "com.keke.kynex.public",
     "mainBinaryName": "Kynex Launcher Public",
-    "releaseTag": "v1.3.3"
+    "releaseTag": "v1.4.1-source"
   },
   "beta": {
     "version": "1.3.0-beta.1.3.0",

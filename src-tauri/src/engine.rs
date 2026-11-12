@@ -180,6 +180,19 @@ async fn hash_prefix(path: &Path) -> Result<(Sha1, sha2::Sha256)> {
 }
 
 pub async fn download(core: &Core, url: &str, path: &Path, hash: &str) -> Result<()> {
+    let agent_hash;
+    let hash=if core.agent_policy.is_some(){
+        crate::agent::policy::absolute(&core.root,path)?;
+        if !url.is_empty(){crate::agent::policy::url(url)?;}
+        if hash.is_empty(){
+            if url.is_empty(){return Err("工坊下载缺少哈希校验".into());}
+            let response=core.http.get(format!("{url}.sha1")).send().await.map_err(|_|"无法获取官方文件校验值")?.error_for_status().map_err(|_|"官方文件未提供校验值，工坊已停止")?;
+            let text=response.text().await.map_err(err)?;
+            agent_hash=text.split_whitespace().next().unwrap_or("").to_owned();
+            if agent_hash.len()!=40||!agent_hash.bytes().all(|b|b.is_ascii_hexdigit()){return Err("官方文件校验值无效".into());}
+            agent_hash.as_str()
+        }else{hash}
+    }else{hash};
     // Forge's installer extracts bundled Maven artifacts and records an empty
     // URL for them. They are local-only files, verified by the supplied hash.
     // Continue rejecting non-HTTPS network URLs even when a cache file exists.
@@ -213,11 +226,13 @@ pub async fn download(core: &Core, url: &str, path: &Path, hash: &str) -> Result
     let mut last = String::new();
     let source = core.download_source.read().map_err(err)?.clone();
     let candidates = crate::mirrors::active_candidates(core, url, &source);
+    let candidates=if core.agent_policy.is_some(){let mut rows=vec![url.to_string()];if let Some(other)=candidates.into_iter().find(|v|v!=url){rows.push(other);}rows}else{candidates};
     let pack_progress = path.starts_with(core.root.join("imports"));
     let client_progress = path.file_name().and_then(|v| v.to_str()) == Some("client.jar") || pack_progress;
-    for attempt in 0..(candidates.len() * 2).max(3) {
+    for attempt in 0..if core.agent_policy.is_some(){2}else{(candidates.len() * 2).max(3)} {
         core.stopped()?;
         let actual_url = &candidates[attempt % candidates.len()];
+        if core.agent_policy.is_some(){crate::agent::policy::url(actual_url)?;}
         let outcome = async {
             let mut request = core.http.get(actual_url);
             if crate::curseforge::is_cdn_url(actual_url) {
@@ -299,6 +314,7 @@ pub async fn download(core: &Core, url: &str, path: &Path, hash: &str) -> Result
                         break;
                     };
                     let b = b.map_err(err)?;
+                    if let Some(policy)=&core.agent_policy{policy.charge(b.len())?;}
                     received += b.len();
                     sha1.update(&b);
                     sha256.update(&b);
@@ -643,14 +659,16 @@ pub async fn install(core: &Core, p: &Value) -> Result<Value> {
     let game = string(p, "version")?;
     safe_name(game)?;
     let loader = p["loader"].as_str().unwrap_or("vanilla");
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = if core.agent_policy.is_some(){
+        let id=string(p,"agentInstanceId")?;uuid::Uuid::parse_str(id).map_err(|_|"工坊实例 ID 无效")?;id.to_owned()
+    }else{uuid::Uuid::new_v4().to_string()};
     let dir = core.instance(&id)?;
     let duplicate = core
         .instances()?
         .as_array()
         .unwrap()
         .iter()
-        .any(|v| v["name"] == name.as_str());
+        .any(|v| v["name"] == name.as_str() && v["id"] != id);
     // 重复安装同一个版本/整合包时自动加序号，而不是直接报“实例名已存在”。
     let name = if duplicate {
         unique_instance_name(core, &name)?
@@ -823,7 +841,7 @@ pub fn merge(mut base: Value, overlay: Value) -> Value {
     }
     base
 }
-async fn prepare_libraries(core: &Core, dir: &Path, version: &Value) -> Result<()> {
+pub(crate) async fn prepare_libraries(core: &Core, dir: &Path, version: &Value) -> Result<()> {
     let client = &version["downloads"]["client"];
     core.stage("准备游戏客户端", 0, 1);
     let hash = client["sha1"].as_str().unwrap_or("");
@@ -853,6 +871,9 @@ async fn prepare_libraries(core: &Core, dir: &Path, version: &Value) -> Result<(
             }
         }
     }
+    prepare_dependency_libraries(core,version).await
+}
+pub(crate) async fn prepare_dependency_libraries(core:&Core,version:&Value)->Result<()>{
     let mut files = vec![];
     for lib in version["libraries"]
         .as_array()
@@ -1272,7 +1293,7 @@ fn choose_java(core: &Core, version: &Value, settings: &Value) -> Result<String>
 fn downloadable_java(required: u64) -> Option<u64> {
     [8, 17, 21, 25].into_iter().find(|major| *major >= required)
 }
-async fn ensure_java(core: &Core, version: &Value, settings: &Value) -> Result<String> {
+pub(crate) async fn ensure_java(core: &Core, version: &Value, settings: &Value) -> Result<String> {
     match choose_java(core, version, settings) {
         Ok(path) => Ok(path),
         Err(error) if error.contains("没有找到 Java") => {
@@ -1333,6 +1354,11 @@ fn legacy_arguments(template: &str, vars: &BTreeMap<String, String>) -> Result<V
         .map(|argument| substitute(&argument, vars)).collect())
 }
 pub async fn launch(core: &Core, p: &Value) -> Result<Value> {
+    let (child,logs)=launch_child(core,p).await?;
+    crate::ai_diagnose::watch(core,child,logs);
+    Ok(json!(true))
+}
+pub(crate) async fn launch_child(core:&Core,p:&Value)->Result<(std::process::Child,Vec<PathBuf>)>{
     core.stage("检查账号与 Java", 0, 4);
     let id = string(p, "id")?;
     let dir = core.instance(id)?;
@@ -1541,9 +1567,8 @@ pub async fn launch(core: &Core, p: &Value) -> Result<Value> {
         .map_err(err)?
         .as_secs()
         .to_string());
-    write_json(&dir.join("kxl.json"), &instance)?;
-    crate::ai_diagnose::watch(core, child, vec![logs.join("kxl-launch.log")]);
-    Ok(json!(true))
+    if let Err(error)=write_json(&dir.join("kxl.json"), &instance){let mut child=child;let _=child.kill();let _=child.wait();return Err(error);}
+    Ok((child,vec![logs.join("kxl-launch.log"),gamedir.join("logs/latest.log")]))
 }
 fn extract_natives(path: &Path, to: &Path) -> Result<()> {
     let mut zip = zip::ZipArchive::new(std::fs::File::open(path).map_err(err)?).map_err(err)?;

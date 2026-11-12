@@ -30,7 +30,7 @@
   --accent-low: color-mix(in srgb, var(--accent) 17%, transparent);
   --accent-mid: color-mix(in srgb, var(--accent) 44%, transparent);
   /* 界面不透明度：百分比，由设置页写入；100% 时面板完全不透明。 */
-  --ui-alpha: 76%;
+  --ui-alpha: 100%;
   --glass: color-mix(in srgb, var(--surface) var(--ui-alpha), transparent);
   --glass-thin: color-mix(in srgb, #0b0b0d calc(var(--ui-alpha) * 0.72), transparent);
   --glass-medium: color-mix(in srgb, #0b0b0d var(--ui-alpha), transparent);
@@ -82,4 +82,17 @@
   --skin-preview-line: #cdd2d7;
   --skin-preview-text: #3b444e;
   --skin-preview-muted: #78838d;
+}
+
+:root[data-custom-theme] {
+  --surface: var(--custom-surface);
+  --text: var(--custom-ink);
+  --bg: color-mix(in srgb, var(--surface) 92%, var(--text));
+  --elev: color-mix(in srgb, var(--surface) 95%, var(--text));
+  --line: color-mix(in srgb, var(--surface) 76%, var(--text));
+  --text2: color-mix(in srgb, var(--text) 93%, var(--surface));
+  --text3: var(--text2);
+  --reading-muted: var(--text2);
+  --glass-edge: var(--line);
+  --cyan: color-mix(in srgb, var(--accent) 75%, var(--text));
 }

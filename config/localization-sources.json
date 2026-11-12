@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "note": "按游戏版本和加载器匹配，验证资源包格式；未找到对应源时跳过。固定的 1.20.1 Forge 发布已核验官方 MD5 和 SHA-256。",
+  "sources": [
+    {
+      "minecraft": [
+        "1.20.1"
+      ],
+      "loaders": [
+        "forge"
+      ],
+      "downloadUrl": "https://github.com/CFPAOrg/Minecraft-Mod-Language-Package/releases/download/Snapshot-20261024064928/Minecraft-Mod-Language-Modpack-1-20.zip",
+      "sha256": "8dda759ba181903ff1bd35b832dac08c577d48cc31e9e9e9ecddaf5b799a9a29"
+    },
+    {
+      "minecraft": [
+        "1.21",
+        "1.21.1"
+      ],
+      "loaders": [
+        "fabric"
+      ],
+      "releasesApi": "https://api.github.com/repos/CFPAOrg/Minecraft-Mod-Language-Package/releases?per_page=30",
+      "assetName": "Minecraft-Mod-Language-Modpack-1-21-Fabric.zip"
+    },
+    {
+      "minecraft": [
+        "1.21",
+        "1.21.1"
+      ],
+      "loaders": [
+        "forge",
+        "neoforge"
+      ],
+      "releasesApi": "https://api.github.com/repos/CFPAOrg/Minecraft-Mod-Language-Package/releases?per_page=30",
+      "assetName": "Minecraft-Mod-Language-Modpack-1-21.zip"
+    },
+    {
+      "minecraft": [
+        "1.12.2"
+      ],
+      "loaders": [
+        "forge"
+      ],
+      "releasesApi": "https://api.github.com/repos/CFPAOrg/Minecraft-Mod-Language-Package/releases?per_page=30",
+      "assetName": "Minecraft-Mod-Language-Modpack-1-12.zip"
+    }
+  ]
+}

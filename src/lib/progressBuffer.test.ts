@@ -21,3 +21,16 @@ it("finishes immediately and cannot be overwritten by an older pending event", (
   expect(apply).toHaveBeenCalledTimes(1);
   buffer.dispose();
 });
+
+it("ignores version lookups without a download task ID", () => {
+  vi.useFakeTimers();
+  const apply = vi.fn();
+  const buffer = progressBuffer(apply);
+  buffer.push({ stage: "读取版本配置", done: 1, total: 2 });
+  buffer.push({ taskId: "install", stage: "准备游戏客户端", done: 0, total: 1 });
+  buffer.push({ taskId: "install", stage: "完成", done: 1, total: 1, finished: true });
+  expect(apply).toHaveBeenCalledExactlyOnceWith([
+    { taskId: "install", stage: "完成", done: 1, total: 1, finished: true },
+  ]);
+  buffer.dispose();
+});

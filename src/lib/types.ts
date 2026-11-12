@@ -3,6 +3,7 @@ export type Page =
   | "library"
   | "instance"
   | "discover"
+  | "workshop"
   | "news"
   | "account"
   | "skin"
@@ -85,7 +86,8 @@ export interface Settings extends InstanceSettings {
   wallpaper: string;
   /** 全局界面背景材质不透明度（0–100）；不改变文字与图标透明度。 */
   uiOpacity: number;
-  theme: "dark" | "light" | "system";
+  theme: "dark" | "light" | "system" | "custom";
+  customThemeColor: string;
   clientId: string;
   curseforgeKey: string;
   threads: number;

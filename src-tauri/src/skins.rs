@@ -91,6 +91,19 @@ fn validate_png(data: &[u8]) -> Result<()> {
     }
     Ok(())
 }
+pub async fn export(p: &Value) -> Result<Value> {
+    let data = crate::appearance::image_data(string(p, "texture")?, false)?;
+    if data.len() > MAX_BYTES { return Err("皮肤文件超过 5 MB".into()); }
+    // The destination comes from the user's native Save dialog. Never write
+    // network responses or arbitrary data: only validated PNG skin textures.
+    let path = std::path::PathBuf::from(string(p, "path")?);
+    if !path.is_absolute() { return Err("请选择有效的保存位置".into()); }
+    let path = if path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("png")) {
+        path
+    } else { return Err("请将皮肤保存为 .png 文件".into()); };
+    tokio::fs::write(&path, data).await.map_err(|e| format!("无法保存皮肤：{e}"))?;
+    Ok(json!(path.to_string_lossy()))
+}
 pub async fn texture(c: &Core, p: &Value) -> Result<Value> {
     use sha2::{Digest,Sha256};
     let url=public_url(string(p,"url")?)?;
@@ -190,6 +203,20 @@ pub async fn import(p: &Value) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn export_skin_roundtrip_and_reject_invalid_data() {
+        let path = std::env::temp_dir().join(format!("kynex-skin-export-{}.png", uuid::Uuid::new_v4()));
+        let original = include_bytes!("../../src/assets/skins/steve.png");
+        let texture = format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(original));
+        let result = export(&json!({"path":path,"texture":texture})).await.unwrap();
+        assert_eq!(result.as_str(), path.to_str());
+        assert_eq!(tokio::fs::read(&path).await.unwrap(), original);
+        assert!(export(&json!({"path":path,"texture":"data:image/png;base64,bm90LXBuZw=="})).await.is_err());
+        assert_eq!(tokio::fs::read(&path).await.unwrap(), original);
+        assert!(export(&json!({"path":path.with_extension("txt"),"texture":texture})).await.is_err());
+        assert!(export(&json!({"path":"relative.png","texture":texture})).await.is_err());
+        tokio::fs::remove_file(path).await.unwrap();
+    }
     #[test]
     fn public_images_only() {
         assert!(public_url("https://textures.minecraft.net/texture/a").is_ok());

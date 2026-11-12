@@ -1,0 +1,1 @@
+{"id":"server","name":"服务器","description":"优先通用性能模组，避免只适用客户端的画面组件。","minecraft":"1.20.1","loader":"fabric","memoryMb":6144,"modQueries":["Lithium","FerriteCore"],"options":{"language":"zh_cn","renderDistance":8}}

@@ -438,20 +438,21 @@
   width: 110px;
 }
 .wardrobe-strip {
+  --skin-tile-size: 104px;
   display: flex;
   gap: 12px;
   overflow-x: auto;
   padding: 1px 1px 10px;
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
-  min-height: 171px;
 }
 .wardrobe-card {
   position: relative;
-  flex: 0 0 112px;
+  flex: 0 0 var(--skin-tile-size);
+  height: var(--skin-tile-size);
   border: 1px solid var(--line);
   background: var(--card);
-  border-radius: 11px;
+  border-radius: 19px;
   overflow: hidden;
   transition:
     border-color 0.18s,
@@ -461,19 +462,21 @@
   border-color: var(--accent);
 }
 .wardrobe-card-select {
-  display: block;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: center;
   width: 100%;
   height: 100%;
-  padding: 0 0 10px;
+  padding: 7px 5px 9px;
   background: none;
   border: 0;
-  text-align: left;
+  text-align: center;
   color: var(--text);
 }
 .wardrobe-card-scene {
   position: relative;
   background: radial-gradient(ellipse at 50% 45%, #8aaf9e16, transparent 80%);
-  height: 115px;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -484,29 +487,30 @@
   image-rendering: pixelated;
   display: block;
 }
-.wardrobe-card strong,
-.wardrobe-card small {
+.wardrobe-card-scene > .wardrobe-sprite {
+  height: min(58px, 100%);
+  transition: transform 160ms var(--motion-ease);
+}
+.wardrobe-card-select:is(:hover, :focus-visible) .wardrobe-sprite {
+  transform: translateY(-2px);
+}
+.wardrobe-card-select:focus-visible { outline-offset: -3px; }
+.wardrobe-card strong {
   display: block;
-  padding: 0 11px;
+  padding: 0 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .wardrobe-card strong {
   font-size: 11px;
-  font-weight: 500;
-  margin-top: 6px;
-  max-width: 110px;
-}
-.wardrobe-card small {
-  font-size: 9px;
-  color: var(--muted);
-  margin-top: 4px;
+  font-weight: 550;
+  margin-top: 3px;
 }
 .wardrobe-wearing {
   position: absolute;
-  left: 6px;
-  top: 6px;
+  left: 0;
+  top: 1px;
   font-size: 8px;
   display: flex;
   align-items: center;
@@ -518,8 +522,8 @@
 }
 .wardrobe-edit {
   position: absolute;
-  right: 5px;
-  bottom: 6px;
+  right: 7px;
+  top: 7px;
   padding: 3px;
   border: 0;
   border-radius: 4px;
@@ -533,10 +537,10 @@
   opacity: 1;
 }
 .wardrobe-add {
-  flex: 0 0 91px;
-  min-height: 169px;
+  flex: 0 0 var(--skin-tile-size);
+  height: var(--skin-tile-size);
   border: 1px dashed var(--line);
-  border-radius: 11px;
+  border-radius: 19px;
   background: transparent;
   display: flex;
   align-items: center;
@@ -716,8 +720,8 @@
   .wardrobe-settings {
     padding-top: 13px;
   }
-  .wardrobe-card {
-    flex-basis: 100px;
+  .wardrobe-strip {
+    --skin-tile-size: 96px;
   }
   .wardrobe-page .page-head {
     margin-bottom: 16px;

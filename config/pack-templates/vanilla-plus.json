@@ -1,0 +1,1 @@
+{"id":"vanilla-plus","name":"原版增强","description":"保留原版玩法，改善性能和常用菜单体验。","minecraft":"1.20.1","loader":"fabric","memoryMb":4096,"modQueries":["Sodium","Lithium","Mod Menu"],"options":{"language":"zh_cn","renderDistance":10}}

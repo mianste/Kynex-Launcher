@@ -12,7 +12,7 @@
   .resource-filters, .native-login, .music-empty, .music-queue,
   .music-platform-grid > button, .music-platform-login, .music-new-playlist,
   .server-row, .add-account, .install-summary, .pack-summary,
-  .wardrobe-studio, .wardrobe-inspector, .wardrobe-library,
+  .wardrobe-studio, .wardrobe-inspector,
   .wardrobe-card, .wardrobe-card-menu, .wardrobe-import,
   .wardrobe-stage-wrap, .wardrobe-camera, .wardrobe-front-back button,
   .wardrobe-drop-overlay, .skin-import-panel, .skin-import-zone,
@@ -84,11 +84,11 @@
   .choice-hint, .choice-option-hint) { font-size: 12px; line-height: 1.5; }
 .app .home-header :is(h1, p) { color: var(--text); text-shadow: none; }
 
-/* Menu and option colours follow the same opacity as the rest of the UI. */
+/* The menu uses the theme opacity. Keep its surface stable while it opens. */
 :root[data-theme] .app .choice-popover[role="listbox"] {
   background: var(--glass);
-  backdrop-filter: blur(var(--ui-blur));
-  -webkit-backdrop-filter: blur(var(--ui-blur));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   isolation: isolate;
 }
 
@@ -118,3 +118,65 @@
   .news-feed-status, .skin-import-zone small, .wardrobe-stage-top small,
   .wardrobe-stage-bottom, .wardrobe-setting-row small, .wardrobe-apply > p,
   .wardrobe-setting-panel > small, .wardrobe-import-result > div > small) { display: none; }
+
+/* Keep the input's native keyboard, label and form behavior. */
+.app :where(input[type="checkbox"], input[type="radio"]) {
+  appearance: none;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, currentColor 65%, transparent);
+  border-radius: 4px;
+  background: var(--glass);
+  color: var(--adaptive-ink, var(--text));
+  vertical-align: -0.18em;
+  cursor: pointer;
+  transition: background-color var(--motion-feedback), border-color var(--motion-feedback);
+}
+.app :where(input[type="radio"]) { border-radius: 50%; }
+.app :where(input[type="checkbox"], input[type="radio"]):is(:checked, :indeterminate) {
+  border-color: var(--accent);
+  background: var(--control-selected);
+}
+.app :where(input[type="checkbox"], input[type="radio"]):enabled:hover {
+  border-color: var(--accent);
+}
+.app :where(input[type="checkbox"], input[type="radio"]):disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.app :where(input[type="checkbox"]):checked::before {
+  content: "";
+  width: 5px;
+  height: 8px;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: translateY(-1px) rotate(45deg);
+}
+.app :where(input[type="checkbox"]):indeterminate::before {
+  content: "";
+  width: 8px;
+  height: 2px;
+  border: 0;
+  border-radius: 1px;
+  background: currentColor;
+  transform: none;
+}
+.app :where(input[type="radio"]):checked::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+@media (forced-colors: active) {
+  .app :where(input[type="checkbox"], input[type="radio"]) {
+    appearance: auto;
+  }
+  .app :where(input[type="checkbox"], input[type="radio"])::before { content: none; }
+}

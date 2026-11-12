@@ -635,7 +635,7 @@ pub async fn install_modpack(core: &Core, p: &Value) -> Result<Value> {
     )
     .await;
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    let mut instance=result?;let source=json!({"provider":"curseforge","projectId":project.to_string(),"versionId":file["id"].as_u64().map(|v|v.to_string()),"name":instance["name"],"versionNumber":file["displayName"],"installedAt":crate::agent::policy::now()});crate::agent::update::record_source(core,&mut instance,source)?;Ok(instance)
 }
 
 #[cfg(test)]

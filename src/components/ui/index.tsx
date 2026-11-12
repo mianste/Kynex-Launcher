@@ -238,6 +238,7 @@ export function Tabs({
         <button
           key={t}
           role="tab"
+            data-guide-tab={t}
           aria-selected={t === value}
           className={t === value ? "on" : ""}
           onClick={() => onChange(t)}

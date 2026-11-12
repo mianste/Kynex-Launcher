@@ -1,0 +1,1 @@
+{"id":"technology","name":"科技","description":"以机械自动化为核心，补充配方查询和仓储。","minecraft":"1.20.1","loader":"forge","memoryMb":6144,"modQueries":["Create","Just Enough Items","Storage Drawers"],"options":{"language":"zh_cn","renderDistance":8}}

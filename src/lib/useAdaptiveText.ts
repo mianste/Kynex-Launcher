@@ -18,6 +18,7 @@ export function useAdaptiveText(
 ) {
   const cachedImage = useRef<{ url: string; image: HTMLImageElement }>();
   const inkDecisions = useRef(new Map<HTMLElement, InkDecision>());
+  const lastAppearance = useRef("");
   useLayoutEffect(() => {
     const app = root.current;
     if (!app) return;
@@ -37,6 +38,13 @@ export function useAdaptiveText(
     colorCanvas.width = colorCanvas.height = 1;
     const colors = colorCanvas.getContext("2d", { willReadFrequently: true })!;
     const decisions = inkDecisions.current;
+    // Explicit appearance changes should update ink immediately, without the
+    // hysteresis used to stabilise text over a moving wallpaper.
+    const appearance = JSON.stringify([wallpaper, opacity, theme]);
+    if (lastAppearance.current !== appearance) {
+      decisions.clear();
+      lastAppearance.current = appearance;
+    }
     let settlingTimer = 0;
 
     const background = app.querySelector<HTMLElement>(".wallpaper");

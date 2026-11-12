@@ -1,4 +1,5 @@
 import { ChoiceSelect } from "../../components/ui/ChoiceSelect";
+import { useGuideSection } from "../../lib/guideNavigation";
 import { useEffect, useRef, useState } from "react";
 import {
   Download as DownloadIcon,
@@ -100,6 +101,7 @@ export function Download() {
     };
   }, []);
   const [kind, K] = useState("游戏本体");
+  useGuideSection("discover", section => { if(categories.includes(section)) K(section); });
   useEffect(() => {
     if (desktop && kind === "游戏本体")
       void api("warm_loader_catalogs").catch(() => {});
@@ -408,7 +410,7 @@ export function Download() {
           </Button>
         </div>
       </div>
-      <div className="chips">
+      <div className="chips" data-guide="download-categories">
         {categories.map((t) => (
           <Chip key={t} active={kind === t} onClick={() => K(t)}>
             {t}

@@ -1,5 +1,5 @@
 import { InstanceIcon } from "../../components/ui/LoaderIcon";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState } from "react";
 import {
   ArrowUpRight,
   Play,
@@ -14,7 +14,6 @@ import {
   Castle,
   Swords,
   Map,
-  Music2,
   RefreshCw,
 } from "lucide-react";
 import { useStore, launch, guarded } from "../../store";
@@ -152,7 +151,7 @@ export function Home() {
             </div>
             </div>
             <div className="launch-buttons">
-              <Button primary busy={s.busy} onClick={() => void launch()}>
+              <Button data-guide="launch" primary busy={s.busy} onClick={() => void launch()}>
                 <Play size={19} />
                 {s.busy ? "正在准备…" : "进入游戏"}
               </Button>

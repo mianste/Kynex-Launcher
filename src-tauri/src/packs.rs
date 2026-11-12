@@ -37,7 +37,7 @@ pub async fn install_modrinth(core: &Core, p: &Value) -> Result<Value> {
     let result = async {
         core.stage("下载整合包文件", 0, 1);
         crate::engine::download(core, string(file, "url")?, &path, hash).await?;
-        import(core, &json!({"path":path,"name":p["name"],"settings":p["settings"],"project":p["project"],"source":"modrinth","iconUrl":p["iconUrl"]})).await
+        let mut instance=import(core, &json!({"path":path,"name":p["name"],"settings":p["settings"],"project":p["project"],"source":"modrinth","iconUrl":p["iconUrl"]})).await?;let source=json!({"provider":"modrinth","projectId":version["project_id"],"versionId":version["id"],"name":instance["name"],"versionNumber":version["version_number"],"installedAt":crate::agent::policy::now()});crate::agent::update::record_source(core,&mut instance,source)?;Ok(instance)
     }.await;
     let _ = std::fs::remove_dir_all(&dir);
     result
@@ -504,6 +504,9 @@ pub async fn import(c: &Core, p: &Value) -> Result<Value> {
         let v = entry(&mut z, &format!("{base}kxl-pack.json"))?.ok_or("包清单缺失")?;
         install["loaderVersion"] = v["loaderVersion"].clone();
         install["optifineVersion"] = v["optifineVersion"].clone();
+    }
+    if c.agent_policy.is_some() {
+        install["agentInstanceId"] = json!(uuid::Uuid::new_v4().to_string());
     }
     let instance = crate::engine::install(c, &install).await?;
     let dir = c.instance(string(&instance, "id")?)?;

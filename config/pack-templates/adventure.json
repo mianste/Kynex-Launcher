@@ -1,0 +1,1 @@
+{"id":"adventure","name":"轻量冒险","description":"轻量探索与寻路，不堆叠大量重复地形模组。","minecraft":"1.20.1","loader":"fabric","memoryMb":4096,"modQueries":["Explorer's Compass","Xaero's World Map"],"options":{"language":"zh_cn","renderDistance":10}}

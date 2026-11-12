@@ -2,14 +2,16 @@ import { DownloadTasks } from "../features/download/DownloadTasks";
 import { progressBuffer } from "../lib/progressBuffer";
 import { useModUpdateState, type ModScanEvent } from "../lib/modUpdateState";
 import { RELEASE } from "../lib/release";
-import { normalizeUiOpacity } from "../lib/appearance";
+import { colorInk, normalizeHexColor, normalizeUiOpacity } from "../lib/appearance";
 import { useAdaptiveText } from "../lib/useAdaptiveText";
 import { ReleaseNotices } from "../features/updates/ReleaseNotices";
+import { HotfixStartup } from "../features/updates/Hotfix";
 import {
   lazy,
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useState,
   useRef,
   type CSSProperties,
@@ -21,7 +23,6 @@ import {
   Download,
   UsersRound,
   Shirt,
-  Activity,
   Settings as SettingsIcon,
   HelpCircle,
   Minus,
@@ -30,6 +31,7 @@ import {
   RotateCw,
   PackagePlus,
   Newspaper,
+  Wrench,
 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Page } from "../lib/types";
@@ -44,11 +46,11 @@ const Skin = lazy(() =>
   import("../features/skin/Skin").then((module) => ({ default: module.Skin })),
 );
 import {
-  AutomaticDiagnosis,
   useDiagnosis,
   type DiagnosisEvent,
 } from "../features/diagnose/AiDiagnosis";
-import { Diagnose } from "../features/diagnose/Diagnose";
+import { Assistant } from "../features/assistant/Assistant";
+import { AgentPanel, useWorkshopEvents } from "../features/assistant/AgentPanel";
 import { Settings } from "../features/settings/Settings";
 import { Help } from "../features/help/Help";
 import { Modals } from "./Modals";
@@ -73,39 +75,73 @@ const navigation: { id: Page; label: string; icon: ReactNode }[] = [
   { id: "home", label: "启动", icon: <Rocket /> },
   { id: "library", label: "版本", icon: <Boxes /> },
   { id: "discover", label: "下载", icon: <Download /> },
+  { id: "workshop", label: "工坊", icon: <Wrench /> },
   { id: "news", label: "MC 新闻", icon: <Newspaper /> },
   { id: "account", label: "账号", icon: <UsersRound /> },
   { id: "skin", label: "皮肤", icon: <Shirt /> },
-  { id: "diagnose", label: "诊断", icon: <Activity /> },
   { id: "settings", label: "设置", icon: <SettingsIcon /> },
   { id: "help", label: "帮助", icon: <HelpCircle /> },
 ];
 export function App() {
   const s = useStore();
+  useWorkshopEvents();
   const [ready, R] = useState(false);
   const [splash, S] = useState(
     !new URLSearchParams(location.search).has("nosplash"),
   );
+  useEffect(() => { if (s.page === "diagnose") { s.setPage("home"); window.dispatchEvent(new Event("kynex-open-assistant")); } }, [s.page]);
   const [drag, D] = useState(false);
   const [tasksOpen, TasksOpen] = useState(false);
   const depth = useRef(0);
   const appRoot = useRef<HTMLElement>(null);
   useEffect(() => {
-    const update = () =>
-      appRoot.current?.style.setProperty(
-        "--corner-aa",
-        `${1.35 / Math.max(1, window.devicePixelRatio)}px`,
-      );
+    const update = () => {
+      const scale=Math.max(1,window.devicePixelRatio);
+      appRoot.current?.style.setProperty("--corner-aa",`${1.5/scale}px`);
+      appRoot.current?.style.setProperty("--window-edge-inset",`${Math.ceil((2/scale)*64)/64}px`);
+    };
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, []);
+  const customSurface = s.settings.theme === "custom" ? normalizeHexColor(s.settings.customThemeColor) ?? "#f7fafc" : undefined;
+  useLayoutEffect(() => {
+    const media = matchMedia("(prefers-color-scheme: light)");
+    const apply = () => {
+      const app = appRoot.current;
+      if (app) app.dataset.appearanceChanging = "true";
+      const root = document.documentElement;
+      const accent = normalizeHexColor(s.settings.accent) ?? "#3d7c88";
+      const ink = customSurface ? colorInk(customSurface) : undefined;
+      const theme = ink
+        ? ink === "#000000" ? "light" : "dark"
+        : s.settings.theme === "system" ? (media.matches ? "light" : "dark") : s.settings.theme;
+      root.dataset.theme = theme;
+      root.style.colorScheme = theme;
+      root.style.setProperty("--accent", accent);
+      root.style.setProperty("--on-accent", colorInk(accent));
+      root.toggleAttribute("data-custom-theme", !!customSurface);
+      if (customSurface && ink) {
+        root.style.setProperty("--custom-surface", customSurface);
+        root.style.setProperty("--custom-ink", ink);
+      } else {
+        root.style.removeProperty("--custom-surface");
+        root.style.removeProperty("--custom-ink");
+      }
+      requestAnimationFrame(() => {
+        if (app) delete app.dataset.appearanceChanging;
+      });
+    };
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, [customSurface, s.settings.theme, s.settings.accent]);
   useAdaptiveText(
     appRoot,
     s.settings.wallpaper,
     normalizeUiOpacity(s.settings.uiOpacity),
     s.page,
-    s.settings.theme,
+    customSurface ?? s.settings.theme,
   );
   const navRoot = useRef<HTMLElement>(null);
   useSelectionMotion(navRoot);
@@ -125,8 +161,12 @@ export function App() {
       async ({ getCurrentWebview }) => {
         const unlisten = await getCurrentWebview().onDragDropEvent((event) => {
           const payload = event.payload;
+          if (payload.type === "drop" && !window.dispatchEvent(new CustomEvent("kynex-assistant-native-drop", { detail: payload, cancelable: true }))) {
+            D(false);
+            return;
+          }
           const page = useStore.getState().page;
-          const delegated = ["instance", "skin", "diagnose"].includes(page);
+          const delegated = ["instance", "skin", "diagnose"].includes(page) || !!document.querySelector(".assistant-body .diagnose-layout");
           window.dispatchEvent(
             new CustomEvent("kynex-native-drag", { detail: payload }),
           );
@@ -160,7 +200,8 @@ export function App() {
       if (!live) return;
       const tasks = { ...useStore.getState().tasks };
       for (const task of events) {
-        const id = task.taskId || "legacy";
+        const id = task.taskId;
+        if (!id) continue;
         tasks[id] = { ...tasks[id], ...task };
         if (task.error) s.notify(task.error);
       }
@@ -227,44 +268,6 @@ export function App() {
       window.removeEventListener("hashchange", change);
     };
   }, []);
-  useEffect(() => {
-    document.documentElement.style.setProperty("--accent", s.settings.accent);
-    const hex = s.settings.accent.replace("#", "");
-    if (/^[0-9a-f]{6}$/i.test(hex)) {
-      const values = [0, 2, 4]
-        .map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255)
-        .map((value) =>
-          value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
-        );
-      const luminance =
-        values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722;
-      document.documentElement.style.setProperty(
-        "--on-accent",
-        luminance > 0.179 ? "#172a35" : "#ffffff",
-      );
-    }
-  }, [s.settings.accent]);
-  useEffect(() => {
-    const media = matchMedia("(prefers-color-scheme: light)");
-    const apply = () => {
-      const root = appRoot.current;
-      if (root) root.dataset.appearanceChanging = "true";
-      const theme =
-        s.settings.theme === "system"
-          ? media.matches
-            ? "light"
-            : "dark"
-          : s.settings.theme;
-      document.documentElement.dataset.theme = theme;
-      document.documentElement.style.colorScheme = theme;
-      requestAnimationFrame(() => {
-        if (root) delete root.dataset.appearanceChanging;
-      });
-    };
-    apply();
-    media.addEventListener("change", apply);
-    return () => media.removeEventListener("change", apply);
-  }, [s.settings.theme]);
   async function importPack() {
     const path = await pickFile([
       { name: "整合包", extensions: ["zip", "mrpack", "curseforge"] },
@@ -292,10 +295,11 @@ export function App() {
     library: <Library />,
     instance: <InstanceDetail />,
     discover: <Discover />,
+    workshop: <AgentPanel />,
     news: <News />,
     account: <Accounts />,
     skin: <Skin />,
-    diagnose: <Diagnose />,
+    diagnose: <Home />,
     settings: <Settings />,
     help: <Help />,
     components: <Components />,
@@ -411,7 +415,9 @@ export function App() {
           <button
             key={n.id}
             title={n.label}
-            aria-label={n.label}
+            data-guide={n.id}
+            aria-label={n.id === "workshop" ? "AI 整合包工坊" : n.label}
+            aria-current={(s.page === "instance" ? "library" : s.page) === n.id ? "page" : undefined}
             className={
               (s.page === "instance" ? "library" : s.page) === n.id ? "on" : ""
             }
@@ -478,9 +484,10 @@ export function App() {
         </div>
       )}
       <Modals />
-      <AutomaticDiagnosis />
+      <Assistant ready={ready && !splash} />
       <Toast />
       <ReleaseNotices ready={ready && !splash} />
+      <HotfixStartup ready={ready && !splash} />
       {splash && <Splash ready={ready} finish={finish} />}
     </main>
   );

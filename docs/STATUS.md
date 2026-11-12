@@ -1,7 +1,6 @@
-# v1.3.2 公开源码状态
+# v1.4.1 公开源码状态
 
-- 已同步最新的版本目录、资源、皮肤、透明主题、新闻和诊断代码。
-- 保留原有开源范围，不包含音乐、一键进服／进入存档、其他 Minecraft 游戏检测和启动模块。
-- 不包含实际服务 Key、Microsoft Client ID、私钥或用户账号资料。
-- 本机前端类型检查、40 项前端测试、128 项核心测试、发布构建和 Windows 桌面编译检查通过；12 项需要真实网络或交互的测试默认跳过。GitHub Actions 另行检查公开版本。
-- 图片使用示例数据，仅展示界面；完整发行版的安装验证与签名验证和公开源码测试分别进行。
+- 已同步 v1.4.1 的 AI 助手、独立整合包工坊、下载任务和汉化修复，以及新版使用引导。
+- 公开源码使用独立应用标识和数据目录。开源范围及服务配置要求见 [README](../README.md#开源范围)。
+- [Windows 检查](https://github.com/mianste/Kynex-Launcher/actions/workflows/windows.yml) 包括前端、Rust 核心和桌面构建。
+- 界面截图使用示例数据。截图说明见 [PREVIEW-NOTES.md](images/PREVIEW-NOTES.md)。

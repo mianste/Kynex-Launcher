@@ -6,7 +6,7 @@
 
 `pnpm dev` 仅打开网页预览，不能操作本机游戏；`pnpm tauri dev` 运行桌面开发版；`pnpm tauri build` 生成公开构建的安装器。公开构建使用独立名称和数据目录。
 
-微软登录通过 `KXL_MICROSOFT_CLIENT_ID` 或账号页登录配置提供自己的 Client ID；CurseForge 官方接口通过 `KXL_CURSEFORGE_API_KEY` 或本地配置提供 Key。源码不包含项目实际使用的服务配置。
+微软登录通过 `KXL_MICROSOFT_CLIENT_ID` 或账号页登录配置提供自己的 Client ID；CurseForge 官方接口通过 `KXL_CURSEFORGE_API_KEY` 或本地配置提供 Key。AI 对话和补译使用「AI 设置」中配置的模型，需要语音转写时也可在该页面配置语音接口。
 
 公开构建默认不启用自动更新。若需要更新，请自行生成和保存签名私钥，填写公钥与更新地址；私钥不要提交到仓库。
 

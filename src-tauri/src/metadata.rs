@@ -20,6 +20,7 @@ async fn fetch(core: &Core, urls: Vec<String>, hash: &str) -> Result<Vec<u8>> {
     let mut pending = FuturesUnordered::new();
     for (index, url) in urls.into_iter().enumerate() {
         pending.push(async move {
+            if core.agent_policy.is_some(){crate::agent::policy::url(&url)?;}
             tokio::time::sleep(Duration::from_millis(index as u64 * 400)).await;
             let response = core
                 .http
@@ -34,6 +35,7 @@ async fn fetch(core: &Core, urls: Vec<String>, hash: &str) -> Result<Vec<u8>> {
                 return Err("版本清单响应过大".to_string());
             }
             let bytes = response.bytes().await.map_err(err)?.to_vec();
+            if let Some(policy)=&core.agent_policy{policy.charge(bytes.len())?;}
             if bytes.len() > 16 * 1024 * 1024 || !hash_matches(&bytes, hash) {
                 return Err("版本清单校验失败".to_string());
             }

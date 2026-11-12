@@ -628,9 +628,6 @@ function VersionSettings({ id }: { id?: string }) {
       }
     >
       <SettingsFields value={value} change={V} allowCustom />
-      <div className="notice">
-        仅对此版本生效。更改目录后使用新位置的文件，原目录中的存档和模组会保留。
-      </div>
     </Modal>
   );
 }

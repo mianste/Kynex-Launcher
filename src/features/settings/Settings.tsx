@@ -1,3 +1,5 @@
+import { ColorPalette } from "./ColorPalette";
+import { SettingsAction } from "./SettingsAction";
 import { RELEASE } from "../../lib/release";
 import { normalizeUiOpacity } from "../../lib/appearance";
 import { useEffect, useRef, useState } from "react";
@@ -10,6 +12,7 @@ import {
   Moon,
   Palette,
   Rocket,
+  RotateCcw,
   Settings2,
   SlidersHorizontal,
   Sun,
@@ -39,6 +42,8 @@ import {
   pickVideoFile,
 } from "../../lib/bridge";
 import { DeepSeekSettings } from "../diagnose/AiDiagnosis";
+import { consumeAiSettings } from "../../lib/settingsNavigation";
+import { useGuideSection } from "../../lib/guideNavigation";
 
 type WeWallpaper = {
   id: string;
@@ -56,13 +61,45 @@ type WeScan = {
 };
 export function Settings() {
   const s = useStore();
-  const [category, C] = useState("启动");
+  const [category, C] = useState(() => (consumeAiSettings() ? "高级" : "启动"));
   const [q, Q] = useState("");
+  useGuideSection("settings", (section) => {
+    C(section);
+    Q("");
+  });
   const content = useRef<HTMLDivElement>(null);
   const nav = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const focusModel = () =>
+      requestAnimationFrame(() => {
+        document
+          .querySelector(".model-settings")
+          ?.scrollIntoView({ block: "start" });
+      });
+    const openModel = () => {
+      if (consumeAiSettings()) {
+        Q("");
+        C("高级");
+        focusModel();
+      }
+    };
+    if (category === "高级") focusModel();
+    window.addEventListener("kynex-open-ai-settings", openModel);
+    return () =>
+      window.removeEventListener("kynex-open-ai-settings", openModel);
+  }, []);
   useSelectionMotion(nav);
   useEffect(() => {
     content.current?.scrollTo({ top: 0 });
+    if (category !== "启动" || q) return;
+    const page = content.current?.closest<HTMLElement>(".page-content");
+    page?.scrollTo({ top: 0 });
+    const fixedWheel = (event: WheelEvent) => {
+      if ((event.target as Element).closest('[role="listbox"],.choice-popover')) return;
+      event.preventDefault();
+    };
+    page?.addEventListener("wheel", fixedWheel, { passive: false });
+    return () => page?.removeEventListener("wheel", fixedWheel);
   }, [category, q]);
   const [java, J] = useState<
     { path: string; major: number; version: string }[]
@@ -73,22 +110,6 @@ export function Settings() {
   >([]);
   const [testingMirror, TestingMirror] = useState(false);
   const [fillingJava, FillingJava] = useState(false);
-  const [msId, MsId] = useState(s.settings.clientId);
-  const [msEmbedded, MsEmbedded] = useState(false);
-  useEffect(() => {
-    if (!desktop) return;
-    let live = true;
-    api<{ embedded?: boolean }>("microsoft_status", {
-      clientId: s.settings.clientId,
-    })
-      .then((value) => {
-        if (live) MsEmbedded(Boolean(value.embedded));
-      })
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, [s.settings.clientId]);
   const categories = [
     "启动",
     "Java 管理",
@@ -148,7 +169,9 @@ export function Settings() {
     app?.style.setProperty("--ui-blur", value === 0 ? "0px" : "26px");
     app?.dispatchEvent(new Event("kynex-appearance-preview"));
     update({ uiOpacity: value });
-    requestAnimationFrame(() => { if (app) delete app.dataset.appearanceChanging; });
+    requestAnimationFrame(() => {
+      if (app) delete app.dataset.appearanceChanging;
+    });
   }
   const [we, setWe] = useState<WeScan | null>(null);
   const [weBusy, setWeBusy] = useState(false);
@@ -182,29 +205,34 @@ export function Settings() {
   }
 
   return (
-    <section className="settings-page" aria-label="设置">
+    <section
+      className="settings-page"
+      data-category={q ? "search" : category}
+      aria-label="设置"
+    >
       <div className="settings-layout">
         <aside className="settings-sidebar" aria-label="设置分类">
-        <SearchInput value={q} onChange={Q} placeholder="搜索设置" />
-        <nav className="settings-nav motion-selection-vertical" ref={nav}>
-          {categories.map((c) => {
-            const Icon = categoryIcons[c as keyof typeof categoryIcons];
-            return (
-              <button
-                key={c}
-                className={category === c ? "on" : ""}
-                aria-current={category === c ? "page" : undefined}
-                onClick={() => {
-                  C(c);
-                  Q("");
-                }}
-              >
-                <Icon size={16} />
-                <span>{c}</span>
-              </button>
-            );
-          })}
-        </nav>
+          <SearchInput value={q} onChange={Q} placeholder="搜索设置" />
+          <nav className="settings-nav motion-selection-vertical" ref={nav}>
+            {categories.map((c) => {
+              const Icon = categoryIcons[c as keyof typeof categoryIcons];
+              return (
+                <button
+                  key={c}
+                  data-guide={`settings-${c}`}
+                  className={category === c ? "on" : ""}
+                  aria-current={category === c ? "page" : undefined}
+                  onClick={() => {
+                    C(c);
+                    Q("");
+                  }}
+                >
+                  <Icon size={16} />
+                  <span>{c}</span>
+                </button>
+              );
+            })}
+          </nav>
         </aside>
         <div
           className="settings-content"
@@ -411,10 +439,7 @@ export function Settings() {
           {show("下载") && (!q || "下载 来源 并发".includes(q)) && (
             <Card>
               <h3>下载</h3>
-              <Row
-                title="游戏文件来源"
-                hint="镜像下载失败时会改用官方地址。"
-              >
+              <Row title="游戏文件来源" hint="镜像下载失败时会改用官方地址。">
                 <OptionSelect
                   label="下载镜像来源"
                   value={s.settings.downloadSource}
@@ -491,12 +516,6 @@ export function Settings() {
                   <Badge>{s.settings.threads} 个文件</Badge>
                 </div>
               </Row>
-              <Row
-                title="文件完整性"
-                hint="下载后检查文件是否完整。"
-              >
-                <Badge tone="ok">SHA-1 / SHA-256</Badge>
-              </Row>
               <p>
                 连接测速显示当前网络的响应延迟；下载中断后会自动续传，并发数可在上方调整。
               </p>
@@ -505,16 +524,14 @@ export function Settings() {
           {show("界面") && (!q || "界面 主题 颜色 壁纸".includes(q)) && (
             <Card>
               <h3>外观</h3>
-              <Row
-                title="界面主题"
-                hint="选择浅色、深色，或跟随系统。"
-              >
+              <Row title="界面主题" hint="选择浅色、深色、跟随系统，或自己调色。">
                 <div className="theme-choices">
                   {(
                     [
                       { value: "light", label: "浅色", icon: Sun },
                       { value: "dark", label: "深色", icon: Moon },
                       { value: "system", label: "跟随系统", icon: Monitor },
+                      { value: "custom", label: "自定义", icon: Palette },
                     ] as const
                   ).map(({ value, label, icon: Icon }) => (
                     <button
@@ -529,6 +546,11 @@ export function Settings() {
                   ))}
                 </div>
               </Row>
+              {s.settings.theme === "custom" && (
+                <Row title="主题底色">
+                  <ColorPalette label="主题底色" value={s.settings.customThemeColor} onChange={(customThemeColor) => update({ customThemeColor })} />
+                </Row>
+              )}
               <Row title="强调色" hint="选择按钮和选中项的颜色。">
                 <div className="color-dots">
                   {["#6F9F94", "#7895A4", "#72A788", "#C59862", "#B87373"].map(
@@ -536,7 +558,7 @@ export function Settings() {
                       <button
                         aria-label={`强调色 ${color}`}
                         key={color}
-                        className={s.settings.accent === color ? "on" : ""}
+                        className={s.settings.accent.toLowerCase() === color.toLowerCase() ? "on" : ""}
                         style={{ background: color }}
                         onClick={() => update({ accent: color })}
                       />
@@ -544,21 +566,8 @@ export function Settings() {
                   )}
                 </div>
               </Row>
-              <Row title="自定义颜色">
-                <input
-                  aria-label="取色器"
-                  type="color"
-                  value={s.settings.accent}
-                  onChange={(e) => update({ accent: e.target.value })}
-                />
-                <Input
-                  aria-label="十六进制强调色"
-                  value={s.settings.accent}
-                  onChange={(e) => {
-                    if (/^#[\da-f]{6}$/i.test(e.target.value))
-                      update({ accent: e.target.value });
-                  }}
-                />
+              <Row title="自定义强调色">
+                <ColorPalette label="强调色" value={s.settings.accent} onChange={(accent) => update({ accent })} />
               </Row>
               <h4>主页壁纸</h4>
               <div className="wall-picker">
@@ -592,10 +601,7 @@ export function Settings() {
                   />
                 </label>
               </div>
-              <Row
-                title="界面不透明度"
-                hint="0% 全透明，100% 不透明。"
-              >
+              <Row title="界面不透明度" hint="0% 全透明，100% 不透明。">
                 <input
                   ref={opacityInput}
                   className="opacity-range"
@@ -605,9 +611,7 @@ export function Settings() {
                   max={100}
                   step={1}
                   defaultValue={normalizeUiOpacity(s.settings.uiOpacity)}
-                  onInput={(e) =>
-                    previewOpacity(Number(e.currentTarget.value))
-                  }
+                  onInput={(e) => previewOpacity(Number(e.currentTarget.value))}
                   onPointerUp={(e) =>
                     commitOpacity(Number(e.currentTarget.value))
                   }
@@ -650,19 +654,23 @@ export function Settings() {
               </Row>
               {we && !we.workshopFound && (
                 <p className="hint">
-                  没有找到 Wallpaper Engine 创意工坊目录：请先通过 Steam 安装 Wallpaper Engine，并订阅至少一个动态壁纸。
+                  没有找到 Wallpaper Engine 创意工坊目录：请先通过 Steam 安装
+                  Wallpaper Engine，并订阅至少一个动态壁纸。
                 </p>
               )}
               {we && we.workshopFound && we.wallpapers.length === 0 && (
                 <p className="hint">
                   没有可以直接播放的视频壁纸
-                  {we.hidden ? `（已隐藏 ${we.hidden} 个场景/Web 或缺少视频文件的项目）` : ""}
+                  {we.hidden
+                    ? `（已隐藏 ${we.hidden} 个场景/Web 或缺少视频文件的项目）`
+                    : ""}
                   ，请订阅视频类型的动态壁纸。
                 </p>
               )}
               {we && we.wallpapers.length > 0 && we.hidden ? (
                 <p className="hint">
-                  已隐藏 {we.hidden} 个场景/Web 或无法播放的项目，只显示可直接播放的视频壁纸。
+                  已隐藏 {we.hidden} 个场景/Web
+                  或无法播放的项目，只显示可直接播放的视频壁纸。
                 </p>
               ) : null}
               {we && we.wallpapers.length > 0 && (
@@ -753,65 +761,27 @@ export function Settings() {
             )}
           {show("高级") &&
             (!q ||
-              "高级 微软 Client ID 数据 DeepSeek 日志分析 Key 密钥".includes(
+              "高级 微软 Client ID 数据 DeepSeek AI 助手 模型 API 连接 测试 日志分析 Key 密钥".includes(
                 q,
               )) && (
               <Card>
                 <DeepSeekSettings />
-                <h3>登录与数据</h3>
-                <Row
-                  title="Microsoft 登录"
-                  hint={
-                    msEmbedded
-                      ? "已配置，可以直接登录微软账号。"
-                      : "开发版需要填写 Azure 应用注册的应用程序（客户端）ID。"
-                  }
+                <SettingsAction
+                  icon={<FolderOpen size={18} />}
+                  title="本地数据目录"
+                  description="打开启动器的数据文件夹，查看本地文件。"
                 >
-                  {msEmbedded ? (
-                    <Badge tone="ok">已内嵌</Badge>
-                  ) : (
-                    <>
-                      <Input
-                        aria-label="Microsoft Client ID"
-                        value={msId}
-                        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                        spellCheck={false}
-                        onChange={(e) => MsId(e.target.value)}
-                      />
-                      <Button
-                        onClick={() => {
-                          const value = msId.trim();
-                          if (
-                            !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-                              value,
-                            )
-                          ) {
-                            s.notify(
-                              "Client ID 必须是 Azure 应用的 GUID，不能填写应用密码或密钥。",
-                            );
-                            return;
-                          }
-                          update({ clientId: value });
-                          s.notify("Microsoft Client ID 已保存");
-                        }}
-                      >
-                        保存
-                      </Button>
-                    </>
-                  )}
-                </Row>
-                <Row title="本地数据目录">
-                  <Button onClick={() => guarded(() => api("open_data_folder"))}>
-                    打开
+                  <Button
+                    onClick={() => guarded(() => api("open_data_folder"))}
+                  >
+                    打开目录
                   </Button>
-                </Row>
-                <Row
-                  title="CurseForge 来源"
-                  hint="公开源码未内置 API Key，请通过环境变量或本地配置提供。"
+                </SettingsAction>
+                <SettingsAction
+                  icon={<RotateCcw size={18} />}
+                  title="恢复默认设置"
+                  description="重置界面与全局偏好，保留游戏实例和账号。"
                 >
-                  <Badge>需自行配置</Badge>
-                </Row>
-                <Row title="恢复界面与全局默认设置" hint="不会删除实例和账号。">
                   <Button
                     onClick={() => {
                       update(initialSettings);
@@ -820,11 +790,7 @@ export function Settings() {
                   >
                     恢复默认
                   </Button>
-                </Row>
-                <p>
-                  登录凭据与 DeepSeek Key 保存到系统凭据库；AI
-                  诊断会发送脱敏日志到 DeepSeek。
-                </p>
+                </SettingsAction>
               </Card>
             )}
           {show("关于") &&

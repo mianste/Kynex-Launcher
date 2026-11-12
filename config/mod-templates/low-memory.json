@@ -1,0 +1,1 @@
+{"version":1,"id":"low-memory","name":"轻量显示配置","description":"适合较小的整合包；实际性能以游戏环境为准。","risk":"low","match":{"minecraft":"*","loader":"*"},"patches":[{"file":"options.txt","format":"properties","set":{"renderDistance":6,"maxFps":60,"guiScale":2}}]}

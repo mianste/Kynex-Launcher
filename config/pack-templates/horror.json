@@ -1,0 +1,1 @@
+{"id":"horror","name":"恐怖","description":"增加夜间威胁与恐怖氛围，先少量添加并验证兼容性。","minecraft":"1.20.1","loader":"forge","memoryMb":6144,"modQueries":["From The Fog","Born in Chaos"],"options":{"language":"zh_cn","renderDistance":6}}

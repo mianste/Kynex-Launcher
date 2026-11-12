@@ -19,6 +19,7 @@ async fn fetch(
     received: &(dyn Fn(usize) + Send + Sync),
 ) -> Result<TemporaryFile> {
     use tokio::io::AsyncWriteExt;
+    if core.agent_policy.is_some(){crate::agent::policy::url(url)?;crate::agent::policy::absolute(&core.root,path)?;}
     let response = core.http.get(url).timeout(Duration::from_secs(90))
         .send().await.map_err(err)?.error_for_status().map_err(err)?;
     let temporary = TemporaryFile(path.with_extension(format!("part-{}", uuid::Uuid::new_v4())));
@@ -29,6 +30,7 @@ async fn fetch(
     while let Some(bytes) = tokio::time::timeout(Duration::from_secs(8), stream.next())
         .await.map_err(|_| "资源下载没有收到数据，正在切换下载源".to_string())? {
         let bytes = bytes.map_err(err)?;
+        if let Some(policy)=&core.agent_policy{policy.charge(bytes.len())?;}
         digest.update(&bytes);
         file.write_all(&bytes).await.map_err(err)?;
         received(bytes.len());

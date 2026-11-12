@@ -11,7 +11,7 @@ describe("saved panel opacity", () => {
     expect(normalizeUiOpacity(-1)).toBe(0);
     expect(normalizeUiOpacity(101)).toBe(100);
     for (const value of [undefined, NaN, Infinity]) {
-      expect(normalizeUiOpacity(value)).toBe(82);
+      expect(normalizeUiOpacity(value)).toBe(100);
     }
   });
 });

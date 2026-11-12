@@ -15,7 +15,7 @@ export function Accounts() {
   return (
     <>
       <div className="page-head">
-        <Button primary onClick={() => s.show("login")}>
+        <Button data-guide="account-add" primary onClick={() => s.show("login")}>
           <Plus size={16} />
           添加账号
         </Button>

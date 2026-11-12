@@ -1,8 +1,8 @@
 # Kynex Launcher（KXL）
 
-Windows 上的 Minecraft 启动器。当前正式版是 **v1.3.3**，当前公开源码也已更新到 v1.3.3。
+Windows 上的 Minecraft 启动器。当前正式版和公开源码均为 **v1.4.1**。
 
-[下载完整安装器](https://github.com/mianste/Kynex-Launcher/releases/tag/v1.3.3) · [更新日志](CHANGELOG.md) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
+[下载完整安装器](https://github.com/mianste/Kynex-Launcher/releases/download/v1.4.1/Kynex.Launcher.v1.4.1.Setup.exe) · [下载公开源码](https://github.com/mianste/Kynex-Launcher/releases/download/v1.4.1/Kynex.Launcher.v1.4.1.Open.Source.zip) · [更新日志](CHANGELOG.md) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
 
 ## 有哪些功能
 
@@ -12,19 +12,21 @@ Windows 上的 Minecraft 启动器。当前正式版是 **v1.3.3**，当前公�
 - 搜索 Modrinth、CurseForge 资源，选择目标版本安装，同一资源可以装到多个版本。
 - 导入、导出整合包，检查文件、管理模组更新。
 - 管理微软、离线和外置认证账号，查看和更换皮肤、披风。
-- 查看 Minecraft 新闻、调整主题透明度、检查启动日志。
+- 用 AI 助手分析 Minecraft 启动日志和报错。配置支持相应能力的服务后，可以上传截图或使用语音转写。
+- 在独立的 AI 整合包工坊生成搭建方案、维护已安装实例、补全中文翻译，查看进度、备份和任务记录。
+- 查看 Minecraft 新闻、调整主题颜色和透明度。
 
 ## 下载安装
 
-在 [v1.3.3 发布页](https://github.com/mianste/Kynex-Launcher/releases/tag/v1.3.3) 下载 `Kynex.Launcher.v1.3.3.Setup.exe`，运行安装器即可。支持 Windows 10 / 11 x64。
+在 [v1.4.1 发布页](https://github.com/mianste/Kynex-Launcher/releases/tag/v1.4.1) 下载 `Kynex.Launcher.v1.4.1.Setup.exe`，运行安装器即可。支持 Windows 10 / 11 x64。
 
-v1.3.2 用户可直接自动更新。更早版本的原更新私钥已丢失，需手动覆盖安装 v1.3.3 一次，之后继续自动更新。安装时会保留原有用户资料。
+已使用新版签名的 v1.3.2 及后续完整安装版可直接自动更新。使用更早签名的版本时，请手动覆盖安装一次，之后可继续自动更新。覆盖安装会保留原有用户资料。
 
-完整安装版的新更新源是 [stable-v2.json](https://github.com/mianste/Kynex-Launcher/releases/download/updater-stable/stable-v2.json)。旧 `stable.json` 保留原内容。
+完整安装版使用 [stable-v2.json](https://github.com/mianste/Kynex-Launcher/releases/download/updater-stable/stable-v2.json) 检查正式更新。
 
 ## 界面
 
-以下图片来自 v1.3.2 公开源码，使用示例账号、实例和资源数据，没有执行真实下载或登录。
+以下界面截图由 v1.4.1 公开源码生成。账号、实例、资源和工坊任务均为示例数据。
 
 ### 启动页
 
@@ -42,13 +44,17 @@ v1.3.2 用户可直接自动更新。更早版本的原更新私钥已丢失，�
 
 ![皮肤预览](docs/images/skin.png)
 
+### AI 整合包工坊
+
+![AI 整合包工坊](docs/images/workshop.png)
+
 ## 开源范围
 
-公开部分包括界面、Java 版安装和启动、版本与目录管理、资源下载、整合包、账号、皮肤、新闻和日志诊断。
+公开部分包括界面、Java 版安装和启动、版本与目录管理、资源下载、整合包、账号、皮肤、新闻、AI 助手及工坊。
 
 音乐、一键进服／进入存档，以及基岩版、地下城和传奇的本地检测与启动模块继续保留在完整安装版中，不在此仓库公开。公开代码不包含实际 API Key、Microsoft Client ID、更新私钥或账号资料。
 
-自行编译的程序标为“公开构建”，使用独立的应用数据目录，方便与完整安装版区分。微软登录需要配置自己的 Client ID；CurseForge 官方接口需要自己的 API Key。更新源和更新公钥默认留空，需要自动更新时请配置自己的签名和更新地址。
+自行编译的程序标为“公开构建”，使用独立的应用数据目录，方便与完整安装版区分。微软登录需要配置自己的 Client ID；CurseForge 官方接口需要自己的 API Key。AI 模型和语音转写服务在「AI 设置」中配置。更新源和更新公钥默认留空，需要自动更新时请配置自己的签名和更新地址。
 
 ## 开发和编译
 
@@ -70,7 +76,3 @@ pnpm tauri build
 公开代码采用 [MIT License](LICENSE)，第三方资料见 [许可说明](docs/THIRD-PARTY-NOTICES.txt)。未公开模块不属于本仓库的许可范围。
 
 本项目与 Mojang、Microsoft、PCL 和 HMCL 无关联。请通过官方渠道购买 Minecraft。
-
-本次 v1.3.3 修复整合包名称带冒号或较长中文时无法安装的问题。
-
-本版也修复了整合包菜单图标识别；已安装实例会共用新的图标识别规则。

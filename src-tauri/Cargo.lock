@@ -2029,7 +2029,7 @@ dependencies = [
 
 [[package]]
 name = "kynex-launcher"
-version = "1.3.3"
+version = "1.4.1"
 dependencies = [
  "aes",
  "base64 0.22.1",
@@ -2039,6 +2039,7 @@ dependencies = [
  "hickory-resolver",
  "keyring",
  "md5",
+ "minisign-verify",
  "num-bigint",
  "open",
  "png",
@@ -2056,8 +2057,10 @@ dependencies = [
  "tauri-plugin-updater",
  "tempfile",
  "tokio",
+ "toml 0.8.2",
  "trash",
  "uuid",
+ "windows",
  "windows-sys 0.61.2",
  "zip 2.6.1",
 ]

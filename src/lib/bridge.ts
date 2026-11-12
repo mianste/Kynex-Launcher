@@ -21,6 +21,7 @@ export async function api<T>(
 export async function pickFile(
   filters: { name: string; extensions: string[] }[],
   directory = false,
+  defaultPath?: string,
 ): Promise<string | null> {
   if (!desktop) throw new Error("选择本地游戏文件需要桌面版");
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -32,7 +33,7 @@ export async function pickFile(
   ]);
   const { open } = await import("@tauri-apps/plugin-dialog");
   try {
-    const result = await open({ multiple: false, directory, filters });
+    const result = await open({ multiple: false, directory, filters, defaultPath });
     return typeof result === "string" ? result : null;
   } finally {
     await current.setCursorVisible(true);

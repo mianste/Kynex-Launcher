@@ -1,0 +1,1 @@
+{"id":"building","name":"建筑","description":"提供建筑工具和方块展示，减少重复功能。","minecraft":"1.20.1","loader":"fabric","memoryMb":4096,"modQueries":["Litematica","Chipped"],"options":{"language":"zh_cn","renderDistance":12}}

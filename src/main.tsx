@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { App } from "./app/App";
+import { api, desktop } from "./lib/bridge";
 import "./tokens.css";
 import "./styles.css";
 import "./motion.css";
@@ -23,6 +24,7 @@ class ErrorBoundary extends React.Component<
         <h1>KXL 暂时无法显示界面</h1>
         <p>{this.state.error}</p>
         <button onClick={() => location.reload()}>重新载入</button>
+        {desktop && <button onClick={() => {void api("hotfix_rollback").then(()=>location.reload());}}>回退界面补丁</button>}
       </div>
     ) : (
       this.props.children

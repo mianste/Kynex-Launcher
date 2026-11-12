@@ -5,7 +5,12 @@ import { Button, Badge, Card } from "../../components/ui";
 import { DiagnosisResult, useDiagnosis } from "./AiDiagnosis";
 import { useStore, guarded } from "../../store";
 import { api, desktop } from "../../lib/bridge";
-export function Diagnose() {
+import { RepairSuggestions } from "../assistant/RepairSuggestions";
+import { openAiSettings } from "../../lib/settingsNavigation";
+export function Diagnose({
+  showResult = true,
+  onAnalyzed,
+}: { showResult?: boolean; onAnalyzed?: (text: string) => void } = {}) {
   const s = useStore();
   const [text, T] = useState("");
   const [name, N] = useState("");
@@ -24,6 +29,7 @@ export function Diagnose() {
         reason: "手动导入日志",
       });
       d.close();
+      onAnalyzed?.(text);
     } catch (e) {
       E(String(e));
     } finally {
@@ -59,7 +65,7 @@ export function Diagnose() {
   return (
     <>
       <div className="page-head">
-        <Badge>仅支持 DeepSeek</Badge>
+        <Badge>AI 日志分析</Badge>
       </div>
       <div className="diagnose-layout">
         <div>
@@ -105,9 +111,9 @@ export function Diagnose() {
             />
           </div>
           <Card>
-            <h2>DeepSeek 分析</h2>
+            <h2>模型分析</h2>
             <p>
-              请先在「设置 → 高级」填写 DeepSeek 密钥。分析时会把隐藏个人信息后的日志发送给 DeepSeek，费用由你的 DeepSeek 账号支付。
+              请先在「设置 → 高级」选好模型并填入密钥。助手会先隐藏日志里的敏感信息，再发给你选的模型。服务商可能会收费。
             </p>
             <Button
               primary
@@ -117,10 +123,11 @@ export function Diagnose() {
             >
               分析日志
             </Button>
-            <Button onClick={() => s.setPage("settings")}>前往设置</Button>
+            {showResult && <Button onClick={openAiSettings}>AI 设置</Button>}
             {error && <div className="notice error">{error}</div>}
-            {d.event && <DiagnosisResult event={d.event} />}
+            {showResult && d.event && <DiagnosisResult event={d.event} />}
           </Card>
+          <RepairSuggestions text={text} />
           <Disclosure
             className="log-input"
             initialOpen={!text}
@@ -144,7 +151,7 @@ export function Diagnose() {
               ],
               ["内存", `${s.settings.memory} MB`],
               ["Java", s.settings.java || "自动匹配"],
-              ["分析服务", "DeepSeek"],
+              ["分析服务", "当前所选模型"],
             ].map(([k, v]) => (
               <div className="kv" key={k}>
                 <span>{k}</span>
