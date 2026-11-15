@@ -129,6 +129,9 @@ async fn get_with_timeout(
                 .unwrap_or("请检查 API Key 是否有效")
         ));
     }
+    if value["data"].is_null() {
+        return Err("CurseForge 返回了无效数据".into());
+    }
     Ok(value)
 }
 
@@ -256,7 +259,7 @@ pub async fn search(
         .iter()
         .filter(|item| !crate::literal_search_required(query) || crate::literal_search_match(query, &[item["name"].as_str().unwrap_or(""), item["slug"].as_str().unwrap_or(""), item["summary"].as_str().unwrap_or("")]))
         .map(|item| {
-            json!({
+            let mut hit = json!({
                 "project_id": item["id"],
                 "title": item["name"],
                 "description": item["summary"],
@@ -265,7 +268,21 @@ pub async fn search(
                 "slug": item["slug"],
                 "icon_url": item["logo"]["thumbnailUrl"].as_str().or_else(|| item["logo"]["url"].as_str()),
                 "source": "curseforge"
-            })
+            });
+            let gallery: Vec<_> = item["screenshots"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|image| {
+                        let url = [&image["url"], &image["thumbnailUrl"]]
+                            .into_iter()
+                            .filter_map(Value::as_str)
+                            .find(|url| crate::https(url).is_ok())?;
+                        Some(json!({"url": url, "title": image["title"].as_str()}))
+                    })
+                    .collect();
+            hit["gallery"] = json!(gallery);
+            hit
         })
         .collect();
     let total = if crate::literal_search_required(query) { hits.len() as u64 } else { value["pagination"]["totalCount"]

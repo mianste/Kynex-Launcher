@@ -1,0 +1,54 @@
+[
+  {
+    "id": "scorpio-obsidian-farm",
+    "name": "黑曜石农场",
+    "originalName": "128.8k Safe Obsidian Farm (Normal)",
+    "description": "DuskScorpio 发布的普通版黑曜石农场。",
+    "author": "DuskScorpio",
+    "license": "CC0-1.0",
+    "format": "litematic",
+    "sourceUrl": "https://github.com/DuskScorpio/Scorpio-File-Downloads/tree/c3956162182bbef0413c601ef1c26691f7783a36/Files/128.8k%20Safe%20Obsidian%20Farm",
+    "licenseUrl": "https://github.com/DuskScorpio/Scorpio-File-Downloads/blob/c3956162182bbef0413c601ef1c26691f7783a36/LICENSE",
+    "fileName": "128.8k Safe Obsidian Farm (Normal).litematic",
+    "sha256": "c0cb2e1b91e340d255f499cdeb94834a9dc2f66b8b1f955a04b4728deb5a377d"
+  },
+  {
+    "id": "block-library-cabin",
+    "name": "云杉山间小屋",
+    "originalName": "Alpine cabin shell",
+    "description": "云杉外墙、双扇门、斜屋顶与砖砌烟囱，室内可自行布置。",
+    "author": "Block Library",
+    "license": "CC0-1.0",
+    "format": "litematic",
+    "sourceUrl": "https://blocklibrary.net/?item=3bd91a83-eec6-4f8c-b8a4-1424ab84f979",
+    "licenseUrl": "https://blocklibrary.net/guides/original-builds.html#source-and-reuse",
+    "fileName": "block-library-cabin.litematic",
+    "sha256": "07f34f39112233cd2aea00bd1c9b78c4116d58ffeca4a76901425015023801f1"
+  },
+  {
+    "id": "block-library-pavilion",
+    "name": "樱花庭院凉亭",
+    "originalName": "Cherry garden pavilion",
+    "description": "四根樱花木立柱支撑层叠屋顶，两棵樱花树环绕开放式亭子。",
+    "author": "Block Library",
+    "license": "CC0-1.0",
+    "format": "litematic",
+    "sourceUrl": "https://blocklibrary.net/?item=388249b2-d72c-428c-9f8b-37f6d871545d",
+    "licenseUrl": "https://blocklibrary.net/guides/original-builds.html#source-and-reuse",
+    "fileName": "block-library-pavilion.litematic",
+    "sha256": "0971555fea47015b5e4425556fa772b07ba05f68fb68eed3621675cdc357ff89"
+  },
+  {
+    "id": "block-library-bridge",
+    "name": "苔石庭院小桥",
+    "originalName": "Mossy stone garden bridge",
+    "description": "五格宽的苔石桥横跨浅水池，包含桥头、樱花树和周围地形。",
+    "author": "Block Library",
+    "license": "CC0-1.0",
+    "format": "litematic",
+    "sourceUrl": "https://blocklibrary.net/?item=d6f8c2ad-353d-4876-8c49-22eb534a96d8",
+    "licenseUrl": "https://blocklibrary.net/guides/original-builds.html#source-and-reuse",
+    "fileName": "block-library-bridge.litematic",
+    "sha256": "4378737897912da5253da6a4a276117c77216a24e316803ad57472c969cb7588"
+  }
+]

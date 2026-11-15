@@ -6,6 +6,7 @@ mod ai_diagnose;
 mod assistant_context;
 mod agent;
 mod mod_updates;
+mod project_versions;
 mod mod_check;
 mod resource_downloads;
 mod resource_dependencies;
@@ -29,6 +30,10 @@ pub mod packs;
 pub mod release;
 pub mod resources;
 mod resource_delete;
+mod schematics;
+mod schematic_preview;
+mod schematic_catalog;
+mod schematic_appearance;
 mod pack_export;
 pub mod skins;
 #[cfg(feature = "desktop")]
@@ -342,7 +347,11 @@ impl Core {
             "ai_test_connection" => ai_diagnose::test_connection(self, &p).await,
             "project_versions" => mod_updates::versions(self, &p).await,
             "resource_requirements" => resource_dependencies::preview(self, &p).await,
-            "datapack_worlds" => resource_downloads::worlds(self,&p),
+            "datapack_worlds" => {
+                let core = self.clone();
+                tokio::task::spawn_blocking(move || resource_downloads::worlds(&core, &p))
+                    .await.map_err(err)?
+            }
             "check_mod_updates" => mod_updates::check(self, &p).await,
             "scan_installed_mod_updates" => mod_check::prepare_installed(self, &p),
             "mod_update_mode" => mod_updates::mode(self, &p),
@@ -354,6 +363,16 @@ impl Core {
                 tokio::task::spawn_blocking(move || resources::list(&core,&p)).await.map_err(err)?
             },
             "delete_resources" => resource_delete::remove(self, &p).await,
+            "schematic_preview" => {
+                let core = self.clone();
+                let lock = schematic_preview::worker(&core);
+                let _guard = lock.lock().await;
+                tokio::task::spawn_blocking(move || schematic_preview::preview(&core, &p))
+                    .await.map_err(err)?
+            }
+            "schematic_catalog_preview" => schematic_catalog::preview(self, &p).await,
+            "schematic_catalog_download" => schematic_catalog::download(self, &p).await,
+            "schematic_appearance" => schematic_appearance::load(self, &p).await,
             "project_dependencies" => curseforge::dependencies(self, &p).await,
             "delete_instance" => {
                 let id = string(&p, "id")?;
@@ -369,10 +388,22 @@ impl Core {
             "toggle_resource" => resources::toggle(self, &p),
             "resource_move" => resources::move_pack(self, &p),
             "import_resource" => {
+                if p["kind"] == schematics::KIND {
+                    let dir = engine::resource_dir(self, &p)?;
+                    let lock = self.jobs.file_lock(&dir);
+                    let _guard = lock.lock().await;
+                    return tokio::task::spawn_blocking(move || schematics::import_file(&dir, &p)).await.map_err(err)?;
+                }
                 let result=resources::import_file(self,&p);
                 if let Ok(value)=&result{mod_check::after_install(self,action,&p,value);}result
             },
             "import_resource_paths" => {
+                if p["kind"] == schematics::KIND {
+                    let dir = engine::resource_dir(self, &p)?;
+                    let lock = self.jobs.file_lock(&dir);
+                    let _guard = lock.lock().await;
+                    return tokio::task::spawn_blocking(move || schematics::import_paths(&dir, &p)).await.map_err(err)?;
+                }
                 let result=resources::import_paths(self,&p);
                 if let Ok(value)=&result{mod_check::after_install(self,action,&p,value);}result
             },
@@ -493,7 +524,14 @@ impl Core {
             #[cfg(feature = "desktop")]
             "open_resource_folder" => {
                 let path = engine::resource_dir(self, &p)?;
-                std::fs::create_dir_all(&path).map_err(err)?;
+                if p["kind"] == schematics::KIND {
+                    if p["directory"].as_str().is_some_and(|directory| Path::new(directory) != path) {
+                        return Err("投影目录已更改，请在版本设置中查看当前投影文件夹".into());
+                    }
+                    schematics::ensure_directory(&path)?;
+                } else {
+                    std::fs::create_dir_all(&path).map_err(err)?;
+                }
                 open::that(path).map_err(err)?;
                 Ok(json!(true))
             }
@@ -564,6 +602,14 @@ async fn modrinth_search(
     if let Some(hits) = value["hits"].as_array_mut() {
         for hit in hits {
             hit["source"] = json!("modrinth");
+            let mut seen = std::collections::HashSet::new();
+            let gallery: Vec<_> = std::iter::once(&hit["featured_gallery"])
+                .chain(hit["gallery"].as_array().into_iter().flatten())
+                .filter_map(Value::as_str)
+                .filter(|url| https(url).is_ok() && seen.insert(*url))
+                .map(|url| json!({"url": url}))
+                .collect();
+            hit["gallery"] = json!(gallery);
         }
     }
     let total = value["total_hits"]
@@ -577,7 +623,7 @@ async fn search_projects(core: &Core, p: &Value) -> Result<Value> {
     use sha2::{Digest, Sha256};
 
     let cache_input = json!({
-        "queryPolicy": 2,
+        "queryPolicy": 4,
         "kind": p["kind"],
         "query": p["query"],
         "source": p["source"],

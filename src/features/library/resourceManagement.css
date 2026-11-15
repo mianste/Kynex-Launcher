@@ -21,6 +21,9 @@
   box-shadow: none; padding: 8px 16px; background: transparent;
 }
 .app .pcl-resource-page .resource-management-actions .btn:first-child { color: var(--accent); border-color: var(--accent); }
+.app .pcl-resource-page .resource-management-actions.schematic-actions > .btn {
+  border-radius: 999px;
+}
 .app .pcl-resource-page .mod-update-manager,
 .app .pcl-resource-page > .resource-list { padding: 4px 14px 12px; background: var(--resource-panel); border-radius: 5px; }
 .app .pcl-resource-page .mod-update-filters { padding-bottom: 8px; border: 0; gap: 4px; }

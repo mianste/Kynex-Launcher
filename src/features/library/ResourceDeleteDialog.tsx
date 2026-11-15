@@ -3,7 +3,7 @@ import { Button, Modal } from "../../components/ui";
 import { api } from "../../lib/bridge";
 
 export type DeleteRequest = {
-  id: string; kind: string; world?: string; label: string; names: string[]; shared: boolean;
+  id: string; kind: string; world?: string; directory?: string; label: string; names: string[]; shared: boolean;
 };
 export function ResourceDeleteDialog({ request, close, completed }: {
   request: DeleteRequest;
@@ -18,7 +18,7 @@ export function ResourceDeleteDialog({ request, close, completed }: {
     Busy(true); ErrorText("");
     try {
       const result = await api<{ deleted: string[]; failed: { name: string; error: string }[]; warnings: string[] }>("delete_resources", {
-        id: request.id, kind: request.kind, world: request.world, names,
+        id: request.id, kind: request.kind, world: request.world, directory: request.directory, names,
       });
       Names(result.failed.map((r) => r.name));
       if (result.deleted.length) await completed(result.deleted);

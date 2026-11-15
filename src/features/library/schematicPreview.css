@@ -1,0 +1,56 @@
+.app .schematic-preview-modal {
+  width: min(840px, calc(100vw - 48px));
+}
+.schematic-preview-modal > header,
+.schematic-preview-modal > footer {
+  flex-shrink: 0;
+}
+.schematic-preview-name {
+  color: var(--text);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.schematic-preview-info,
+.schematic-viewport-help {
+  color: var(--text2);
+  font-size: 12px;
+}
+.schematic-preview-info {
+  margin-top: 4px;
+}
+.schematic-viewport {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: clamp(220px, 51vh, 420px);
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: radial-gradient(ellipse at 50% 35%, var(--elev), var(--surface));
+}
+.schematic-viewport canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+.schematic-viewport canvas:active { cursor: grabbing; }
+.schematic-viewport canvas:focus-visible { outline-offset: -3px; }
+.schematic-viewport .schematic-top-view {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  cursor: default;
+}
+.schematic-viewport-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.schematic-viewport-tools .schematic-viewport-help { margin-inline-end: auto; }
+.schematic-viewport-status { margin-top: 6px; }

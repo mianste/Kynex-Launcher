@@ -1595,6 +1595,9 @@ pub(crate) fn resource_dir(core: &Core, p: &Value) -> Result<PathBuf> {
     config["id"]=p["id"].clone();
     let kind = string(p, "kind")?;
     if kind=="datapacks" && p["world"].as_str().is_some_and(|s|!s.is_empty()){return crate::resource_downloads::install_dir(core,p);}
+    if kind == schematics::KIND {
+        return schematics::directory(&game_directories::running_directory(core, &config)?);
+    }
     if !["mods", "resourcepacks", "saves", "shaderpacks", "datapacks"].contains(&kind) {
         return Err("资源分类无效".into());
     }
@@ -1602,6 +1605,9 @@ pub(crate) fn resource_dir(core: &Core, p: &Value) -> Result<PathBuf> {
 }
 pub fn resources(core: &Core, p: &Value) -> Result<Value> {
     let dir = resource_dir(core, p)?;
+    if p["kind"] == schematics::KIND {
+        return schematics::list(&dir);
+    }
     std::fs::create_dir_all(&dir).map_err(err)?;
     let mut out = vec![];
     for e in std::fs::read_dir(dir).map_err(err)?.flatten() {
@@ -1614,6 +1620,9 @@ pub fn resources(core: &Core, p: &Value) -> Result<Value> {
     Ok(json!(out))
 }
 pub fn toggle_resource(core: &Core, p: &Value) -> Result<Value> {
+    if p["kind"] == schematics::KIND {
+        return Err("投影文件由游戏内的投影模组加载".into());
+    }
     let dir = resource_dir(core, p)?;
     let name = safe_name(string(p, "name")?)?;
     if string(p, "kind")? == "saves" {

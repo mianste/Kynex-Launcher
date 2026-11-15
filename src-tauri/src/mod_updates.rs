@@ -12,55 +12,117 @@ fn curseforge_row(v: &Value, game: &str, loader: &str) -> Value {
  let games:Vec<_>=tags.iter().filter_map(Value::as_str).filter(|x|!loader_names.contains(x)).collect();
  json!({"id":v["id"].to_string(),"name":v["displayName"],"number":v["fileName"],"date":v["fileDate"],"type":match v["releaseType"].as_u64(){Some(1)=>"release",Some(2)=>"beta",_=>"alpha"},"gameVersions":games,"loaders":loaders,"compatible":curseforge::compatible(v,Some(game),Some(loader))})
 }
-pub async fn versions(core:&Core,p:&Value)->Result<Value>{
- let kind=p["kind"].as_str().unwrap_or("mods");
- if !["mods","modpacks","resourcepacks","shaderpacks","datapacks"].contains(&kind){return Err("资源类型无效".into());}
- let config=p["id"].as_str().filter(|id|!id.is_empty()).and_then(|id|core.instance(id).ok()).and_then(|path|read_json(&path.join("kxl.json")).ok()).unwrap_or_else(||json!({}));
- let game=config["version"].as_str().unwrap_or("");let loader=config["loader"].as_str().unwrap_or("");
- let game_filter=p["game"].as_str().filter(|v|!v.is_empty());
- let loader_filter=p["loader"].as_str().filter(|v|!v.is_empty());
- let paged=p["paged"].as_bool().unwrap_or(false);
- let mut next_offset=None;
- let mut total=None;
- let data=if p["source"]=="curseforge" {
-  let project=p["project"].as_u64().or_else(||p["project"].as_str()?.parse().ok()).ok_or("项目 ID 无效")?;
-  let key=curseforge::configured_key(core,p["curseforgeKey"].as_str().unwrap_or(""));
-  let mut rows=if paged {
-   let offset=p["offset"].as_u64().unwrap_or(0);
-   let page=curseforge::file_page(core,project,game_filter,loader_filter,key.as_deref(),offset).await?;
-   let rows=page["data"].as_array().ok_or("CurseForge 版本列表响应无效")?.clone();
-   let end=offset+rows.len() as u64;
-   total=page["pagination"]["totalCount"].as_u64();
-   if !rows.is_empty() && total.map_or(rows.len()==50,|n|end<n){next_offset=Some(end);}
-   rows
-  }else{curseforge::files(core,project,game_filter,loader_filter,key.as_deref()).await?};
-  rows.retain(|v|v["isAvailable"]!=false && v["isServerPack"]!=true);
-  rows.sort_by(|a,b|b["fileDate"].as_str().cmp(&a["fileDate"].as_str()));
-  let rows=rows.iter().filter_map(|v|{
-   let name=v["fileName"].as_str()?;
-   if !crate::resource_downloads::extension_matches(name,kind){return None;}
-   let mut row=curseforge_row(v,game,loader);
-   row["filename"]=json!(name);
-   row["compatible"]=json!(kind=="modpacks" || (!game.is_empty() && curseforge::compatible(v,if resource_downloads::needs_game_match(kind){Some(game)}else{None},if kind=="mods"{Some(loader)}else{None})));
-   Some(row)
-  }).collect::<Vec<_>>();json!(rows)
- } else {
-  let project=safe_name(string(p,"project")?)?;
-  let mut url=reqwest::Url::parse(&format!("https://api.modrinth.com/v2/project/{project}/version")).map_err(err)?;
-  url.query_pairs_mut().append_pair("include_changelog","false");
-  if let Some(game)=game_filter{url.query_pairs_mut().append_pair("game_versions",&json!([game]).to_string());}
-  if let Some(loader)=loader_filter{url.query_pairs_mut().append_pair("loaders",&json!([loader]).to_string());}
-  let mut data=core.get(url.as_str()).await?;
-  if let Some(rows)=data.as_array_mut(){rows.sort_by(|a,b|b["date_published"].as_str().cmp(&a["date_published"].as_str()));}
-  let rows=data.as_array().ok_or("版本列表响应无效")?.iter().filter_map(|v|{
-   let file=crate::resource_downloads::modrinth_file(v,kind).ok()?;
-   let mut row=modrinth_row(v,game,loader);
-   row["filename"]=file["filename"].clone();
-   let compatible=kind=="modpacks" || (!game.is_empty() && (!resource_downloads::needs_game_match(kind) || v["game_versions"].as_array().is_some_and(|a|a.iter().any(|x|x==game))) && (kind!="mods" || v["loaders"].as_array().is_some_and(|a|a.iter().any(|x|x==loader))));
-   row["compatible"]=json!(compatible);Some(row)
-  }).collect::<Vec<_>>();json!(rows)
- };
- if paged{Ok(json!({"versions":data,"nextOffset":next_offset,"total":total}))}else{Ok(data)}
+pub async fn versions(core: &Core, p: &Value) -> Result<Value> {
+    let kind = p["kind"].as_str().unwrap_or("mods");
+    if !["mods", "modpacks", "resourcepacks", "shaderpacks", "datapacks"].contains(&kind) {
+        return Err("资源类型无效".into());
+    }
+    let config = p["id"].as_str()
+        .filter(|id| !id.is_empty())
+        .and_then(|id| core.instance(id).ok())
+        .and_then(|path| read_json(&path.join("kxl.json")).ok())
+        .unwrap_or(Value::Null);
+    let game = config["version"].as_str().unwrap_or("");
+    let loader = config["loader"].as_str().unwrap_or("");
+    let game_filter = p["game"].as_str().filter(|v| !v.is_empty());
+    let loader_filter = p["loader"].as_str().filter(|v| !v.is_empty());
+    let paged = p["paged"] == true;
+    let offset = p["offset"].as_u64().unwrap_or(0);
+    let force = p["force"] == true;
+    let mut next_offset = None;
+    let mut total = None;
+    let mut stale = false;
+
+    let mut rows = if p["source"] == "curseforge" {
+        let project = p["project"].as_u64().or_else(|| p["project"].as_str()?.parse().ok())
+            .ok_or("项目 ID 无效")?;
+        let key = curseforge::configured_key(core, p["curseforgeKey"].as_str().unwrap_or(""));
+        let mut files = if paged {
+            let cache_key = json!(["curseforge", project, game_filter, loader_filter, offset, key]);
+            let (mut page, used_stale) = project_versions::cached(core, cache_key, force, || {
+                curseforge::file_page(core, project, game_filter, loader_filter, key.as_deref(), offset)
+            }).await?;
+            stale = used_stale;
+            let Value::Array(files) = page["data"].take() else {
+                return Err("CurseForge 版本列表响应无效".into());
+            };
+            let end = offset.saturating_add(files.len() as u64);
+            total = page["pagination"]["totalCount"].as_u64();
+            if !files.is_empty() && total.map_or(files.len() == 50, |n| end < n) {
+                next_offset = Some(end);
+            }
+            files
+        } else {
+            curseforge::files(core, project, game_filter, loader_filter, key.as_deref()).await?
+        };
+        files.sort_by(|a, b| b["fileDate"].as_str().cmp(&a["fileDate"].as_str()));
+        files.iter().filter_map(|file| {
+            let name = file["fileName"].as_str()?;
+            if file["isAvailable"] == false || file["isServerPack"] == true
+                || !resource_downloads::extension_matches(name, kind) {
+                return None;
+            }
+            let mut row = curseforge_row(file, game, loader);
+            row["filename"] = json!(name);
+            row["compatible"] = json!(kind == "modpacks" || (!game.is_empty()
+                && curseforge::compatible(file, resource_downloads::needs_game_match(kind).then_some(game),
+                    (kind == "mods").then_some(loader))));
+            Some(row)
+        }).collect::<Vec<_>>()
+    } else {
+        let project = safe_name(string(p, "project")?)?;
+        let mut url = reqwest::Url::parse("https://api.modrinth.com/v2/project/").map_err(err)?;
+        url.path_segments_mut().map_err(|_| "Modrinth 地址无效")?
+            .pop_if_empty().push(project).push("version");
+        {
+            let mut pairs = url.query_pairs_mut();
+            pairs.append_pair("include_changelog", "false");
+            if let Some(game) = game_filter {
+                pairs.append_pair("game_versions", &json!([game]).to_string());
+            }
+            if let Some(loader) = (kind == "datapacks").then_some("datapack").or(loader_filter) {
+                pairs.append_pair("loaders", &json!([loader]).to_string());
+            }
+        }
+        let (mut data, used_stale) = project_versions::cached(core, json!(url.as_str()), force, || {
+            project_versions::get_modrinth(core, &url)
+        }).await?;
+        stale = used_stale;
+        let files = data.as_array_mut().ok_or("Modrinth 版本列表响应无效")?;
+        files.sort_by(|a, b| b["date_published"].as_str().cmp(&a["date_published"].as_str()));
+        files.iter().filter_map(|version| {
+            let file = resource_downloads::modrinth_file(version, kind).ok()?;
+            let mut row = modrinth_row(version, game, loader);
+            row["filename"] = file["filename"].clone();
+            row["compatible"] = json!(kind == "modpacks" || (!game.is_empty()
+                && (!resource_downloads::needs_game_match(kind) || version["game_versions"]
+                    .as_array().is_some_and(|games| games.iter().any(|v| v == game)))
+                && (kind != "mods" || row["compatible"] == true)));
+            Some(row)
+        }).collect::<Vec<_>>()
+    };
+
+    if !paged {
+        return Ok(json!(rows));
+    }
+    if p["source"] != "curseforge" {
+        if resource_downloads::needs_game_match(kind) && !game.is_empty() {
+            rows.sort_by_key(|row| row["compatible"] != true);
+        }
+        const PAGE_SIZE: usize = 40;
+        let start = usize::try_from(offset).unwrap_or(usize::MAX).min(rows.len());
+        let end = start.saturating_add(PAGE_SIZE).min(rows.len());
+        total = Some(rows.len() as u64);
+        next_offset = (end < rows.len()).then_some(end as u64);
+        rows.truncate(end);
+        rows.drain(..start);
+    }
+    Ok(json!({
+        "versions": rows,
+        "nextOffset": next_offset,
+        "total": total,
+        "warning": stale.then_some("暂时无法连接下载源，正在显示之前获取的版本。"),
+    }))
 }
 pub fn mode(core:&Core,p:&Value)->Result<Value>{let path=core.instance(string(p,"id")?)?.join("kxl.json");let mut v=read_json(&path)?;
  if let Some(mode)=p["mode"].as_str(){if !["auto","manual"].contains(&mode){return Err("更新方式无效".into());}v["modUpdateMode"]=json!(mode);write_json(&path,&v)?;}

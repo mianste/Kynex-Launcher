@@ -1,6 +1,5 @@
-# v1.4.1 公开源码状态
+# v1.4.2 公开源码
 
-- 已同步 v1.4.1 的 AI 助手、独立整合包工坊、下载任务和汉化修复，以及新版使用引导。
-- 公开源码使用独立应用标识和数据目录。开源范围及服务配置要求见 [README](../README.md#开源范围)。
-- [Windows 检查](https://github.com/mianste/Kynex-Launcher/actions/workflows/windows.yml) 包括前端、Rust 核心和桌面构建。
-- 界面截图使用示例数据。截图说明见 [PREVIEW-NOTES.md](images/PREVIEW-NOTES.md)。
+- 这一版加入了投影下载和 3D 预览，也更新了资源安装窗口和数据包安装。具体改动见[更新日志](../CHANGELOG.md)。
+- 自己编译的版本单独存放数据。要了解完整安装版与公开版的区别，见[项目介绍](../README.md#想自己编译)。
+- [GitHub 上的检查](https://github.com/mianste/Kynex-Launcher/actions/workflows/windows.yml)会跑界面测试、核心测试，并编译 Windows 程序。

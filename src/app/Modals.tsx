@@ -1,6 +1,6 @@
 import { ChoiceSelect } from "../components/ui/ChoiceSelect";
 import { useEffect, useState, type ReactNode } from "react";
-import { Check, Copy, Globe, ShieldCheck, Settings2 } from "lucide-react";
+import { Check, Copy, FolderOpen, Globe, ShieldCheck, Settings2 } from "lucide-react";
 import {
   Button,
   Field,
@@ -16,6 +16,7 @@ import {
 import { useStore, guarded, launch } from "../store";
 import { api, desktop, external, pickFile } from "../lib/bridge";
 import { parseInstallTarget } from "../lib/installTarget";
+import { requestGuideSection } from "../lib/guideNavigation";
 import { ExportPack } from "../features/library/ExportPack";
 import type {
   Instance,
@@ -594,11 +595,25 @@ function VersionSettings({ id }: { id?: string }) {
     instance?.settings ?? s.settings,
   );
   const [busy, B] = useState(false);
+  const settingsChanged = JSON.stringify(value) !== JSON.stringify(instance?.settings);
   return (
     <Modal
       title={`版本设置 · ${instance?.name ?? "未选择实例"}`}
       footer={
         <>
+          <Button
+            disabled={!instance || busy || settingsChanged}
+            title={settingsChanged ? "请先保存版本设置" : undefined}
+            onClick={() => {
+              if (!instance) return;
+              useStore.setState({ selected: instance.id });
+              s.setPage("instance");
+              requestGuideSection("instance", "投影");
+              s.hide();
+            }}
+          >
+            <FolderOpen size={15} /> 投影文件管理
+          </Button>
           <Button onClick={s.hide}>取消</Button>
           <Button
             primary

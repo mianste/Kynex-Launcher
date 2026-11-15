@@ -91,7 +91,7 @@ pub fn context(core: &Core, p: &Value) -> Result<Core> {
     Ok(Core{root,progress:Arc::new(move|mut event|{event["directoryId"]=json!(id);progress(event);}),..core.clone()})
 }
 pub fn game_action(action: &str) -> bool {
-    matches!(action,"list_instances"|"hydrate_pack_icons"|"install"|"launch"|"import_pack"|"install_project"|"install_java"|"download_resource_file"|"update_mods"|"export_pack"|"export_options"|"save_instance"|"save_instance_icon"|"delete_instance"|"project_versions"|"resource_requirements"|"datapack_worlds"|"check_mod_updates"|"scan_installed_mod_updates"|"mod_update_mode"|"resources"|"delete_resources"|"toggle_resource"|"resource_move"|"import_resource"|"import_resource_paths"|"ensure_loader_components"|"open_folder"|"open_resource_folder"|"java")
+    matches!(action,"list_instances"|"hydrate_pack_icons"|"install"|"launch"|"import_pack"|"install_project"|"install_java"|"download_resource_file"|"update_mods"|"export_pack"|"export_options"|"save_instance"|"save_instance_icon"|"delete_instance"|"project_versions"|"resource_requirements"|"datapack_worlds"|"check_mod_updates"|"scan_installed_mod_updates"|"mod_update_mode"|"resources"|"delete_resources"|"toggle_resource"|"resource_move"|"import_resource"|"import_resource_paths"|"ensure_loader_components"|"open_folder"|"open_resource_folder"|"schematic_preview"|"schematic_appearance"|"schematic_catalog_download"|"java")
 }
 
 pub fn running_directory(core: &Core, instance: &Value) -> Result<PathBuf> {
@@ -136,7 +136,7 @@ fn existing_running_directory(root: &Path, version: &Path) -> PathBuf {
         if settings["gameDirType"]=="ROOT_FOLDER" || settings["gameDirType"]==0 {return root.into();}
         if settings["gameDirType"]=="VERSION_FOLDER" || settings["gameDirType"]==1 {return version.into();}
     }
-    if ["mods","saves","resourcepacks","options.txt"].iter().any(|p|version.join(p).exists()) {version.into()}else{root.into()}
+    if ["mods","saves","resourcepacks","schematics","options.txt"].iter().any(|p|version.join(p).exists()) {version.into()}else{root.into()}
 }
 pub fn discover(core: &Core) -> Result<()> {
     let versions=core.root.join("versions");

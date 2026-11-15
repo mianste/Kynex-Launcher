@@ -77,6 +77,7 @@ export interface Resource {
   version?: string;
   problems?: string[];
   dir?: boolean;
+  directory?: string;
   icon_url?: string;
 }
 export interface Settings extends InstanceSettings {
@@ -116,6 +117,7 @@ export interface Project {
   project_type: string;
   slug: string;
   icon_url?: string | null;
+  gallery?: { url: string; title?: string | null }[];
   source?: "modrinth" | "curseforge";
 }
 export interface NewsArticle {

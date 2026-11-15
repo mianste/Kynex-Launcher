@@ -1,18 +1,19 @@
 {
   "channel": "stable",
-  "version": "1.4.1",
-  "displayVersion": "v1.4.1",
-  "label": "公开构建 v1.4.1",
+  "version": "1.4.2",
+  "displayVersion": "v1.4.2",
+  "label": "公开构建 v1.4.2",
   "repositoryUrl": "https://github.com/mianste/Kynex-Launcher",
   "supportUrl": "https://afdian.com/a/keke_657",
   "changes": [
-    "整合包工坊独立成页，改用标签和按钮导航。任务记录支持逐条删除，使用引导增加工坊、任务记录和汉化步骤。",
-    "修复下载任务误停在「读取版本配置」以及汉化资源包启用时的 resourcePacks 报错。",
-    "汉化支持先安装匹配的社区资源包。AI 补译并行处理，复用已通过校验的译文，只重试缺失条目，并显示实时进度。",
-    "任务取消和失败提醒会自动消失，原因可在「进度与备份」查看。语音服务异常自动重试一次，工坊规划和服务端下载更加稳定。"
+    "下载页多了「投影」。黑曜石农场、小屋、凉亭和石桥都能直接下载，也能先看 3D 预览。",
+    "在「版本设置 → 投影文件管理」可以打开投影文件夹、导入文件，还能拖动旋转、滚轮放大缩小，看看建筑长什么样。",
+    "投影用 Minecraft 原版方块来显示。修好了树叶发蓝的问题，樱花叶也会显示原来的粉色。",
+    "打开整合包、模组、资源包、数据包和光影的安装窗口时，版本列表出来得更快。作者有放截图的话，安装前就能看。",
+    "修好了新建存档后装不了数据包的问题。现在选择存档就能安装。"
   ],
   "productName": "Kynex Launcher Public",
   "identifier": "com.keke.kynex.public",
   "mainBinaryName": "Kynex Launcher Public",
-  "releaseTag": "v1.4.1-source"
+  "releaseTag": "v1.4.2-source"
 }

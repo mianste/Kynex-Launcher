@@ -9,24 +9,50 @@ pub(crate) fn modrinth_file<'a>(version:&'a Value,kind:&str)->Result<&'a Value>{
  let eligible=|f:&&Value|f["filename"].as_str().is_some_and(|n|extension_matches(n,kind) && (kind!="modpacks" || n.to_lowercase().ends_with(".mrpack")));
  files.iter().filter(eligible).find(|f|f["primary"]==true).or_else(||files.iter().find(eligible)).ok_or("此发行版没有对应类型的可下载文件".into())
 }
-fn world_dir(core:&Core,p:&Value)->Result<PathBuf>{
- let root=engine::resource_dir(core,&json!({"id":p["id"],"kind":"saves"}))?;
- let world=safe_name(string(p,"world")?)?;let path=root.join(world);
- let root=root.canonicalize().map_err(|_|"实例中没有存档，请先创建或导入世界")?;
- let path=path.canonicalize().map_err(|_|"所选存档不存在")?;
- if !path.starts_with(&root)||!path.join("level.dat").is_file(){return Err("请选择此实例中的 Minecraft 存档".into());}Ok(path)
+fn saved_world(root: &Path, name: &str) -> Result<PathBuf> {
+    if !resource_delete::valid_name(name) {
+        return Err("存档文件夹名称无效".into());
+    }
+    let path = root.join(name).canonicalize().map_err(|_| "所选存档不存在，请刷新存档列表")?;
+    if path.parent() != Some(root)
+        || !["level.dat", "level.dat_old"].iter().any(|file| path.join(file).is_file()) {
+        return Err("请选择此实例中的 Minecraft 存档".into());
+    }
+    Ok(path)
 }
-pub fn worlds(core:&Core,p:&Value)->Result<Value>{
- if !p["id"].as_str().is_some_and(|s|!s.is_empty()){return Ok(json!([]));}
- let dir=engine::resource_dir(core,&json!({"id":p["id"],"kind":"saves"}))?;
- if !dir.exists(){return Ok(json!([]));}let mut rows=Vec::new();
- for e in std::fs::read_dir(dir).map_err(err)?.flatten(){let name=e.file_name().to_string_lossy().to_string();if safe_name(&name).is_ok() && world_dir(core,&json!({"id":p["id"],"world":name})).is_ok(){rows.push(json!({"name":name}));}}
- rows.sort_by_key(|v|v["name"].as_str().unwrap_or("").to_owned());Ok(json!(rows))
+fn saves_dir(core: &Core, p: &Value) -> Result<PathBuf> {
+    engine::resource_dir(core, &json!({"id":p["id"],"kind":"saves"}))
+}
+fn world_dir(core: &Core, p: &Value) -> Result<PathBuf> {
+    let name = p["world"].as_str().filter(|name| !name.is_empty()).ok_or("请先选择要安装到的存档")?;
+    let root = saves_dir(core, p)?.canonicalize().map_err(|_| "实例中没有存档，请先创建或导入世界")?;
+    saved_world(&root, name)
+}
+pub fn worlds(core: &Core, p: &Value) -> Result<Value> {
+    if !p["id"].as_str().is_some_and(|s| !s.is_empty()) {
+        return Ok(json!([]));
+    }
+    let dir = match saves_dir(core, p)?.canonicalize() {
+        Ok(dir) => dir,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(json!([])),
+        Err(error) => return Err(err(error)),
+    };
+    let mut names: Vec<_> = std::fs::read_dir(&dir).map_err(err)?.flatten()
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| saved_world(&dir, name).is_ok())
+        .collect();
+    names.sort();
+    Ok(json!(names.into_iter().map(|name| json!({"name": name})).collect::<Vec<_>>()))
 }
 pub(crate) fn install_dir(core:&Core,p:&Value)->Result<PathBuf>{
  if p["kind"]!="datapacks"{return engine::resource_dir(core,p);}
  let world=world_dir(core,p)?;let dir=world.join("datapacks");
- if dir.exists()&&!dir.canonicalize().map_err(err)?.starts_with(&world){return Err("数据包目录不能指向存档以外的位置".into());}Ok(dir)
+ match std::fs::symlink_metadata(&dir) {
+     Ok(meta) if !meta.is_dir() || resource_delete::is_link(&meta) => Err("存档的数据包路径必须是此存档中的文件夹".into()),
+     Ok(_) => Ok(dir),
+     Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(dir),
+     Err(error) => Err(err(error)),
+ }
 }
 pub(crate) fn lock_path(core:&Core,p:&Value)->Result<PathBuf>{
  if p["kind"]=="datapacks"{Ok(world_dir(core,p)?.join("kxl-datapacks.json"))}else{Ok(core.instance(string(p,"id")?)?.join("installed-projects.json"))}
@@ -49,6 +75,23 @@ pub async fn save(core:&Core,p:&Value)->Result<Value>{
  engine::download(core,&url,&path,&hash).await?;Ok(json!({"path":path,"filename":name}))
 }
 #[cfg(test)]mod tests{use super::*;
+ #[test]
+ fn custom_save_directory_accepts_long_names_and_backup_level_metadata() {
+     let temp = tempfile::tempdir().unwrap();
+     let core = Core::new(temp.path().join("launcher"), Arc::new(|_| {})).unwrap();
+     let game = temp.path().join("custom-game");
+     write_json(&core.instance("a").unwrap().join("kxl.json"), &json!({
+         "settings":{"isolation":"custom","gameDirectory": game}
+     })).unwrap();
+     let name = "长存档".repeat(20);
+     let world = game.join("saves").join(&name);
+     std::fs::create_dir_all(&world).unwrap();
+     std::fs::write(world.join("level.dat_old"), b"saved level").unwrap();
+     std::fs::create_dir_all(game.join("saves").join("incomplete")).unwrap();
+     let payload = json!({"id":"a","kind":"datapacks","world":name});
+     assert_eq!(worlds(&core, &payload).unwrap(), json!([{"name":name}]));
+     assert_eq!(install_dir(&core, &payload).unwrap(), world.canonicalize().unwrap().join("datapacks"));
+ }
  #[test]fn game_match_is_strict_only_for_mods_and_data(){assert!(needs_game_match("mods"));assert!(needs_game_match("datapacks"));assert!(!needs_game_match("resourcepacks"));assert!(!needs_game_match("shaderpacks"));}
  #[test]fn data_pack_selects_zip_and_not_a_primary_mod_jar(){let v=json!({"loaders":["fabric","datapack"],"files":[{"filename":"thing.jar","primary":true},{"filename":"thing.zip","primary":false}]});assert_eq!(modrinth_file(&v,"datapacks").unwrap()["filename"],"thing.zip");assert_eq!(modrinth_file(&v,"mods").unwrap()["filename"],"thing.jar");assert!(modrinth_file(&json!({"loaders":["fabric"],"files":[{"filename":"x.zip"}]}),"datapacks").is_err());}
  #[test]fn data_pack_target_is_a_real_world_and_has_an_independent_lock(){let t=tempfile::tempdir().unwrap();let c=Core::new(t.path().into(),Arc::new(|_|{})).unwrap();write_json(&c.instance("a").unwrap().join("kxl.json"),&json!({"loader":"vanilla","settings":{"isolation":"all"}})).unwrap();let world=c.instance("a").unwrap().join("saves/World");std::fs::create_dir_all(&world).unwrap();std::fs::write(world.join("level.dat"),b"fixture").unwrap();let p=json!({"id":"a","kind":"datapacks","world":"World"});assert_eq!(install_dir(&c,&p).unwrap(),world.canonicalize().unwrap().join("datapacks"));assert_eq!(worlds(&c,&p).unwrap()[0]["name"],"World");assert!(install_dir(&c,&json!({"id":"a","kind":"datapacks","world":"../x"})).is_err());assert!(install_dir(&c,&json!({"id":"a","kind":"datapacks"})).is_err());assert_eq!(lock_path(&c,&p).unwrap(),world.canonicalize().unwrap().join("kxl-datapacks.json"));}

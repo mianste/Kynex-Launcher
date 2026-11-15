@@ -1,13 +1,20 @@
-# 编译公开源码
+# 怎么编译公开版
 
-需要 Node.js 22+、pnpm 11.25.0、Rust stable、WebView2 Runtime，以及 Tauri 的 Windows C++ 构建环境。
+先准备 Node.js 22 或更新版本、pnpm 11.25.0、Rust、WebView2 Runtime 和 Windows 的 C++ 构建工具。
 
-先运行 `pnpm install --frozen-lockfile`，再运行 `pnpm typecheck`、`pnpm test`、`pnpm build` 和 `cargo test --locked --no-default-features --manifest-path src-tauri/Cargo.toml`。
+```powershell
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm test
+pnpm build
+cargo test --locked --no-default-features --manifest-path src-tauri/Cargo.toml
+pnpm tauri build
+```
 
-`pnpm dev` 仅打开网页预览，不能操作本机游戏；`pnpm tauri dev` 运行桌面开发版；`pnpm tauri build` 生成公开构建的安装器。公开构建使用独立名称和数据目录。
+日常改界面可以用 `pnpm dev` 看网页。需要读取游戏文件或测试下载时，使用 `pnpm tauri dev` 打开桌面版。自己编译的程序叫「Kynex Launcher Public」，会单独保存数据。
 
-微软登录通过 `KXL_MICROSOFT_CLIENT_ID` 或账号页登录配置提供自己的 Client ID；CurseForge 官方接口通过 `KXL_CURSEFORGE_API_KEY` 或本地配置提供 Key。AI 对话和补译使用「AI 设置」中配置的模型，需要语音转写时也可在该页面配置语音接口。
+要用微软登录，可以在账号页填自己的应用编号，也可以设置环境变量 `KXL_MICROSOFT_CLIENT_ID`。要用 CurseForge 官方接口，可以在设置里填自己的密钥，也可以设置 `KXL_CURSEFORGE_API_KEY`。
 
-公开构建默认不启用自动更新。若需要更新，请自行生成和保存签名私钥，填写公钥与更新地址；私钥不要提交到仓库。
+公开版默认关闭自动更新。要给自己编译的版本提供更新，需要设置自己的更新地址和签名公钥。签名私钥请留在本机。
 
-Windows GNU 构建时，项目、构建缓存及临时目录应使用纯英文路径，避免 windres 无法读取图标。GitHub Actions 使用 Windows MSVC 环境执行检查和桌面编译。
+如果用 Windows GNU 工具编译，请把项目、构建缓存和临时文件夹放在纯英文路径下。GitHub 上使用 Windows MSVC 工具检查。

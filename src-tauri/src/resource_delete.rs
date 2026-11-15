@@ -1,7 +1,7 @@
 use crate::*;
 use std::collections::BTreeSet;
 
-fn is_link(metadata: &std::fs::Metadata) -> bool {
+pub(crate) fn is_link(metadata: &std::fs::Metadata) -> bool {
     #[cfg(windows)]
     {
         use std::os::windows::fs::MetadataExt;
@@ -12,14 +12,30 @@ fn is_link(metadata: &std::fs::Metadata) -> bool {
         metadata.file_type().is_symlink()
     }
 }
+pub(crate) fn valid_name(name: &str) -> bool {
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && name.encode_utf16().count() <= 255
+        && !name.ends_with(['.', ' '])
+        && !name.chars().any(|c| c.is_control() || "/\\:*?\"<>|".contains(c))
+}
 pub(crate) fn selected_paths(core: &Core, p: &Value) -> Result<Vec<(String, PathBuf)>> {
-    if !matches!(
-        string(p, "kind")?,
-        "mods" | "resourcepacks" | "shaderpacks" | "datapacks"
-    ) {
+    let kind = string(p, "kind")?;
+    if !matches!(kind, "mods" | "resourcepacks" | "shaderpacks" | "datapacks" | schematics::KIND) {
         return Err("此分类不支持删除资源".into());
     }
     let dir = engine::resource_dir(core, p)?;
+    let names = p["names"].as_array().ok_or("请选择要删除的资源")?;
+    if names.is_empty() || names.len() > 10_000 {
+        return Err("请选择 1–10000 个资源".into());
+    }
+    if kind == schematics::KIND {
+        if p["directory"].as_str().is_some_and(|directory| Path::new(directory) != dir) {
+            return Err("投影目录已变更，请刷新后重新选择文件".into());
+        }
+        return schematics::selected_paths(&dir, names);
+    }
     let root = core.root.canonicalize().map_err(err)?;
     let parent = dir
         .parent()
@@ -33,25 +49,13 @@ pub(crate) fn selected_paths(core: &Core, p: &Value) -> Result<Vec<(String, Path
     {
         return Err("资源目录不能指向实例以外的位置".into());
     }
-    let names = p["names"].as_array().ok_or("请选择要删除的资源")?;
-    if names.is_empty() || names.len() > 10_000 {
-        return Err("请选择 1–10000 个资源".into());
-    }
     let mut seen = BTreeSet::new();
     let mut paths = Vec::new();
     // Validate the entire batch before touching any file. Names come from the
     // actual directory and can exceed the instance-name limit of 128 bytes.
     for value in names {
         let name = value.as_str().ok_or("资源文件名无效")?;
-        if name.is_empty()
-            || name == "."
-            || name == ".."
-            || name.encode_utf16().count() > 255
-            || name.ends_with(['.', ' '])
-            || name
-                .chars()
-                .any(|c| c.is_control() || "/\\:*?\"<>|".contains(c))
-        {
+        if !valid_name(name) {
             return Err("资源文件名无效".into());
         }
         if !seen.insert(name.to_lowercase()) {
@@ -81,8 +85,12 @@ pub async fn remove(core: &Core, p: &Value) -> Result<Value> {
     let _guard = lock
         .try_lock()
         .map_err(|_| "资源正在安装或更新，请完成后再删除")?;
+    let mut p = p.clone();
+    if p["kind"] == schematics::KIND && p["directory"].is_null() {
+        p["directory"] = json!(dir);
+    }
     let mut file_guards = Vec::new();
-    for (_, path) in selected_paths(core, p)? {
+    for (_, path) in selected_paths(core, &p)? {
         file_guards.push(
             core.jobs
                 .file_lock(&path)
@@ -91,7 +99,6 @@ pub async fn remove(core: &Core, p: &Value) -> Result<Value> {
         );
     }
     let core = core.clone();
-    let p = p.clone();
     tokio::task::spawn_blocking(move || {
         remove_with(&core, &p, |path| trash::delete(path).map_err(err))
     })
@@ -116,7 +123,7 @@ fn remove_with(
         }
     }
     let mut warnings = Vec::new();
-    if !deleted.is_empty() {
+    if !deleted.is_empty() && p["kind"] != schematics::KIND {
         warnings = resources::after_delete(core, p, &deleted);
     }
     Ok(json!({"deleted":deleted,"failed":failed,"warnings":warnings}))
@@ -135,6 +142,31 @@ mod tests {
         )
         .unwrap();
         (t, c, instance)
+    }
+    #[test]
+    fn schematic_removal_respects_nested_paths_and_the_selected_directory() {
+        let (t, core, instance) = fixture();
+        let dir = instance.join("schematics");
+        std::fs::create_dir_all(dir.join("城堡")).unwrap();
+        let file = dir.join("城堡/塔.litematic");
+        std::fs::write(&file, b"build").unwrap();
+        std::fs::write(dir.join("notes.txt"), b"leave me").unwrap();
+        let outside = t.path().join("escape.litematic");
+        std::fs::write(&outside, b"outside").unwrap();
+        let mut request = json!({"id":"a","kind":"schematics","directory":dir,"names":["城堡/塔.litematic", "../escape.litematic"]});
+        assert!(selected_paths(&core, &request).is_err());
+        assert!(file.exists());
+        request["names"] = json!(["notes.txt"]);
+        assert!(selected_paths(&core, &request).is_err());
+        request["names"] = json!(["城堡/塔.litematic"]);
+        request["directory"] = json!(t.path());
+        assert!(selected_paths(&core, &request).is_err());
+        request["directory"] = json!(dir);
+        let result = remove_with(&core, &request, |path| std::fs::remove_file(path).map_err(err)).unwrap();
+        assert_eq!(result["deleted"], json!(["城堡/塔.litematic"]));
+        assert!(dir.join("城堡").is_dir());
+        assert!(dir.join("notes.txt").is_file());
+        assert!(outside.is_file());
     }
     #[tokio::test]
     async fn delete_cannot_race_installs_or_downloads() {

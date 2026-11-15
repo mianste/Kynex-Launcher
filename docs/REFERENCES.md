@@ -132,3 +132,10 @@ Windows 凭据只保存必要的登录字段，使用系统凭据库的字节存
 ## 收藏音源与格式修复（2026-10-28）
 
 通过真实对照定位到播放请求缺少 os=pc 平台字段，补齐后原 403 地址恢复有效音源。只在请求中声明桌面平台，不改变已保存账号会话。MP3 采用官方码率参数，FLAC 采用 lossless；按音频文件头确认实际格式。上游 [请求字段处理](https://github.com/neteasecloudmusicapienhanced/api-enhanced/blob/master/util/request.js) 与 [音源接口](https://github.com/neteasecloudmusicapienhanced/api-enhanced/blob/master/module/song_url.js) 仅用于核对协议；KXL 独立实现，不接入第三方解锁或公共代理。
+
+## 投影文件管理
+
+- 参考 [Litematica 使用说明](https://github.com/maruohon/litematica/wiki/Frequently-Asked-Questions#loading-a-schematic) 与 [Sakura-Ryoko 维护分支的配置定义](https://github.com/sakura-ryoko/litematica/blob/1.21.8/src/main/java/fi/dy/masa/litematica/config/Configs.java)，核对默认 `schematics` 目录、游戏内加载入口和自定义投影目录设置。启动器读取配置并管理本地文件。
+- 投影预览按 [Litematica 方块容器](https://github.com/maruohon/litematica/tree/pre-rewrite/fabric/1.21.1-masa/src/main/java/fi/dy/masa/litematica/schematic/container) 和 [Sponge 投影规范](https://github.com/SpongePowered/Schematic-Specification) 核对数据布局，独立读取投影的方块坐标与状态。
+- 方块外观按 [Fabric 方块模型文档](https://docs.fabricmc.net/develop/blocks/block-models) 解释 JSON 模型、状态和纹理。优先读取已安装的 Minecraft Java 客户端，缺少可读取的客户端时从 [Mojang 版本清单](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json) 记录的地址缓存并校验 1.21.11 客户端。Minecraft 模型和纹理用于本机预览，安装包只包含读取和绘制逻辑。
+- 投影下载内置 [DuskScorpio 的 CC0 黑曜石农场](https://github.com/DuskScorpio/Scorpio-File-Downloads/tree/c3956162182bbef0413c601ef1c26691f7783a36) 的原始文件，以及 [Block Library 的三份 CC0 原创建筑](https://blocklibrary.net/guides/original-builds.html#source-and-reuse) 的重新封装文件。这三份文件按作者公开的 [小屋](https://blocklibrary.net/guides/plans/cabin.json)、[凉亭](https://blocklibrary.net/guides/plans/pavilion.json) 和 [石桥](https://blocklibrary.net/guides/plans/bridge.json) 方块坐标及状态生成，保留作品署名。将三份公开 JSON 放进同一目录后，可以运行 `python scripts/package-block-library-schematics.py <目录>` 重新生成。清单记录内置文件的 SHA-256，供预览和保存前校验。

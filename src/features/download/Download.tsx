@@ -31,8 +31,10 @@ import { ResourceVersionPicker, DataPackWorldPicker } from "./ModManagement";
 import { resourceTags } from "./resourceTags";
 import { ProjectIcon } from "./ProjectIcon";
 import { catalogCache, appendCatalog } from "./catalogCache";
+import { versionCatalog, versionQuery } from "./versionCatalog";
+import { SchematicCatalog } from "./SchematicCatalog";
 import "./downloadCatalog.css";
-const categories = ["游戏本体", "整合包", "模组", "资源包", "光影", "数据包"];
+const categories = ["游戏本体", "整合包", "模组", "资源包", "光影", "数据包", "投影"];
 
 const projectKinds: Record<string, { type: string; install: string }> = {
   整合包: { type: "modpack", install: "modpacks" },
@@ -136,11 +138,30 @@ export function Download() {
   const [pageCount, PageCount] = useState(1);
   const [searchRevision, RetrySearch] = useState(0);
   const request = useRef(0);
+  const versionPrefetch = useRef<ReturnType<typeof setTimeout>>();
   const previousKind = useRef(kind);
   const previousQuery = useRef(q);
   const previousRevision = useRef(searchRevision);
   const target = s.instances.find((i) => i.id === s.selected);
   const busy = manifestBusy || (searchBusy && projects.length === 0);
+  useEffect(() => () => clearTimeout(versionPrefetch.current), []);
+
+  function prefetchVersions(project: Project) {
+    if (!desktop || !projectKinds[kind]) return;
+    clearTimeout(versionPrefetch.current);
+    const serial = request.current;
+    const query = versionQuery(project, {
+      id: s.selected,
+      kind: projectKinds[kind].install,
+      game: gameFilter,
+      loader: loaderFilter,
+      directoryId: s.directoryId,
+      curseforgeKey: s.settings.curseforgeKey,
+    });
+    versionPrefetch.current = setTimeout(() => {
+      if (serial === request.current) void versionCatalog.get(query).catch(() => {});
+    }, 150);
+  }
 
   function refresh(force = false) {
     if (!desktop) return;
@@ -349,6 +370,7 @@ export function Download() {
           : "资源下载完成",
       );
     } catch (e) {
+      if (category === "数据包") throw e;
       E(String(e).replace(/^Error: /, ""));
     }
   }
@@ -357,12 +379,28 @@ export function Download() {
     <>
       {versionProject && (
         <ResourceVersionPicker
+          key={versionProject.targetId}
           project={versionProject.project}
           id={versionProject.targetId}
           kind={projectKinds[versionProject.category].install}
           label={versionProject.category}
           gameFilter={versionProject.game}
           loaderFilter={versionProject.loader}
+          targetControls={versionProject.category === "数据包" && (
+            <div className="spread resource-version-target">
+              <span>目标实例</span>
+              <InstanceSelect
+                instances={s.instances}
+                value={versionProject.targetId}
+                onChange={(id) => {
+                  const instance = s.instances.find((item) => item.id === id);
+                  if (!instance) return;
+                  useStore.setState({ selected: id });
+                  VP((selection) => selection && { ...selection, targetId: id, game: instance.version });
+                }}
+              />
+            </div>
+          )}
           close={() => VP(null)}
           install={(version) => {
             const selection = versionProject;
@@ -376,11 +414,11 @@ export function Download() {
         <DataPackWorldPicker
           project={dataProject.project}
           id={dataProject.targetId}
+          targetName={s.instances.find((item) => item.id === dataProject.targetId)?.name ?? ""}
           close={() => DP(null)}
-          install={(world) => {
-            const selection = dataProject;
+          install={async (world) => {
+            await installProject(dataProject, dataProject.version, world);
             DP(null);
-            void installProject(selection, selection.version, world);
           }}
         />
       )}
@@ -392,22 +430,26 @@ export function Download() {
             placeholder={
               kind === "模组"
                 ? "搜索模组，支持中文 / English"
-                : "搜索游戏版本或资源"
+                : kind === "投影" ? "搜索投影" : "搜索游戏版本或资源"
             }
           />
-          <Button onClick={() => guarded(importPack)}>
-            <PackagePlus size={15} />
-            导入整合包
-          </Button>
-          <Button
-            onClick={() =>
-              projectKinds[kind] ? RetrySearch((n) => n + 1) : refresh(true)
-            }
-            disabled={busy}
-          >
-            <RefreshCw size={15} />
-            刷新
-          </Button>
+          {kind !== "投影" && (
+            <>
+              <Button onClick={() => guarded(importPack)}>
+                <PackagePlus size={15} />
+                导入整合包
+              </Button>
+              <Button
+                onClick={() =>
+                  projectKinds[kind] ? RetrySearch((n) => n + 1) : refresh(true)
+                }
+                disabled={busy}
+              >
+                <RefreshCw size={15} />
+                刷新
+              </Button>
+            </>
+          )}
         </div>
       </div>
       <div className="chips" data-guide="download-categories">
@@ -443,14 +485,20 @@ export function Download() {
               ))}
             </>
           )}
-          <h4>下载来源</h4>
-          <Badge>
-            {s.settings.downloadSource === "bmclapi"
-              ? "游戏：BMCLAPI 优先"
-              : "游戏：Mojang 官方"}
-          </Badge>
-          <Badge tone="ok">资源：Modrinth</Badge>
-          <Badge tone="warn">资源：CurseForge</Badge>
+          <h4>{kind === "投影" ? "作品来源" : "下载来源"}</h4>
+          {kind === "投影" ? (
+            <><Badge>GitHub</Badge><Badge>Block Library</Badge></>
+          ) : (
+            <>
+              <Badge>
+                {s.settings.downloadSource === "bmclapi"
+                  ? "游戏：BMCLAPI 优先"
+                  : "游戏：Mojang 官方"}
+              </Badge>
+              <Badge tone="ok">资源：Modrinth</Badge>
+              <Badge tone="warn">资源：CurseForge</Badge>
+            </>
+          )}
           {kind !== "整合包" && (
             <>
               <h4>目标实例</h4>
@@ -460,15 +508,16 @@ export function Download() {
                 onChange={(id) => useStore.setState({ selected: id })}
               />
               <p className="target-instance-hint">
-                {target
-                  ? `将安装到 ${target.name} · ${target.version} · ${target.loader}`
-                  : "先安装或选择一个 Java 实例，资源会按该实例的版本与加载器匹配。"}
+                {kind === "投影"
+                  ? target ? `投影将保存到 ${target.name} 的投影文件夹` : "选择一个 Java 实例后可保存投影。"
+                  : target ? `将安装到 ${target.name} · ${target.version} · ${target.loader}`
+                    : "先安装或选择一个 Java 实例，资源会按该实例的版本与加载器匹配。"}
               </p>
             </>
           )}
         </aside>
         <div className="download-main">
-          {error && (
+          {kind !== "投影" && error && (
             <div role="alert" className="notice error">
               {error}
               <Button
@@ -485,7 +534,7 @@ export function Download() {
           {manifestBusy && kind === "游戏本体" && !versions.length && (
             <Skeleton />
           )}
-          {kind === "游戏本体" ? (
+          {kind === "投影" ? <SchematicCatalog query={q} instanceId={target?.id ?? ""} /> : kind === "游戏本体" ? (
             <>
               <div className="spread section-tools">
                 <span className="muted">
@@ -676,6 +725,8 @@ export function Download() {
                         key={p.project_id}
                         className="project-result-row"
                         role="listitem"
+                        onPointerEnter={() => prefetchVersions(p)}
+                        onPointerLeave={() => clearTimeout(versionPrefetch.current)}
                       >
                         <ProjectIcon url={p.icon_url} name={localized.name} />
                         <div className="project-copy">
@@ -722,6 +773,8 @@ export function Download() {
                           </div>
                         </div>
                         <Button
+                          onFocus={() => prefetchVersions(p)}
+                          onBlur={() => clearTimeout(versionPrefetch.current)}
                           onClick={() => {
                             VP({
                               project: p,

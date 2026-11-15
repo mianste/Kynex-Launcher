@@ -115,3 +115,50 @@
   border-color: var(--line);
   color: var(--text2);
 }
+
+.schematic-catalog-tools,
+.schematic-catalog-row {
+  flex-wrap: wrap;
+}
+.schematic-catalog-tools {
+  gap: 8px;
+}
+.schematic-catalog-row .project-copy {
+  flex-basis: min(220px, 100%);
+}
+.schematic-catalog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.schematic-download-receipt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+.schematic-download-location {
+  flex: 1 1 240px;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+.schematic-download-location strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.schematic-catalog-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.schematic-catalog-link:hover {
+  color: var(--text);
+}

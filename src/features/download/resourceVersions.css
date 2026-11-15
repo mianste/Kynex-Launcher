@@ -1,5 +1,5 @@
 .app .resource-version-modal {
-  width: min(800px, calc(100vw - 48px));
+  width: min(984px, calc(100vw - 48px));
 }
 .resource-version-modal > header,
 .resource-version-modal > footer {
@@ -8,6 +8,9 @@
 .resource-version-picker {
   display: grid;
   gap: 20px;
+}
+.resource-version-target {
+  margin-bottom: 16px;
 }
 .resource-version-intro h3 {
   font-size: 16px;
@@ -20,7 +23,7 @@
 }
 .resource-version-columns {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, .9fr) minmax(0, 1.25fr);
   gap: 24px;
   min-height: 0;
 }
@@ -176,6 +179,60 @@
   background: var(--control-bg);
   color: var(--text);
   border: 1px solid var(--line);
+}
+.resource-gallery-frame {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--control-bg);
+}
+.resource-gallery-frame img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.resource-gallery-message {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  color: var(--text2);
+  font-size: 12px;
+  text-align: center;
+}
+.resource-gallery-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  color: var(--text2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.resource-gallery-controls .btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+}
+@media (max-width: 880px) {
+  .resource-version-columns {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  }
+  .resource-gallery {
+    grid-column: 1 / -1;
+    width: min(100%, 440px);
+  }
+}
+@media (max-width: 560px) {
+  .resource-version-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* 只有一个可用版本时不再放下拉框，直接给一张已选中的版本卡。 */

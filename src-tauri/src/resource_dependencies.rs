@@ -6,7 +6,7 @@ use sha1::{Digest, Sha1};
 struct Entry { project: Value, version: Value, kind: String, name: String, icon: Value }
 fn mr_kind(info: &Value, version: &Value) -> Result<String> {
     if version["loaders"].as_array().is_some_and(|a|a.iter().any(|v|v=="datapack")) && version["files"].as_array().is_some_and(|a|a.iter().any(|f|f["filename"].as_str().is_some_and(|s|s.ends_with(".zip")))) { return Ok("datapacks".into()); }
-    Ok(match info["project_type"].as_str() { Some("mod")=>"mods",Some("resourcepack")=>"resourcepacks",Some("shader")=>"shaderpacks",_=>return Err("不支持此类型的前置资源".into()) }.into())
+    Ok(match info["project_type"].as_str() { Some("mod")=>"mods",Some("resourcepack")=>"resourcepacks",Some("shader")=>"shaderpacks",Some("datapack")=>"datapacks",_=>return Err("不支持此类型的前置资源".into()) }.into())
 }
 fn cf_kind(info: &Value) -> Result<String> { Ok(match info["classId"].as_u64(){Some(6)=>"mods",Some(12)=>"resourcepacks",Some(6552)=>"shaderpacks",Some(6945)=>"datapacks",_=>return Err("不支持此类型的前置资源".into())}.into()) }
 fn payload(p:&Value,e:&Entry)->Value { let mut v=p.clone();v["project"]=e.project.clone();v["versionId"]=e.version.clone();v["kind"]=json!(e.kind);v["name"]=json!(e.name);v["iconUrl"]=e.icon.clone();v["skipDependencies"]=json!(true);v }
@@ -35,18 +35,40 @@ async fn plan(core:&Core,p:&Value)->Result<Vec<Entry>> {
         if entries.len()>=128{return Err("前置资源过多，请改用整合包安装".into());}
         let (entry,deps)=if cf {
             let pid=project.as_u64().or_else(||project.as_str()?.parse().ok()).ok_or("前置项目 ID 无效")?;
-            let info=curseforge::project_info(core,pid,key.as_deref()).await?;
-            let kind=root_kind.unwrap_or(cf_kind(&info)?);
-            let file=if let Some(vid)=version{curseforge::file_by_id(core,pid,vid.parse().map_err(|_|"前置版本 ID 无效")?,key.as_deref()).await?}else{curseforge::best_file(core,pid,Some(game),if kind=="mods"{Some(loader)}else{None},key.as_deref()).await?};
+            let metadata = curseforge::project_info(core, pid, key.as_deref());
+            let (info, selected_file) = if let Some(vid) = version {
+                let vid = vid.parse().map_err(|_| "前置版本 ID 无效")?;
+                let (info, file) = tokio::try_join!(metadata, curseforge::file_by_id(core, pid, vid, key.as_deref()))?;
+                (info, Some(file))
+            } else {
+                (metadata.await?, None)
+            };
+            let kind = match root_kind { Some(kind) => kind, None => cf_kind(&info)? };
+            let file = match selected_file {
+                Some(file) => file,
+                None => curseforge::best_file(core, pid, Some(game), (kind == "mods").then_some(loader), key.as_deref()).await?,
+            };
             if file["modId"].as_u64()!=Some(pid)||file["isAvailable"]==false||!curseforge::compatible(&file,if resource_downloads::needs_game_match(&kind){Some(game)}else{None},if kind=="mods"{Some(loader)}else{None}){return Err("前置文件不属于此项目或不兼容当前实例".into());}
+            if !file["fileName"].as_str().is_some_and(|name| resource_downloads::extension_matches(name, &kind)) {
+                return Err(format!("{} 没有对应类型的可下载文件", info["name"].as_str().unwrap_or("所选资源")));
+            }
             let deps=file["dependencies"].as_array().into_iter().flatten().filter(|d|d["relationType"]==3).map(|d|(d["modId"].clone(),None,None)).collect::<Vec<_>>();
             (Entry{project:json!(pid),version:json!(file["id"].to_string()),kind,name:info["name"].as_str().unwrap_or("前置资源").into(),icon:info["logo"]["thumbnailUrl"].as_str().or_else(||info["logo"]["url"].as_str()).map(|s|json!(s)).unwrap_or(Value::Null)},deps)
         }else{
-            let mut info=if let Some(pid)=project.as_str(){safe_name(pid)?;Some(core.get(&format!("https://api.modrinth.com/v2/project/{pid}")).await?)}else{None};
-            let file=if let Some(vid)=version{safe_name(&vid)?;core.get(&format!("https://api.modrinth.com/v2/version/{vid}")).await?}else{
+            let metadata = async {
+                let Some(pid) = project.as_str() else { return Ok::<_, String>(None); };
+                safe_name(pid)?;
+                core.get(&format!("https://api.modrinth.com/v2/project/{pid}")).await.map(Some)
+            };
+            let (mut info, file) = if let Some(vid) = version {
+                safe_name(&vid)?;
+                let address = format!("https://api.modrinth.com/v2/version/{vid}");
+                tokio::try_join!(metadata, core.get(&address))?
+            } else {
+                let info = metadata.await?;
                 let pid=project.as_str().ok_or("前置项目 ID 无效")?;
-                let resource_kind=root_kind.clone().unwrap_or_else(||if info.as_ref().is_some_and(|v|v["loaders"].as_array().is_some_and(|a|a.len()==1 && a[0]=="datapack")){"datapacks".into()}else{match info.as_ref().and_then(|v|v["project_type"].as_str()){Some("mod")=>"mods",Some("resourcepack")=>"resourcepacks",Some("shader")=>"shaderpacks",_=>"mods"}.into()});
-                engine::project_version(core,pid,game,loader,&resource_kind).await?
+                let resource_kind=root_kind.clone().unwrap_or_else(||if info.as_ref().is_some_and(|v|v["loaders"].as_array().is_some_and(|a|a.len()==1 && a[0]=="datapack")){"datapacks".into()}else{match info.as_ref().and_then(|v|v["project_type"].as_str()){Some("mod")=>"mods",Some("resourcepack")=>"resourcepacks",Some("shader")=>"shaderpacks",Some("datapack")=>"datapacks",_=>"mods"}.into()});
+                (info, engine::project_version(core,pid,game,loader,&resource_kind).await?)
             };
             let pid=string(&file,"project_id")?;
             if info.is_none(){info=Some(core.get(&format!("https://api.modrinth.com/v2/project/{pid}")).await?);}
@@ -80,6 +102,13 @@ pub async fn preview(core:&Core,p:&Value)->Result<Value>{
     Ok(json!({"dependencies":deps,"notes":notes}))
 }
 pub async fn install(core:&Core,p:&Value)->Result<Value>{
+    let world_lock = (p["kind"] == "datapacks").then(|| {
+        resource_downloads::install_dir(core, p).map(|dir| core.jobs.file_lock(&dir))
+    }).transpose()?;
+    let _world = match &world_lock {
+        Some(lock) => Some(jobs::wait(core, lock.lock()).await?),
+        None => None,
+    };
     let entries=plan(core,p).await?;
     let mut files=0;let mut mods_changed=false;
     for entry in entries.iter().rev(){

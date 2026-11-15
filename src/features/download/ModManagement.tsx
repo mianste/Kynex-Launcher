@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef, useId, type ReactNode } from "react";
+import { useCallback, useEffect, useState, useRef, useId, type ReactNode } from "react";
+import { RefreshCw } from "lucide-react";
 import { api, desktop, saveFile } from "../../lib/bridge";
 import { useStore } from "../../store";
 import { useModUpdateState, type ModUpdate } from "../../lib/modUpdateState";
@@ -6,19 +7,9 @@ export type { ModUpdate } from "../../lib/modUpdateState";
 import { Button, Chip, OptionSelect, Modal, Badge } from "../../components/ui";
 import { localizeProject } from "./modLocalization";
 import type { Project, Resource } from "../../lib/types";
+import { ResourceGallery } from "./ResourceGallery";
+import { versionCatalog, versionQuery, type Version } from "./versionCatalog";
 import "./resourceVersions.css";
-type Version = {
-  id: string;
-  name: string;
-  number: string;
-  date: string;
-  type: string;
-  gameVersions?: string[];
-  loaders?: string[];
-  compatible?: boolean;
-  filename?: string;
-};
-type VersionPage = { versions: Version[]; nextOffset?: number | null };
 export function ResourceVersionPicker({
   project,
   id,
@@ -26,6 +17,7 @@ export function ResourceVersionPicker({
   label = "模组",
   gameFilter = "",
   loaderFilter = "",
+  targetControls,
   close,
   install,
 }: {
@@ -35,19 +27,27 @@ export function ResourceVersionPicker({
   label?: string;
   gameFilter?: string;
   loaderFilter?: string;
+  targetControls?: ReactNode;
   close: () => void;
   install: (id: string) => void;
 }) {
   const s = useStore();
-  const visualList = kind === "shaderpacks" || kind === "resourcepacks";
+  const visualResource = kind === "shaderpacks" || kind === "resourcepacks";
+  const visualList = visualResource || !!project.gallery?.length;
+  const query = versionQuery(project, {
+    id, kind, game: gameFilter, loader: loaderFilter,
+    directoryId: s.directoryId, curseforgeKey: s.settings.curseforgeKey,
+  });
+  const seed = versionCatalog.peek(query);
   const versionGroup = useId();
-  const [rows, R] = useState<Version[]>([]);
-  const [selected, S] = useState("");
-  const [nextOffset, Next] = useState<number | null>(null);
-  const [busy, B] = useState(true);
+  const [rows, R] = useState<Version[]>(seed?.versions ?? []);
+  const [selected, S] = useState(() => preferredVersion(seed?.versions ?? []));
+  const [nextOffset, Next] = useState<number | null>(seed?.nextOffset ?? null);
+  const [busy, B] = useState(!seed);
   const [moreBusy, MoreBusy] = useState(false);
   const [saving, Saving] = useState(false);
   const [error, E] = useState("");
+  const [warning, Warning] = useState("");
   const generation = useRef(0);
   const chosen = rows.find((v) => v.id === selected);
   const [requirements, Requirements] = useState<{
@@ -98,34 +98,23 @@ export function ResourceVersionPicker({
     s.settings.curseforgeKey,
     requirementRevision,
   ]);
-  async function loadPage(offset: number, token = generation.current) {
-    if (offset === 0) B(true);
+  async function loadPage(offset: number, token = generation.current, force = false) {
+    if (offset === 0) B(force || !versionCatalog.peek(query));
     else MoreBusy(true);
     E("");
     try {
-      const reply = await api<VersionPage | Version[]>("project_versions", {
-        id,
-        kind,
-        project: project.project_id,
-        source: project.source,
-        game: gameFilter,
-        loader: loaderFilter,
-        paged: true,
-        offset,
-        curseforgeKey: s.settings.curseforgeKey,
-      });
+      const reply = await versionCatalog.get({ ...query, offset }, force);
       if (token !== generation.current) return;
-      const values = Array.isArray(reply) ? reply : reply.versions;
+      const values = reply.versions;
       R((previous) => [
         ...new Map(
           [...(offset ? previous : []), ...values].map((v) => [v.id, v]),
         ).values(),
       ]);
-      Next(Array.isArray(reply) ? null : (reply.nextOffset ?? null));
-      if (offset === 0)
-        S(
-          values.find((v) => v.compatible !== false)?.id || values[0]?.id || "",
-        );
+      Next(reply.nextOffset ?? null);
+      if (offset === 0 || reply.warning) Warning(reply.warning ?? "");
+      if (offset === 0) S(preferredVersion(values));
+      else S((current) => current || preferredVersion(values));
     } catch (e) {
       if (token === generation.current) E(String(e));
     } finally {
@@ -137,9 +126,12 @@ export function ResourceVersionPicker({
   }
   useEffect(() => {
     const token = ++generation.current;
-    R([]);
-    S("");
-    Next(null);
+    const cached = versionCatalog.peek(query);
+    R(cached?.versions ?? []);
+    S(preferredVersion(cached?.versions ?? []));
+    Next(cached?.nextOffset ?? null);
+    Warning("");
+    MoreBusy(false);
     void loadPage(0, token);
     return () => {
       generation.current++;
@@ -152,6 +144,7 @@ export function ResourceVersionPicker({
     gameFilter,
     loaderFilter,
     s.settings.curseforgeKey,
+    s.directoryId,
   ]);
   async function saveSelected() {
     if (!chosen || saving) return;
@@ -235,7 +228,7 @@ export function ResourceVersionPicker({
   return (
     <Modal
       title={
-        visualList
+        visualResource
           ? `选择${kind === "shaderpacks" ? "光影" : "材质包"}版本`
           : `选择 ${localizeProject(project).name} 的版本`
       }
@@ -260,9 +253,7 @@ export function ResourceVersionPicker({
               saving ||
               !chosen ||
               chosen.compatible === false ||
-              (kind !== "modpacks" && !id) ||
-              requirementBusy ||
-              !!requirementError
+              (kind !== "modpacks" && !id)
             }
             onClick={() => install(selected)}
           >
@@ -271,6 +262,8 @@ export function ResourceVersionPicker({
         </>
       }
     >
+      {targetControls}
+      {warning && <p className="notice" role="status">{warning}</p>}
       {visualList ? (
         <div className="resource-version-picker">
           <div className="resource-version-intro">
@@ -300,13 +293,13 @@ export function ResourceVersionPicker({
                   {error}
                   <Button
                     disabled={busy || moreBusy}
-                    onClick={() => void loadPage(nextOffset ?? 0)}
+                    onClick={() => void loadPage(nextOffset ?? 0, generation.current, true)}
                   >
                     重试获取
                   </Button>
                 </div>
               )}
-              {!busy && !rows.length && !error && (
+              {!busy && !rows.length && !error && nextOffset === null && (
                 <p>没有符合条件的版本，请返回下载页调整筛选。</p>
               )}
               {!!rows.length && (
@@ -404,6 +397,10 @@ export function ResourceVersionPicker({
                 <p>选择版本后查看支持信息和必需前置。</p>
               )}
             </aside>
+            <ResourceGallery
+              key={`${project.source}:${project.project_id}`}
+              images={project.gallery ?? []}
+            />
           </div>
         </div>
       ) : (
@@ -426,13 +423,13 @@ export function ResourceVersionPicker({
               {error}
               <Button
                 disabled={busy || moreBusy}
-                onClick={() => void loadPage(nextOffset ?? 0)}
+                onClick={() => void loadPage(nextOffset ?? 0, generation.current, true)}
               >
                 重试获取
               </Button>
             </div>
           )}
-          {!busy && !rows.length && !error && (
+          {!busy && !rows.length && !error && nextOffset === null && (
             <p>没有符合筛选条件的版本，请返回下载页调整筛选。</p>
           )}
           {!!rows.length && rows.length > 1 && (
@@ -496,25 +493,37 @@ export function ResourceVersionPicker({
   );
 }
 
+function preferredVersion(rows: Version[]) {
+  return rows.find((version) => version.compatible !== false)?.id || rows[0]?.id || "";
+}
+
 export function DataPackWorldPicker({
   project,
   id,
+  targetName,
   close,
   install,
 }: {
   project: Project;
   id: string;
+  targetName: string;
   close: () => void;
-  install: (world: string) => void;
+  install: (world: string) => Promise<void>;
 }) {
   const [worlds, Worlds] = useState<{ name: string }[]>([]);
   const [world, World] = useState("");
   const [error, E] = useState("");
+  const [installError, InstallError] = useState("");
   const [busy, B] = useState(true);
+  const [installing, Installing] = useState(false);
+  const [revision, Refresh] = useState(0);
+  useEffect(() => {
+    const refreshOnFocus = () => { if (!installing) Refresh((value) => value + 1); };
+    window.addEventListener("focus", refreshOnFocus);
+    return () => window.removeEventListener("focus", refreshOnFocus);
+  }, [installing]);
   useEffect(() => {
     let live = true;
-    World("");
-    Worlds([]);
     E("");
     B(true);
     if (!id) {
@@ -523,7 +532,11 @@ export function DataPackWorldPicker({
     }
     void api<{ name: string }[]>("datapack_worlds", { id })
       .then((v) => {
-        if (live) Worlds(v);
+        if (!live) return;
+        Worlds(v);
+        World((previous) => v.some((entry) => entry.name === previous)
+          ? previous
+          : v.length === 1 ? v[0].name : "");
       })
       .catch((e) => {
         if (live) E(String(e));
@@ -534,25 +547,44 @@ export function DataPackWorldPicker({
     return () => {
       live = false;
     };
-  }, [id]);
+  }, [id, revision]);
+  async function installSelected() {
+    if (!world || busy || error || installing) return;
+    Installing(true);
+    InstallError("");
+    try {
+      await install(world);
+    } catch (error) {
+      InstallError(String(error).replace(/^Error: /, ""));
+    } finally {
+      Installing(false);
+    }
+  }
+  const dismiss = useCallback(() => { if (!installing) close(); }, [close, installing]);
   return (
     <Modal
       title={`安装 ${localizeProject(project).name}`}
-      onClose={close}
+      onClose={dismiss}
       footer={
         <>
-          <Button onClick={close}>取消</Button>
+          <Button disabled={installing} onClick={dismiss}>取消</Button>
           <Button
             primary
-            disabled={!world || busy}
-            onClick={() => install(world)}
+            busy={installing}
+            disabled={!world || busy || !!error}
+            onClick={() => void installSelected()}
           >
             安装到所选存档
           </Button>
         </>
       }
     >
-      <p>安装兼容当前实例的数据包，请选择目标存档。</p>
+      <div className="spread">
+        <p>目标实例 {targetName}</p>
+        <Button disabled={!id || busy || installing} onClick={() => Refresh((value) => value + 1)}>
+          <RefreshCw size={14} /> 刷新存档
+        </Button>
+      </div>
       {busy ? (
         <p role="status">正在读取存档…</p>
       ) : error ? (
@@ -561,7 +593,8 @@ export function DataPackWorldPicker({
         <OptionSelect
           label="数据包目标存档"
           value={world}
-          onChange={World}
+          disabled={installing}
+          onChange={(name) => { World(name); InstallError(""); }}
           options={[
             { value: "", label: "请选择存档", disabled: true },
             ...worlds.map((w) => ({ value: w.name, label: w.name })),
@@ -570,10 +603,11 @@ export function DataPackWorldPicker({
       ) : (
         <p>
           {id
-            ? "此实例还没有存档，请先在游戏中创建世界。"
+            ? "当前实例没有可选存档。请保存退出世界后刷新，或返回更换目标实例。"
             : "请先在下载页选择目标实例。"}
         </p>
       )}
+      {installError && <p className="notice error" role="alert">{installError}</p>}
     </Modal>
   );
 }

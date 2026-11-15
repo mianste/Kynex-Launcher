@@ -247,3 +247,9 @@ PNG: https://s.namemc.com/i/8a1a50b8b7d8c1cd.png
 Original bytes preserved; 64x32 PNG; SHA-256: 99611d1e8ce2b794bb0840e2ac2f4e4c5704da7b59ec6b6eecb1ea92b9fad0d5
 Minecraft character artwork belongs to its respective rights holders.
 Not covered by Kynex Launcher's MIT license. No cape texture is bundled.
+
+===== Schematic preview dependencies =====
+fastnbt 2.6.3 (MIT) — licenses/fastnbt-2.6.3-LICENSE.txt
+cesu8 1.1.0 (MIT) — licenses/cesu8-1.1.0-LICENSE.txt
+serde_bytes 0.11.19 (MIT) — licenses/serde_bytes-0.11.19-LICENSE.txt
+flate2 1.1.10 (MIT) — licenses/flate2-1.1.10-LICENSE.txt

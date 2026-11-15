@@ -231,6 +231,9 @@ fn packaged_icon(path: &Path, kind: &str) -> String {
     icon_from_anywhere(&mut archive).unwrap_or_default()
 }
 pub fn list(core: &Core, p: &Value) -> Result<Value> {
+    if p["kind"] == schematics::KIND {
+        return crate::engine::resources(core, p);
+    }
     let mut rows = crate::engine::resources(core, p)?
         .as_array()
         .cloned()
@@ -500,7 +503,6 @@ pub(crate) fn after_delete(core: &Core, p: &Value, deleted: &[String]) -> Vec<St
     warnings
 }
 pub fn import_file(core: &Core, p: &Value) -> Result<Value> {
-    use base64::Engine;
     let kind = string(p, "kind")?;
     let name = safe_name(string(p, "name")?)?;
     let lower = name.to_ascii_lowercase();
@@ -518,16 +520,7 @@ pub fn import_file(core: &Core, p: &Value) -> Result<Value> {
             _ => "当前分类不支持拖入文件".into(),
         });
     }
-    let encoded = string(p, "base64")?;
-    if encoded.len() > 168 * 1024 * 1024 {
-        return Err("单个资源文件不能大于 120 MB".into());
-    }
-    let data = base64::engine::general_purpose::STANDARD
-        .decode(encoded)
-        .map_err(err)?;
-    if data.len() > 120 * 1024 * 1024 {
-        return Err("单个资源文件不能大于 120 MB".into());
-    }
+    let data = decode_resource(p)?;
     let dir = crate::engine::resource_dir(core, p)?;
     std::fs::create_dir_all(&dir).map_err(err)?;
     let target = dir.join(name);
@@ -538,6 +531,18 @@ pub fn import_file(core: &Core, p: &Value) -> Result<Value> {
     std::fs::write(&temp, data).map_err(err)?;
     std::fs::rename(&temp, &target).map_err(err)?;
     list(core, p)
+}
+pub(crate) fn decode_resource(p: &Value) -> Result<Vec<u8>> {
+    use base64::Engine;
+    let encoded = string(p, "base64")?;
+    if encoded.len() > 168 * 1024 * 1024 {
+        return Err("单个资源文件不能大于 120 MB".into());
+    }
+    let data = base64::engine::general_purpose::STANDARD.decode(encoded).map_err(err)?;
+    if data.len() > 120 * 1024 * 1024 {
+        return Err("单个资源文件不能大于 120 MB".into());
+    }
+    Ok(data)
 }
 pub fn import_paths(core: &Core, p: &Value) -> Result<Value> {
     let paths = p["paths"].as_array().ok_or("没有可导入的文件")?;

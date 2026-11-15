@@ -10,21 +10,28 @@ export type CatalogPage = {
 type Payload = Record<string, unknown>;
 
 // Kept only in this app process. Shared by page remounts and concurrent callers.
-export class CatalogCache {
-  private ready = new Map<string, { until: number; value: CatalogPage }>();
-  private pending = new Map<string, Promise<CatalogPage>>();
+export class CatalogCache<T = CatalogPage> {
+  private ready = new Map<string, { until: number; value: T }>();
+  private pending = new Map<string, Promise<T>>();
   constructor(
-    private fetch: (payload: Payload) => Promise<CatalogPage>,
+    private fetch: (payload: Payload) => Promise<T>,
     private now = Date.now,
   ) {}
-  get(payload: Payload, force = false): Promise<CatalogPage> {
-    const key = JSON.stringify(
+  private key(payload: Payload) {
+    return JSON.stringify(
       Object.fromEntries(
         Object.keys(payload)
           .sort()
           .map((k) => [k, payload[k]]),
       ),
     );
+  }
+  peek(payload: Payload): T | undefined {
+    const cached = this.ready.get(this.key(payload));
+    return cached && cached.until > this.now() ? cached.value : undefined;
+  }
+  get(payload: Payload, force = false): Promise<T> {
+    const key = this.key(payload);
     const inflight = this.pending.get(key);
     if (inflight) return inflight;
     const cached = this.ready.get(key);
@@ -39,7 +46,7 @@ export class CatalogCache {
     ).then(
       (value) => {
         this.pending.delete(key);
-        if (!value.warning) {
+        if (!(value && typeof value === "object" && "warning" in value && value.warning)) {
           this.ready.set(key, { value, until: this.now() + 5 * 60_000 });
           while (this.ready.size > 80)
             this.ready.delete(this.ready.keys().next().value!);

@@ -2,6 +2,7 @@ import { useGuideSection, isGuideActive } from "../../lib/guideNavigation";
 import { InstanceIcon } from "../../components/ui/LoaderIcon";
 import { GameDirectoryBar } from "./GameDirectoryBar";
 import { ResourceDeleteDialog, type DeleteRequest } from "./ResourceDeleteDialog";
+import { SchematicPreviewDialog, type SchematicPreviewRequest } from "./SchematicPreviewDialog";
 import { useResourceDragSelection } from "./useResourceDragSelection";
 import { useModUpdateState } from "../../lib/modUpdateState";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -23,6 +24,7 @@ import {
   CheckSquare,
   CircleMinus,
   CircleCheck,
+  Eye,
 } from "lucide-react";
 import {
   Button,
@@ -40,6 +42,7 @@ import {
   api,
   desktop,
   pickFile,
+  pickFiles,
   pickImageFile,
   readableSize,
 } from "../../lib/bridge";
@@ -245,6 +248,7 @@ const tabKinds: Record<string, string> = {
   存档: "saves",
   光影: "shaderpacks",
   数据包: "datapacks",
+  投影: "schematics",
 };
 import { loadModNames, localModName } from "../download/modLocalization";
 import { ModUpdates, type ModUpdateContext } from "../download/ModManagement";
@@ -271,6 +275,7 @@ export function InstanceDetail() {
   const [loadedResources, LoadedResources] = useState("");
   const [selectedResources, SelectResources] = useState<string[]>([]);
   const [deleteRequest, DeleteRequestState] = useState<DeleteRequest | null>(null);
+  const [preview, Preview] = useState<SchematicPreviewRequest | null>(null);
   const [resourceFilter, ResourceFilter] = useState("all");
   const cachedModRows = useModUpdateState((state) => state.byId[s.selected]?.rows);
   const [q, Q] = useState("");
@@ -295,7 +300,8 @@ export function InstanceDetail() {
   const [error, E] = useState("");
   const [loading, Loading] = useState(false);
   const [dragging, Dragging] = useState(false);
-  const managed = ["Mod", "资源包", "光影", "数据包"].includes(tab);
+  const schematic = tab === "投影";
+  const managed = ["Mod", "资源包", "光影", "数据包", "投影"].includes(tab);
   const currentResourceScope = `${i?.id ?? ""}:${tabKinds[tab] ?? ""}:${tab === "数据包" ? dataWorld : ""}`;
   const resourceScope = useRef(currentResourceScope);
   resourceScope.current = currentResourceScope;
@@ -342,7 +348,7 @@ export function InstanceDetail() {
       world: tab === "数据包" ? dataWorld || undefined : undefined,
     };
     const request = (async () => {
-    if (displayedResourceScope.current !== scope) {
+    if (!schematic && displayedResourceScope.current !== scope) {
     const first = resourceRows.current.get(scope) ?? await api<Resource[]>("resources", { ...payload, basic: true });
     resourceRows.current.set(scope, first);
     if (resourceScope.current === scope) {
@@ -352,7 +358,7 @@ export function InstanceDetail() {
       Loading(false);
     }
     }
-    if (!detailedResourceScopes.current.has(scope) && tab !== "存档") {
+    if (!schematic && !detailedResourceScopes.current.has(scope) && tab !== "存档") {
       const initial = resourceRows.current.get(scope) || [];
       for (let offset = 0; offset < initial.length; offset += 32) {
         if (resourceScope.current !== scope) return;
@@ -363,18 +369,20 @@ export function InstanceDetail() {
         if (resourceScope.current === scope) R(merged);
       }
     }
-    const value = await api<Resource[]>("resources", payload);
+    const value = await api<Resource[]>("resources", schematic ? { ...payload, basic: true } : payload);
+    const previousDirectory = resourceRows.current.get(scope)?.[0]?.directory;
     detailedResourceScopes.current.add(scope);
     if (resourceRows.current.size > 12) resourceRows.current.clear();
     resourceRows.current.set(scope, value);
     if (resourceScope.current !== scope) return;
     E("");
+    if (schematic && previousDirectory !== value[0]?.directory) SelectResources([]);
     R((before) =>
       before.length === value.length && before.every((row,n) => {
         const other = value[n];
         return row.name === other.name && row.size === other.size && row.modified === other.modified &&
           row.enabled === other.enabled && row.version === other.version && row.icon_url === other.icon_url &&
-          row.order === other.order && JSON.stringify(row.modIds) === JSON.stringify(other.modIds) &&
+          row.order === other.order && row.directory === other.directory && JSON.stringify(row.modIds) === JSON.stringify(other.modIds) &&
           JSON.stringify(row.problems) === JSON.stringify(other.problems);
       }) ? before : value,
     );
@@ -382,7 +390,7 @@ export function InstanceDetail() {
     })().finally(() => resourceRequests.current.delete(scope));
     resourceRequests.current.set(scope, request);
     return request;
-  }, [i?.id, tab, dataWorld]);
+  }, [i?.id, tab, dataWorld, schematic]);
   const importPaths = useCallback(
     async (paths: string[]) => {
       if (!i || !tabKinds[tab] || !paths.length) return;
@@ -394,14 +402,23 @@ export function InstanceDetail() {
           world: tab === "数据包" ? dataWorld || undefined : undefined,
           paths,
         });
-        R(value);
-        useStore.getState().notify(`已添加 ${paths.length} 个${tab}`);
+        if (resourceScope.current === currentResourceScope) {
+          if (schematic) {
+            if (resourceRows.current.get(currentResourceScope)?.[0]?.directory !== value[0]?.directory) SelectResources([]);
+            resourceRows.current.set(currentResourceScope, value);
+            LoadedResources(currentResourceScope);
+          }
+          R(value);
+        }
+        useStore.getState().notify(`已添加 ${paths.length} 个${schematic ? "投影文件" : tab}`);
       } finally {
-        Loading(false);
-        Dragging(false);
+        if (resourceScope.current === currentResourceScope) {
+          Loading(false);
+          Dragging(false);
+        }
       }
     },
-    [i?.id, tab, dataWorld],
+    [i?.id, tab, dataWorld, schematic, currentResourceScope],
   );
   useEffect(() => {
     E("");
@@ -520,7 +537,7 @@ export function InstanceDetail() {
         });
       }
       await refreshResources();
-      s.notify(`已添加 ${accepted.length} 个${tab}`);
+      s.notify(`已添加 ${accepted.length} 个${schematic ? "投影文件" : tab}`);
     } finally {
       Loading(false);
       Dragging(false);
@@ -528,6 +545,11 @@ export function InstanceDetail() {
   }
   async function browseResource() {
     if (!tabKinds[tab]) return;
+    if (schematic) {
+      const paths = await pickFiles([{ name: "投影文件", extensions: ["litematic", "schematic", "schem", "nbt"] }]);
+      await importPaths(paths);
+      return;
+    }
     const path = await pickFile([
       {
         name: tab === "Mod" ? "Mod" : tab,
@@ -546,7 +568,8 @@ export function InstanceDetail() {
   function confirmResourceDelete(names: string[]) {
     if (!i || !names.length || resourceBusy) return;
     DeleteRequestState({ id: i.id, kind: tabKinds[tab], world: tab === "数据包" ? dataWorld || undefined : undefined,
-      label: tab === "Mod" ? "模组" : tab, names, shared: i.settings.isolation === "shared" || i.settings.isolation === "modded" && i.loader === "vanilla" });
+      directory: schematic ? scopeRows[0]?.directory : undefined,
+      label: tab === "Mod" ? "模组" : schematic ? "投影文件" : tab, names, shared: i.settings.isolation === "shared" || i.settings.isolation === "modded" && i.loader === "vanilla" });
   }
   function renderResources(updates?: ModUpdateContext) {
     if (desktop && loadedResources !== currentResourceScope) return <p className="resource-loading" role="status">正在读取{tab}…</p>;
@@ -591,14 +614,14 @@ export function InstanceDetail() {
                       {tab === "Mod" && localModName(r.modIds, r.name)
                         ? `${r.name.replace(/\.disabled$/, "")} · `
                         : ""}
-                      {readableSize(r.size)} ·{" "}
-                      {tab === "数据包"
+                      {readableSize(r.size)}
+                      {!schematic && (tab === "数据包"
                         ? r.enabled
-                          ? "文件已就绪，游戏中确认启用"
-                          : "文件已停用"
+                          ? " · 文件已就绪，游戏中确认启用"
+                          : " · 文件已停用"
                         : r.enabled
-                          ? "已启用"
-                          : "已停用"}
+                          ? " · 已启用"
+                          : " · 已停用")}
                     </small>
                     {tab === "Mod" && (
                       <>
@@ -691,7 +714,16 @@ export function InstanceDetail() {
                       </Badge>
                     ))}
                   <div className="resource-row-actions" onClick={(e) => e.stopPropagation()}>
-                  {tab === "存档" ? (
+                  {schematic && i && (
+                    <Button
+                      aria-label={"预览 " + r.name}
+                      disabled={!desktop || resourceBusy}
+                      onClick={() => Preview({ name: r.name, instanceId: i.id, directory: r.directory })}
+                    >
+                      <Eye size={16} /> 预览
+                    </Button>
+                  )}
+                  {!schematic && (tab === "存档" ? (
                     <Button
                       primary
                       onClick={() => void guarded(() => api("open_resource_folder", { id: s.selected, kind: "saves" }))}
@@ -711,7 +743,7 @@ export function InstanceDetail() {
                       on={r.enabled}
                       change={() => guarded(() => toggle(r))}
                     />
-                  )}
+                  ))}
                   {tab === "资源包" && (
                     <>
                       <Button
@@ -743,12 +775,16 @@ export function InstanceDetail() {
         ) : (
           <Empty
             title={
-              modResources.length && tab === "Mod"
+              schematic && q.trim()
+                ? "没有匹配的投影文件"
+                : modResources.length && tab === "Mod"
                 ? "没有匹配的模组"
                 : `还没有${tab}`
             }
             detail={
-              tab === "Mod" && modResources.length
+              schematic && q.trim()
+                ? "试试其他文件名。"
+                : tab === "Mod" && modResources.length
                 ? "调整搜索词或状态筛选后再试。"
                 : desktop
                   ? `把文件拖到这里，或打开${tab}文件夹添加；列表会自动刷新。`
@@ -761,6 +797,7 @@ export function InstanceDetail() {
   }
   return (
     <>
+      {preview && <SchematicPreviewDialog request={preview} onClose={() => Preview(null)} />}
       {deleteRequest && <ResourceDeleteDialog request={deleteRequest} close={() => DeleteRequestState(null)} completed={async (deleted) => {
         SelectResources((before) => before.filter((name) => !deleted.includes(name)));
         R((before) => before.filter((r) => !deleted.includes(r.name)));
@@ -830,6 +867,7 @@ export function InstanceDetail() {
           "存档",
           "光影",
           "数据包",
+          "投影",
           "设置",
         ]}
         value={tab}
@@ -870,9 +908,14 @@ export function InstanceDetail() {
         <Card>
           <h3>仅对本版本生效</h3>
           <p>实例内存、Java 路径、窗口大小与隔离目录。</p>
-          <Button primary onClick={() => s.show("instance-settings", i.id)}>
-            编辑版本设置
-          </Button>
+          <div className="actions">
+            <Button primary onClick={() => s.show("instance-settings", i.id)}>
+              编辑版本设置
+            </Button>
+            <Button onClick={() => T("投影")}>
+              <FolderOpen size={15} /> 投影文件管理
+            </Button>
+          </div>
         </Card>
       ) : (
         <div
@@ -910,8 +953,9 @@ export function InstanceDetail() {
         >
           <div className="spread section-tools">
             <SearchInput value={q} onChange={Q} placeholder={`搜索${tab}`} />
-            <div className="resource-management-actions">
+            <div className={`resource-management-actions${schematic ? " schematic-actions" : ""}`}>
             <Button
+              disabled={schematic && !desktop}
               onClick={() =>
                 guarded(() =>
                   api("open_resource_folder", {
@@ -926,7 +970,7 @@ export function InstanceDetail() {
               <FolderOpen size={14} /> 打开{tab}文件夹
             </Button>
             <Button disabled={resourceBusy} onClick={() => guarded(browseResource)}>
-              <Upload size={14} /> {managed ? "从文件安装" : `添加${tab}`}
+              <Upload size={14} /> {schematic ? "导入投影文件" : managed ? "从文件安装" : `添加${tab}`}
             </Button>
             {managed && <Button disabled={resourceBusy || !visibleResources.length} onClick={() => SelectResources(
               selectedResources.length === visibleResources.length ? [] : visibleResources.map((r) => r.name))}>
@@ -942,7 +986,7 @@ export function InstanceDetail() {
             <div className="resource-drop-hint">
               <Upload size={28} />
               <b>松开以添加到{tab}文件夹</b>
-              <span>文件会复制到当前实例，并立即出现在列表中</span>
+              <span>{schematic ? "文件会复制到当前投影文件夹" : "文件会复制到当前实例，并立即出现在列表中"}</span>
             </div>
           )}
           {tab === "数据包" && (
@@ -964,6 +1008,11 @@ export function InstanceDetail() {
             </div>
           )}
           {error && <div className="notice error">{error}</div>}
+          {schematic && desktop && (
+            <p className="notice">
+              导入后，在游戏里用默认快捷键 M 打开 Litematica 菜单并选择「加载投影」。
+            </p>
+          )}
           {tab === "Mod" ? (
             <ModUpdates
               key={i.id}

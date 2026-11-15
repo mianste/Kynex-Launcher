@@ -1,6 +1,6 @@
 [package]
 name = "kynex-launcher"
-version = "1.4.1"
+version = "1.4.2"
 edition = "2021"
 [lib]
 name = "kynex_core"
@@ -20,7 +20,7 @@ open = { version = "5", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots", "stream", "multipart"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots", "stream", "multipart", "gzip"] }
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3"
 sha1 = "0.10"
@@ -28,6 +28,8 @@ sha2 = "0.10"
 md5 = "0.7"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 base64 = "0.22"
+fastnbt = "2.6.3"
+flate2 = "1"
 aes = "0.8"
 cbc = { version = "0.1", features = ["std"] }
 num-bigint = "0.4"
@@ -40,12 +42,10 @@ trash = { version = "=5.2.9", default-features = false, features = ["coinit_mult
 hickory-resolver = { version = "0.24", features = ["system-config", "tokio-runtime"] }
 keyring = { version = "3", features = ["windows-native", "apple-native", "linux-native"] }
 png = "0.18"
+tempfile = "3"
 [target.'cfg(windows)'.dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["native-tls"] }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_Diagnostics_ToolHelp", "Win32_System_SystemInformation", "Win32_Storage_FileSystem"] }
 windows = { version = "0.62", features = ["Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common"] }
-[dev-dependencies]
-tempfile = "3"
-
 [profile.release.package.kynex-launcher]
 codegen-units = 1
