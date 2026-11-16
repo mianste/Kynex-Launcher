@@ -144,7 +144,17 @@ export function App() {
     customSurface ?? s.settings.theme,
   );
   const navRoot = useRef<HTMLElement>(null);
+  const navigationToggle = useRef<HTMLButtonElement>(null);
+  const [navPinned, setNavPinned] = useState(true);
+  const [navHover, setNavHover] = useState(false);
+  const navOpen = navHover ? !navPinned : navPinned;
   useSelectionMotion(navRoot);
+  useLayoutEffect(() => {
+    if (navRoot.current) navRoot.current.inert = !navOpen;
+  }, [navOpen]);
+  function openPage(page: Page) {
+    s.setPage(page);
+  }
   // 原生滚轮：自定义惯性在拖滚动条到底时会继续缓动，表现为“还在慢慢下滑”。
   const finish = useCallback(() => S(false), []);
   useEffect(() => {
@@ -290,8 +300,9 @@ export function App() {
     });
     s.show("pack", path);
   }
+  const openDownloads = () => TasksOpen(true);
   const screen: Record<Page, ReactNode> = {
-    home: <Home />,
+    home: <Home onOpenDownloads={openDownloads} />,
     library: <Library />,
     instance: <InstanceDetail />,
     discover: <Discover />,
@@ -299,7 +310,7 @@ export function App() {
     news: <News />,
     account: <Accounts />,
     skin: <Skin />,
-    diagnose: <Home />,
+    diagnose: <Home onOpenDownloads={openDownloads} />,
     settings: <Settings />,
     help: <Help />,
     components: <Components />,
@@ -317,6 +328,8 @@ export function App() {
     <main
       ref={appRoot}
       className={`app page-${s.page} ${splash ? "splash-active" : ""} ${dynamicVideo ? "video-wallpaper" : ""}`}
+      data-native-window={desktop ? "" : undefined}
+      data-default-wallpaper={s.settings.wallpaper === "island" ? "" : undefined}
       style={{ "--ui-alpha": uiAlpha, "--ui-blur": uiBlur } as CSSProperties}
       onDragOverCapture={(e) => {
         if (
@@ -400,34 +413,76 @@ export function App() {
           </button>
         </div>
       </header>
-      <nav className="nav motion-selection" ref={navRoot}>
+      <div
+        className="top-navigation"
+        data-open={navOpen}
+        data-hover-preview={!navPinned && navHover}
+        onPointerLeave={() => setNavHover(false)}
+        onKeyDown={(event) => {
+          if (event.key !== "Escape" || !navPinned) return;
+          event.stopPropagation();
+          setNavPinned(false);
+          setNavHover(false);
+          navigationToggle.current?.focus({ preventScroll: true });
+        }}
+      >
         <button
-          className="brand"
-          aria-label="KXL 首页"
-          onClick={() => s.setPage("home")}
+          ref={navigationToggle}
+          className="navigation-notch"
+          data-guide="navigation-toggle"
+          aria-label={navPinned ? "收起导航" : "打开导航"}
+          aria-expanded={navOpen}
+          aria-controls="launcher-navigation"
+          onPointerEnter={(event) => {
+            if (event.pointerType !== "touch") setNavHover(true);
+          }}
+          onPointerLeave={() => {
+            if (navPinned) setNavHover(false);
+          }}
+          onPointerCancel={() => setNavHover(false)}
+          onClick={() => {
+            setNavHover(false);
+            setNavPinned((open) => !open);
+          }}
         >
-          <div className="logo">
-            <KxlMark />
-          </div>
-          <b>KXL</b>
+          <span aria-hidden="true" />
         </button>
-        {navigation.map((n) => (
+        <nav
+          id="launcher-navigation"
+          className="nav motion-selection"
+          aria-label="主导航"
+          aria-hidden={!navOpen}
+          ref={navRoot}
+        >
           <button
-            key={n.id}
-            title={n.label}
-            data-guide={n.id}
-            aria-label={n.id === "workshop" ? "AI 整合包工坊" : n.label}
-            aria-current={(s.page === "instance" ? "library" : s.page) === n.id ? "page" : undefined}
-            className={
-              (s.page === "instance" ? "library" : s.page) === n.id ? "on" : ""
-            }
-            onClick={() => s.setPage(n.id)}
+            className="brand"
+            aria-label="KXL 首页"
+            onClick={() => openPage("home")}
           >
-            {n.icon}
-            {n.id !== "help" && <span>{n.label}</span>}
+            <div className="logo">
+              <KxlMark />
+            </div>
+            <b>KXL</b>
           </button>
-        ))}
-      </nav>
+          {navigation.map((n) => {
+            const current = (s.page === "instance" ? "library" : s.page) === n.id;
+            return (
+              <button
+                key={n.id}
+                title={n.label}
+                data-guide={n.id}
+                aria-label={n.id === "workshop" ? "AI 整合包工坊" : n.label}
+                aria-current={current ? "page" : undefined}
+                className={current ? "on" : ""}
+                onClick={() => openPage(n.id)}
+              >
+                {n.icon}
+                {n.id !== "help" && <span>{n.label}</span>}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
       <MotionPage id={s.page}>
         <Suspense fallback={<div className="empty">正在加载…</div>}>
           {screen[s.page]}
@@ -454,7 +509,7 @@ export function App() {
             )}
           </>
         )}
-        <button onClick={() => TasksOpen(true)}>
+        <button onClick={openDownloads}>
           <Download size={13} />
           下载任务
           {Object.values(s.tasks).filter((t) => !t.finished).length
@@ -462,10 +517,12 @@ export function App() {
             : ""}
         </button>
         <span className="grow" />
-        <button onClick={() => guarded(importPack)}>
-          <PackagePlus size={13} />
-          导入整合包
-        </button>
+        {s.page !== "home" && (
+          <button onClick={() => guarded(importPack)}>
+            <PackagePlus size={13} />
+            导入整合包
+          </button>
+        )}
         <button
           className="mono"
           title="查看本次更新日志"

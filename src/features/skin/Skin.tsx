@@ -281,6 +281,7 @@ export function Skin() {
   return (
     <div className="wardrobe-page">
       <div className="page-head">
+        <h1>皮肤</h1>
         <div className="row">
           {w.account?.kind !== "offline" && w.account && (
             <Button

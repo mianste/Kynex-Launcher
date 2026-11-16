@@ -27,7 +27,6 @@ import type {
   Resource,
 } from "../lib/types";
 import { readLocalSkins } from "../features/skin/library";
-import { defaultSkin } from "../features/skin/textures";
 import { SkinSprite } from "../features/skin/SkinSprite";
 import { useMicrosoftLogin } from "../features/account/useMicrosoftLogin";
 import { MotionPresence } from "../components/ui/Motion";
@@ -658,7 +657,7 @@ function Login() {
   const [error, E] = useState("");
   const [profiles, PR] = useState<{ id: string; name: string }[]>([]);
   const [profile, PF] = useState("");
-  const [skinChoice, SkinChoice] = useState("default");
+  const [skinChoice, SkinChoice] = useState<string | null>(null);
   const localSkins = readLocalSkins();
   const [authMeta, AuthMeta] = useState<{ name: string } | null>(null);
   const [checking, Checking] = useState(false);
@@ -716,10 +715,7 @@ function Login() {
       if (tab === "离线") {
         const account = await api<Account>("offline_login", { name });
         added = account;
-        const chosen =
-          skinChoice === "default"
-            ? { texture: defaultSkin(), model: "Classic" as const }
-            : localSkins.find((x) => x.id === skinChoice);
+        const chosen = localSkins.find((skin) => skin.id === skinChoice);
         if (chosen) {
           try {
             await api("apply_skin", {
@@ -933,51 +929,33 @@ function Login() {
               placeholder="请输入你的用户名"
             />
           </Field>
-          <Field
-            label="离线皮肤"
-            hint="创建账号时会直接装配所选皮肤，之后也能在账号页更换。"
-          >
-            <div className="offline-skin-grid">
-              <button
-                type="button"
-                className={
-                  "offline-skin-option " +
-                  (skinChoice === "default" ? "on" : "")
-                }
-                onClick={() => SkinChoice("default")}
-              >
-                <SkinSprite texture={defaultSkin()} model="Classic" />
-                <span>
-                  <b>默认皮肤</b>
-                  <small>Steve · Classic</small>
-                </span>
-                {skinChoice === "default" && <Check size={13} />}
-              </button>
-              {localSkins.map((skin) => (
-                <button
-                  type="button"
-                  key={skin.id}
-                  className={
-                    "offline-skin-option " +
-                    (skinChoice === skin.id ? "on" : "")
-                  }
-                  onClick={() => SkinChoice(skin.id)}
-                >
-                  <SkinSprite texture={skin.texture} model={skin.model} />
-                  <span>
-                    <b>{skin.name}</b>
-                    <small>{skin.model}</small>
-                  </span>
-                  {skinChoice === skin.id && <Check size={13} />}
-                </button>
-              ))}
+          <div className="notice">离线模式无法在游戏中使用自定义皮肤。</div>
+          {localSkins.length > 0 && (
+            <div className="field">
+              <span id="offline-local-skins">本地皮肤（仅在启动器内显示）</span>
+              <div className="offline-skin-grid" role="group" aria-labelledby="offline-local-skins">
+                {localSkins.map((skin) => {
+                  const selected = skinChoice === skin.id;
+                  return (
+                    <button
+                      type="button"
+                      key={skin.id}
+                      className={`offline-skin-option ${selected ? "on" : ""}`}
+                      aria-pressed={selected}
+                      onClick={() => SkinChoice(selected ? null : skin.id)}
+                    >
+                      <SkinSprite texture={skin.texture} model={skin.model} />
+                      <span>
+                        <b>{skin.name}</b>
+                        <small>{skin.model}</small>
+                      </span>
+                      {selected && <Check size={13} />}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            {!localSkins.length && (
-              <small className="muted">
-                还没有自定义皮肤，先去皮肤页导入，再回来选择。
-              </small>
-            )}
-          </Field>
+          )}
           <Button
             onClick={() => {
               s.hide();

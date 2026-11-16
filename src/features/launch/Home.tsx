@@ -1,172 +1,150 @@
-import { InstanceIcon } from "../../components/ui/LoaderIcon";
-import { useState } from "react";
 import {
   ArrowUpRight,
-  Play,
   ChevronDown,
+  ChevronRight,
   Heart,
-  Box,
-  Globe,
-  FolderOpen,
-  Plus,
-  PackagePlus,
-  Gamepad2,
-  Castle,
-  Swords,
-  Map,
-  RefreshCw,
+  Layers3,
+  Play,
+  UserRound,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "../../components/ui";
+import { external } from "../../lib/bridge";
 import { useStore, launch, guarded } from "../../store";
-import { Button, Badge } from "../../components/ui";
-import { api, desktop, external, pickFile } from "../../lib/bridge";
+import { AccountAvatar } from "../account/AccountAvatar";
+import { HomeWidgets } from "./HomeWidgets";
 
-export function Home() {
+const accountLabels = {
+  offline: "离线账号",
+  microsoft: "Microsoft 正版",
+  external: "外置认证",
+};
+
+export function Home({ onOpenDownloads }: { onOpenDownloads: () => void }) {
   const s = useStore();
   const instance = s.instances.find((item) => item.id === s.selected);
   const account = s.accounts.find((item) => item.id === s.accountId);
-  async function importPack() {
-    const path = await pickFile([
-      { name: "整合包", extensions: ["zip", "mrpack", "curseforge"] },
-    ]);
-    if (path) s.show("pack", path);
+  const [panel, setPanel] = useState<"account" | "launch" | null>(null);
+  const accountArea = useRef<HTMLDivElement>(null);
+  const launchArea = useRef<HTMLDivElement>(null);
+  const accountTrigger = useRef<HTMLButtonElement>(null);
+  const launchTrigger = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!panel) return;
+    const area = panel === "account" ? accountArea.current : launchArea.current;
+    const trigger = panel === "account" ? accountTrigger.current : launchTrigger.current;
+    function closeOutside(event: PointerEvent) {
+      if (event.target instanceof Node && !area?.contains(event.target)) setPanel(null);
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setPanel(null);
+      trigger?.focus({ preventScroll: true });
+    }
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [panel]);
+
+  function chooseLaunchAction(action: () => void) {
+    setPanel(null);
+    launchTrigger.current?.focus({ preventScroll: true });
+    action();
   }
+
   return (
     <div className="home-layout">
-      <header className="home-header">
-        <div className="actions">
+      <h1 className="sr-only">启动</h1>
+      {s.page === "home" && <HomeWidgets onOpenDownloads={onOpenDownloads} />}
+      <div className="home-dock">
+        <div className="home-account-area" ref={accountArea}>
           <button
-            className="support"
-            onClick={() =>
-              guarded(() => external("https://afdian.com/a/keke_657"))
-            }
+            ref={accountTrigger}
+            className="home-account-trigger"
+            aria-label={account ? "当前账号 " + account.name : "玩家账号"}
+            title={account?.name ?? "玩家账号"}
+            aria-expanded={panel === "account"}
+            aria-controls={panel === "account" ? "home-account-popover" : undefined}
+            onClick={() => setPanel(panel === "account" ? null : "account")}
           >
-            <Heart size={14} /> 爱发电
+            <AccountAvatar account={account} />
           </button>
-
+          {panel === "account" && (
+            <section className="home-popover home-account-popover" id="home-account-popover" aria-label="玩家账号" data-fixed-ink>
+              <div className="home-account-summary">
+                <AccountAvatar account={account} />
+                <div>
+                  <b>{account?.name ?? "添加账号"}</b>
+                  <small>{account ? accountLabels[account.kind] : "Microsoft / 离线 / 外置认证"}</small>
+                </div>
+              </div>
+              <button className="home-menu-row" onClick={() => s.setPage("account")}>
+                <UserRound size={16} />
+                <b>{account ? "管理账号与皮肤" : "打开账号页"}</b>
+                <ArrowUpRight size={14} />
+              </button>
+              <button className="home-menu-row" onClick={() => guarded(() => external("https://afdian.com/a/keke_657"))}>
+                <Heart size={16} />
+                <b>爱发电</b>
+                <ArrowUpRight size={14} />
+              </button>
+            </section>
+          )}
         </div>
-      </header>
-      <div className="home-dashboard">
-        <section className="home-quick-panel">
-          <h2 className="readable-title">常用入口</h2>
-          <div className="home-shortcuts">
-
-
-            <button onClick={() => guarded(importPack)}>
-              <span>
-                <PackagePlus size={23} />
-              </span>
-              <span className="shortcut-copy readable-copy">
-                <b>导入整合包</b>
-                <small>ZIP / MRPACK</small>
-              </span>
-            </button>
-          </div>
-          <div className="home-recent-head">
-            <h2 className="readable-title">最近的实例</h2>
-            <button className="readable-copy" onClick={() => s.setPage("library")}>
-              全部版本 <ArrowUpRight size={13} />
-            </button>
-          </div>
-          <div className="home-recent">
-            {s.instances.slice(0, 2).map((item) => (
-              <button
-                key={item.id}
-                onClick={() => {
-                  useStore.setState({ selected: item.id });
-                  s.setPage("instance");
-                }}
-              >
-                <span className="home-instance-icon">
-                  <InstanceIcon
-                    instance={item}
-                    className="home-instance-artwork"
-                  />
-                </span>
-                <span className="readable-copy">
-                  <b>{item.name}</b>
-                  <small>
-                    Minecraft {item.version} / {item.loader}
-                  </small>
-                </span>
-                <ArrowUpRight size={15} />
-              </button>
-            ))}
-            {!s.instances.length && (
-              <button onClick={() => s.setPage("discover")}>
-                <Plus size={20} />
-                <span className="readable-copy">
-                  <b>安装第一个版本</b>
-                  <small>选择游戏版本与加载器</small>
-                </span>
-                <ArrowUpRight size={15} />
-              </button>
-            )}
-          </div>
-        </section>
-        <aside className="launch-column">
-          <button className="account-tile" onClick={() => s.setPage("account")}>
-            <div className="avatar">
-              {account?.skin || s.skin ? (
-                <i
-                  className="avatar-head"
-                  style={{ backgroundImage: `url(${account?.skin || s.skin})` }}
-                />
-              ) : (
-                (account?.name.slice(0, 1).toUpperCase() ?? "K")
-              )}
-            </div>
-            <div className="readable-copy">
-              <b>{account?.name ?? "添加你的第一个账号"}</b>
-              <small>
-                {account
-                  ? {
-                      offline: "离线账号",
-                      microsoft: "Microsoft 正版",
-                      external: "外置认证",
-                    }[account.kind]
-                  : "Microsoft / 离线 / 外置认证"}
-              </small>
-            </div>
-            <ArrowUpRight size={16} />
-          </button>
-          <div className="glass launch-card">
-            <div className="launch-copy readable-copy">
-            <div className="launch-status">
-              <i />
-              Java 版<Badge tone="ok">本地游戏库</Badge>
-            </div>
-            <h2>启动 Minecraft</h2>
-            <button className="version-link" onClick={() => s.show("versions")}>
-              {instance?.name ?? "选择或安装版本"}
-              <ChevronDown size={15} />
-            </button>
-            <div className="launch-meta">
-              <span>
-                {instance?.loader ?? "原版"}
-                {instance?.loader === "forge" && instance.optifineVersion
-                  ? " + OptiFine"
-                  : ""}
-              </span>
-              <span>{instance?.settings.memory ?? s.settings.memory} MB</span>
-            </div>
-            </div>
-            <div className="launch-buttons">
-              <Button data-guide="launch" primary busy={s.busy} onClick={() => void launch()}>
-                <Play size={19} />
-                {s.busy ? "正在准备…" : "进入游戏"}
-              </Button>
-
-            </div>
-            <button
-              className="text-button readable-copy"
-              onClick={() => s.setPage("library")}
+        <div className="home-launch-area" ref={launchArea}>
+          <div className="home-launch-controls">
+            <Button
+              className="home-launch-button"
+              data-guide="launch"
+              primary
+              busy={s.busy}
+              aria-label={s.busy ? "正在准备…" : "进入游戏"}
+              onClick={() => {
+                setPanel(null);
+                void launch();
+              }}
             >
-              <FolderOpen size={13} /> 管理版本与存档 <ArrowUpRight size={12} />
+              {!s.busy && <Play size={19} />}
+              <span className="home-launch-label">
+                <b>{s.busy ? "正在准备…" : "进入游戏"}</b>
+                <small>{instance?.name ?? "尚未选择版本"}</small>
+              </span>
+            </Button>
+            <button
+              ref={launchTrigger}
+              className="home-launch-options"
+              data-guide="home-shortcuts"
+              aria-label="更多启动选项"
+              title="版本选择"
+              aria-expanded={panel === "launch"}
+              aria-controls={panel === "launch" ? "home-launch-popover" : undefined}
+              onClick={() => setPanel(panel === "launch" ? null : "launch")}
+            >
+              <ChevronDown size={20} />
             </button>
           </div>
-        </aside>
+          {panel === "launch" && (
+            <section className="home-popover home-launch-popover" id="home-launch-popover" aria-label="启动选项" data-fixed-ink>
+              <button
+                className="home-menu-row"
+                aria-haspopup="dialog"
+                onClick={() => chooseLaunchAction(() => s.show("versions"))}
+              >
+                <Layers3 size={17} />
+                <span>
+                  <b>版本选择</b>
+                  <small>{instance ? instance.version + " · " + instance.loader + " · " + instance.settings.memory + " MB" : "选择或安装版本"}</small>
+                </span>
+                <ChevronRight size={16} />
+              </button>
+            </section>
+          )}
+        </div>
       </div>
-
     </div>
   );
 }

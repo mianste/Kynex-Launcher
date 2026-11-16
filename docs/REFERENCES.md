@@ -1,5 +1,12 @@
 # 参考来源与署名
 
+## 首页组件
+
+- [M3E Canvas](https://lnkiai.github.io/m3e-canvas/)用于参考组件库、画布、属性面板和尺寸手柄。[GridStack](https://github.com/gridstack/gridstack.js/)用于参考拖动和边缘滚动。Kynex 自行实现连续坐标、首页预览和确认应用。
+
+- [Apple 桌面组件](https://support.apple.com/en-md/guide/mac-help/mchl52be5da5/mac)与 [Windows 小组件](https://support.microsoft.com/en-gb/windows/experience/personalization/stay-up-to-date-with-widgets-in-windows)用于参考组件面板、快捷操作和日历。
+- [Plasma Audio Wave Visualizer](https://github.com/Muddyblack/audio-wave-visualizer)与 [Rainmeter AudioLevel](https://docs.rainmeter.net/manual/plugins/audiolevel/)用于参考歌词、波形和频谱的布局与数据表达。Kynex 使用 Web Audio 和现有播放器独立实现。
+
 ## PCL
 
 - 原地址：https://github.com/Hex-Dragon/PCL2 （检索时跳转到 https://github.com/Meloong-Git/PCL）
@@ -8,6 +15,7 @@
 - 阅读范围：`ModLaunch.vb` 的启动阶段，以及 `ModDownload.vb`、`ModDownloadLib.vb`、`ResourceSearcher.vb` 的源优先级、错峰回退、并发文件任务、双站资源搜索与筛选组织。KXL 仅采用这些架构思路，以 Rust 独立实现，未复制 PCL 的代码、控件或品牌资产。
 - 署名：龙腾猫跃及 PCL 贡献者。PCL 仓库包含自定义《PCL 分发有限许可》及合理使用指南，不能视作 MIT 项目。本工程独立实现，不是 PCL 分支，不使用其源代码或品牌资产；关于页已署名和提供仓库链接。
 - 许可原文：https://github.com/Meloong-Git/PCL/blob/main/LICENCE
+- 头像流程参考：[PCL 旧版 UUID 默认皮肤规则](https://github.com/Meloong-Git/PCL/blob/93ede5d9e638c99fcec853a9ba1eecd91ceee7f5/Plain%20Craft%20Launcher%202/Modules/Minecraft/ModMinecraft.vb#L1395-L1417)及[皮肤头像预览行为](https://github.com/Meloong-Git/PCL/blob/8c8b1066bff6476a14437a14bc16a281e25145bd/Plain%20Craft%20Launcher%202/Pages/PageLaunch/MySkin.xaml.vb#L74-L128)。KXL 独立使用 Java UUID 哈希的奇偶位选择 Steve 或 Alex，并将游戏皮肤正脸与外层合成。仅用于启动器内显示，纹理来源见 `src/assets/skins/SOURCES.json`。
 
 ## 启动动画检索
 

@@ -179,6 +179,7 @@ export function News() {
   return (
     <section className="news-page" aria-busy={busy}>
       <div className="page-head">
+        <h1>MC 新闻</h1>
         <div className="actions news-toolbar">
           <SearchInput
             value={query}

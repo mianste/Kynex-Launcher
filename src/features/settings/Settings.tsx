@@ -210,6 +210,7 @@ export function Settings() {
       data-category={q ? "search" : category}
       aria-label="设置"
     >
+      <div className="page-head"><h1>设置</h1></div>
       <div className="settings-layout">
         <aside className="settings-sidebar" aria-label="设置分类">
           <SearchInput value={q} onChange={Q} placeholder="搜索设置" />

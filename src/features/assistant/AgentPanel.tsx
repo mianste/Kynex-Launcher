@@ -312,9 +312,9 @@ export function AgentPanel() {
     }
   }
   return (
-    <section className="agent-panel" aria-label="AI 整合包工坊">
+    <section className="agent-panel" aria-labelledby="workshop-title">
       <header>
-        <h1>AI 整合包工坊</h1>
+        <h1 id="workshop-title">AI 整合包工坊（测试）</h1>
         <div className="agent-actions">
           <Button
             type="button"

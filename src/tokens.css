@@ -3,18 +3,18 @@
 @tailwind utilities;
 :root {
   --bg: #000000;
-  --surface: #0a0a0b;
-  --elev: #141416;
-  --line: #2a2a2e;
-  --text: #f7f7f8;
-  --text2: #a8a8ad;
-  --text3: #7c7c83;
-  --reading-muted: #c3cbd0;
+  --surface: #111113;
+  --elev: #1b1b1e;
+  --line: #2d2d32;
+  --text: #f3f3f4;
+  --text2: #c1c1c7;
+  --text3: #a7a7af;
+  --reading-muted: #cdced3;
   --accent: #6f9f94;
   --cyan: #89b9c6;
-  --ok: #22c55e;
-  --warn: #f59e0b;
-  --bad: #ef4444;
+  --ok: #82d9a6;
+  --warn: #f5c982;
+  --bad: #ff9c9c;
   --java: #7cb342;
   --bedrock: #8d9ba8;
   --dungeons: #7b4ba8;
@@ -45,6 +45,13 @@
   --r-lg: 18px;
   --r-md: 13px;
   --r-sm: 9px;
+  --workspace-inset: clamp(52px, 6.3vw, 84px);
+  --workspace-gap: 16px;
+  --workspace-shadow: 0 10px 28px rgb(0 0 0 / 18%);
+  --workspace-focus: color-mix(in oklab, var(--accent) 68%, var(--text));
+  --launch-sheen: #e7fffa;
+  --guide-highlight: #d7ffeb;
+  --guide-dimmer: rgb(0 0 0 / 66%);
   --mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
   --font:
     "HarmonyOS Sans", "Segoe UI Variable", "Microsoft YaHei UI", system-ui,
@@ -52,15 +59,31 @@
   color-scheme: dark;
 }
 
+.app {
+  --home-widget-surface: color-mix(in srgb, var(--surface) clamp(84%, var(--ui-alpha), 100%), transparent);
+  --home-widget-editor: color-mix(in srgb, var(--surface) 96%, var(--accent));
+  --home-widget-canvas: color-mix(in srgb, var(--surface) 86%, var(--elev));
+  --home-widget-control: color-mix(in srgb, var(--surface) 91%, var(--text));
+  --home-widget-grid-line: color-mix(in srgb, var(--line) 78%, var(--surface));
+  --home-widget-selection: color-mix(in srgb, var(--accent) 24%, var(--surface));
+  --home-widget-neutral: color-mix(in srgb, var(--home-widget-surface) 91%, var(--text));
+  --home-widget-accent: color-mix(in srgb, var(--home-widget-surface) 85%, var(--accent));
+}
+
 :root[data-theme="light"] {
-  --bg: #e9eff4;
-  --surface: #f7fafc;
-  --elev: #e7eef5;
-  --line: #c6d2dd;
-  --text: #20323e;
-  --text2: #4e6371;
-  --text3: #5f7582;
-  --reading-muted: #3b5362;
+  --bg: #eef1eb;
+  --surface: #fcfdf9;
+  --elev: #edf2ea;
+  --line: #d4ded5;
+  --text: #182720;
+  --text2: #4b6056;
+  --text3: #546b60;
+  --reading-muted: #3d554b;
+  --ok: #226a47;
+  --warn: #83540b;
+  --bad: #a5353a;
+  --workspace-shadow: 0 10px 28px rgb(30 53 42 / 8%);
+  --guide-dimmer: rgb(16 34 27 / 45%);
   --accent-low: color-mix(in srgb, var(--accent) 19%, transparent);
   --accent-mid: color-mix(in srgb, var(--accent) 48%, transparent);
   --glass: color-mix(in srgb, var(--surface) var(--ui-alpha), transparent);

@@ -10,11 +10,13 @@ import {
 import { Button, Badge, Card } from "../../components/ui";
 import { useStore, guarded } from "../../store";
 import { api } from "../../lib/bridge";
+import { AccountAvatar } from "./AccountAvatar";
 export function Accounts() {
   const s = useStore();
   return (
     <>
       <div className="page-head">
+        <h1>账号</h1>
         <Button data-guide="account-add" primary onClick={() => s.show("login")}>
           <Plus size={16} />
           添加账号
@@ -27,16 +29,7 @@ export function Accounts() {
             className={a.id === s.accountId ? "selected-account" : ""}
           >
             <div className="account-header">
-              <div className={`avatar ${a.kind}`}>
-                {a.skin || (a.id === s.accountId && s.skin) ? (
-                  <i
-                    className="avatar-head"
-                    style={{ backgroundImage: `url(${a.skin || s.skin})` }}
-                  />
-                ) : (
-                  a.name.slice(0, 1).toUpperCase()
-                )}
-              </div>
+              <AccountAvatar account={a} />
               <div>
                 <h3>{a.name}</h3>
                 <small>

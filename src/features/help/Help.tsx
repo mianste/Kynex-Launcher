@@ -28,7 +28,7 @@ export function Help() {
   return (
     <>
       <div className="page-head">
-        <Badge>Kynex Launcher</Badge><Button onClick={() => window.dispatchEvent(new Event("kynex-open-guide"))}>重新查看使用引导</Button>
+        <h1>帮助</h1><Button onClick={() => window.dispatchEvent(new Event("kynex-open-guide"))}>重新查看使用引导</Button>
       </div>
       <Tabs items={["帮助库", "更新日志"]} value={tab} onChange={T} />
       {tab === "帮助库" ? (

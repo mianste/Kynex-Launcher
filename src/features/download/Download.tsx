@@ -423,6 +423,7 @@ export function Download() {
         />
       )}
       <div className="page-head">
+        <h1>下载</h1>
         <div className="actions">
           <SearchInput
             value={q}

@@ -1,0 +1,673 @@
+/* Workspace layout and surfaces. The floating navigation and assistant button
+   keep their existing styles. */
+:root[data-theme] .app[data-default-wallpaper] > .scrim {
+  background: color-mix(in srgb, var(--bg) calc(var(--ui-alpha) * 0.98), transparent);
+}
+
+.app .page-content,
+.app.page-home .page-content.home {
+  padding-inline: max(var(--workspace-inset), calc((100% - 1440px) / 2));
+  padding-bottom: 28px;
+}
+
+.app .page-content :is(.page-head, .agent-panel > header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 42px;
+  gap: 12px 24px;
+  flex-wrap: wrap;
+  margin: 0 0 var(--workspace-gap);
+}
+
+.app .page-content :is(.page-head, .agent-panel > header) h1 {
+  display: block;
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(24px, 2.45vw, 34px);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.045em;
+  text-shadow: none;
+}
+
+.app .page-content .page-head .actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.app .page-content :is(.card, .instance-card, .news-feature, .news-card),
+.app :is(.modal, .assistant-panel, .music-panel, .download-task-card) {
+  border-radius: var(--r-lg);
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+.app :is(.modal, .assistant-panel, .music-panel) {
+  box-shadow: var(--workspace-shadow);
+}
+
+.app .page-content :is(.input, .search),
+.app .overlay :is(.input, .search) {
+  min-height: 36px;
+  border-radius: var(--r-sm);
+}
+
+.app .page-content :is(.input, .search):focus-within,
+.app .overlay :is(.input, .search):focus-within {
+  border-color: var(--workspace-focus);
+}
+
+.app .page-content :is(.btn, .chip, .tabs button, .source-tabs button),
+.app .overlay .btn {
+  border-radius: var(--r-sm);
+}
+
+.app .page-content :is(.resource-row, .project-result-row, .version-row) {
+  border-radius: var(--r-md);
+}
+
+.app .page-content :is(.resource-row, .project-result-row, .version-row):hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+}
+
+.app .page-content :is(.account-grid, .library-grid, .news-grid, .help-grid, .project-grid) {
+  gap: var(--workspace-gap);
+}
+
+.app .page-content .settings-page .settings-layout {
+  grid-template-columns: clamp(152px, 16vw, 204px) minmax(0, 1fr);
+  gap: clamp(14px, 2.3vw, 32px);
+}
+
+.app .page-content .settings-sidebar {
+  border: 1px solid var(--line);
+}
+
+.app .page-content .settings-content {
+  padding-inline-end: 0;
+}
+
+.app .page-content .settings-card-head h2 {
+  letter-spacing: -0.025em;
+}
+
+.app .page-content .help-number {
+  display: none;
+}
+
+.app .page-content .news-page > .page-head {
+  margin-bottom: 4px;
+}
+
+.app > .taskbar {
+  padding-inline: clamp(14px, 2.4vw, 34px);
+  gap: 8px;
+}
+
+/* The notch is always available, with the island tucked underneath it. */
+.top-navigation {
+  position: absolute;
+  z-index: 55;
+  inset: 0 0 auto;
+  pointer-events: none;
+}
+
+.top-navigation[data-hover-preview="true"]::after {
+  content: "";
+  position: absolute;
+  top: 26px;
+  left: 50%;
+  width: min(620px, calc(100% - 32px));
+  height: 12px;
+  translate: -50% 0;
+  pointer-events: auto;
+}
+
+.navigation-notch {
+  position: relative;
+  display: grid;
+  width: 118px;
+  height: 27px;
+  margin-inline: auto;
+  place-items: center;
+  border-radius: 0 0 15px 15px;
+  background: var(--glass);
+  box-shadow: var(--workspace-shadow);
+  color: var(--text2);
+  pointer-events: auto;
+}
+
+.navigation-notch::after {
+  content: "";
+  position: absolute;
+  inset: 0 -7px -5px;
+}
+
+.navigation-notch > span {
+  width: 18px;
+  height: 3px;
+  border-radius: 99px;
+  background: currentColor;
+}
+
+.navigation-notch:is(:hover, [aria-expanded="true"]) {
+  color: var(--workspace-focus);
+}
+
+.navigation-notch[aria-expanded="true"] > span { transform: scaleX(1.4); }
+
+.app .top-navigation > .nav {
+  top: 37px;
+  left: 50%;
+  max-width: calc(100% - 20px);
+  border: 0;
+  transform: translateX(-50%);
+  translate: 0 -7px;
+  clip-path: inset(0 41% 78% round 18px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.app .top-navigation[data-open="true"] > .nav {
+  translate: 0 0;
+  clip-path: inset(-30px -30px -34px round 18px);
+  opacity: 1;
+  visibility: inherit;
+  pointer-events: auto;
+}
+
+/* Wallpaper, launch split button and edge controls */
+:root[data-theme] .app.page-home[data-default-wallpaper] > .scrim {
+  background: transparent;
+}
+
+.app.page-home .page-content.home {
+  --home-gutter: clamp(22px, 4vw, 54px);
+  left: 0;
+  right: 0;
+  overflow-y: auto !important;
+  padding: 0 var(--home-gutter) clamp(24px, 4.8vh, 42px);
+}
+
+.app.page-home .home-layout {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: auto;
+  min-height: 100%;
+}
+
+.home-dock {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(232px, 322px) minmax(0, 1fr);
+  align-items: end;
+  gap: 12px;
+}
+
+.home-account-area {
+  justify-self: end;
+  align-self: center;
+}
+.home-account-area,
+.home-launch-area { position: relative; min-width: 0; }
+
+.player-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--accent-low);
+  color: var(--workspace-focus);
+}
+
+.player-avatar canvas {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+.home-popover {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--workspace-shadow);
+}
+
+.home-account-trigger {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border-radius: 17px;
+}
+
+.home-account-trigger .player-avatar {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--white);
+}
+
+.home-account-trigger .player-avatar svg {
+  width: 26px;
+  height: 26px;
+  filter: drop-shadow(0 1px 3px var(--black));
+}
+
+.home-launch-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px;
+  gap: 1px;
+  border-radius: 16px;
+  box-shadow: var(--workspace-shadow);
+}
+
+.app .home-launch-controls .home-launch-button {
+  position: relative;
+  justify-content: center;
+  min-width: 0;
+  min-height: 58px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 16px 0 0 16px;
+  box-shadow: none;
+}
+
+.home-launch-label {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  text-align: left;
+}
+
+.home-launch-label b { font-size: 16px; }
+.app .home-launch-label small {
+  overflow: hidden;
+  color: inherit;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-launch-button::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(108deg, transparent 36%, var(--launch-sheen) 50%, transparent 64%);
+  opacity: 0;
+}
+
+.home-launch-options {
+  display: grid;
+  min-height: 54px;
+  border-radius: 0 16px 16px 0;
+  background: var(--glass);
+  place-items: center;
+  color: var(--text);
+}
+
+.home-launch-options:is(:hover, [aria-expanded="true"]) {
+  background: color-mix(in srgb, var(--elev) var(--ui-alpha), transparent);
+  color: var(--workspace-focus);
+}
+
+.home-launch-options[aria-expanded="true"] > svg { rotate: 180deg; }
+
+.home-popover {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  z-index: 3;
+  width: min(308px, calc(100vw - 2 * var(--home-gutter) - 4px));
+  max-height: min(408px, calc(100vh - 235px));
+  overflow: auto;
+  padding: 7px;
+  border-radius: 17px;
+  overscroll-behavior: contain;
+}
+
+.home-account-popover {
+  left: 0;
+  transform-origin: bottom left;
+}
+
+.home-launch-popover {
+  right: 0;
+  transform-origin: bottom right;
+}
+
+.home-account-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 2px 4px;
+  padding: 6px 4px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.home-account-summary > div,
+.home-menu-row > span { min-width: 0; }
+
+.home-popover :is(b, small) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-popover b { font-size: 13px; }
+.app .home-popover small {
+  margin-top: 2px;
+  color: var(--text2);
+  font-size: 11px;
+}
+
+.home-menu-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  min-height: 38px;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.home-menu-row:is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--elev) var(--ui-alpha), transparent);
+}
+
+.home-menu-row > svg:first-child { color: var(--workspace-focus); }
+.home-menu-row > svg:last-child { color: var(--text3); }
+.app.page-home > .music-shell.compact {
+  top: clamp(130px, 32vh, 245px);
+  right: 0;
+  translate: 0 -50%;
+  pointer-events: none;
+}
+
+.music-edge-dock {
+  --music-dock-width: 98px;
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  width: var(--music-dock-width);
+  pointer-events: none;
+}
+
+.music-edge-dock:has(.music-quick-play) {
+  --music-dock-width: min(168px, calc(100vw - 32px));
+}
+
+.music-edge-dock::before {
+  content: "";
+  position: absolute;
+  inset: -8px 0 -8px auto;
+  width: 39px;
+  pointer-events: auto;
+}
+
+.app .music-edge-dock > .music-compact {
+  position: relative;
+  contain: layout paint;
+  width: 29px;
+  min-height: 58px;
+  padding: 0;
+  border: 0;
+  border-radius: 29px 0 0 29px;
+  background: var(--glass);
+  box-shadow: none;
+  pointer-events: auto;
+}
+
+.app .native-music[data-view="playlists"] .native-playlist-grid > button {
+  gap: 5px;
+  padding-bottom: 9px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  overflow: hidden;
+  background: var(--home-widget-editor);
+}
+
+.native-music[data-view="playlists"] .native-playlist-grid .music-artwork--playlist {
+  aspect-ratio: 4 / 3;
+  border-radius: 0;
+}
+
+.native-music[data-view="playlists"] .native-playlist-grid :is(b, small) {
+  display: block;
+  max-width: 100%;
+  padding-inline: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-edge-dock .music-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 29px;
+  align-self: stretch;
+  gap: 0;
+}
+
+.app .music-edge-dock .music-main:focus-visible { outline-offset: -3px; }
+
+.music-edge-dock .music-disc {
+  grid-area: 1 / 2;
+  width: 29px;
+  height: 36px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--workspace-focus);
+}
+
+.music-edge-dock .music-compact-copy {
+  grid-area: 1 / 1;
+  padding-left: 13px;
+}
+
+.music-edge-dock .music-compact:has(.music-quick-play) .music-compact-copy {
+  padding-left: 48px;
+}
+
+.music-edge-dock .music-quick-play {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  translate: 0 -50%;
+}
+
+.music-edge-dock :is(.music-compact-copy, .music-quick-play) {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.app .music-edge-dock:is(:hover, :has(:focus-visible)) > .music-compact {
+  width: var(--music-dock-width);
+  border-top-left-radius: 17px;
+  border-bottom-left-radius: 17px;
+}
+
+.music-edge-dock:is(:hover, :has(:focus-visible)) :is(.music-compact-copy, .music-quick-play) {
+  opacity: 1;
+  visibility: inherit;
+}
+
+/* Guide surface, with the step copy animated independently of its placement. */
+.app .onboarding-card {
+  padding: 21px;
+  border-radius: var(--r-lg);
+  box-shadow: var(--glass-shadow);
+}
+
+.app .onboarding-card > header { margin-bottom: 13px; }
+.app .onboarding-card > header svg { color: var(--workspace-focus); }
+
+.onboarding-step-copy h2 {
+  margin: 0 0 7px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.onboarding-step-copy p {
+  margin: 0;
+  color: var(--text2);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.app .onboarding-highlight { stroke: var(--guide-highlight); }
+.app .onboarding-progress { margin-block: 16px; }
+.app .onboarding-progress > span { height: 3px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .navigation-notch > span {
+    transition: transform 200ms var(--motion-ease);
+  }
+
+  .app .top-navigation > .nav {
+    transition: opacity 150ms ease, translate 180ms var(--motion-ease),
+      clip-path 190ms var(--motion-ease),
+      visibility 0s 180ms;
+  }
+
+  .app .top-navigation[data-open="true"] > .nav {
+    transition: opacity 200ms ease, translate 260ms var(--motion-ease),
+      clip-path 300ms var(--motion-ease), visibility 0s;
+  }
+
+  .app .top-navigation[data-open="true"] .nav > button > * {
+    animation: kxl-navigation-item 230ms var(--motion-ease) both;
+  }
+
+  .app .top-navigation[data-open="true"] .nav > button:is(:nth-child(-n+3), :nth-child(n+8)) > * {
+    animation-delay: 35ms;
+  }
+
+  .app .music-edge-dock > .music-compact {
+    transition: width 180ms var(--motion-ease),
+      border-radius 180ms var(--motion-ease);
+  }
+
+  .app .music-edge-dock:is(:hover, :has(:focus-visible)) > .music-compact {
+    transition-duration: 260ms;
+  }
+
+  .music-edge-dock :is(.music-compact-copy, .music-quick-play) {
+    transition: opacity 100ms ease, visibility 0s 100ms;
+  }
+
+  .music-edge-dock:is(:hover, :has(:focus-visible)) :is(.music-compact-copy, .music-quick-play) {
+    transition: opacity 150ms 55ms ease, visibility 0s;
+  }
+
+  .app .page-entering :is(.page-head, .agent-panel > header) h1,
+  .app .onboarding-step-copy {
+    animation: kxl-workspace-arrive 250ms var(--motion-ease) both;
+  }
+
+  .app .page-entering .page-head > :is(.actions, .row, .btn) {
+    animation: kxl-workspace-arrive 230ms 28ms var(--motion-ease) both;
+  }
+
+  .home-popover {
+    animation: kxl-dock-popover 240ms var(--motion-ease) both;
+  }
+
+  .home-launch-options > svg { transition: rotate 190ms var(--motion-ease); }
+
+  .app .home-launch-button:focus-visible::before {
+    content: "";
+    animation: kxl-light-pass 560ms var(--motion-ease) both;
+  }
+
+  .app .overlay > .modal {
+    animation: kxl-workspace-dialog 250ms var(--motion-ease) both;
+  }
+
+  .app .overlay.is-exiting > .modal {
+    animation: kxl-workspace-dialog-out 110ms var(--motion-ease) both;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
+  .app .home-launch-button:not(:disabled):hover::before {
+    content: "";
+    animation: kxl-light-pass 560ms var(--motion-ease) both;
+  }
+
+  .app .home-menu-row > svg:last-child {
+    transition: transform 150ms var(--motion-ease);
+  }
+
+  .app .home-menu-row:hover > svg:last-child {
+    transform: translateX(2px);
+  }
+}
+
+@keyframes kxl-workspace-arrive {
+  from { opacity: 0.5; transform: translateY(7px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes kxl-dock-popover {
+  from { opacity: 0.55; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes kxl-navigation-item {
+  from { opacity: 0.5; translate: 0 -4px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+@keyframes kxl-light-pass {
+  from { opacity: 0; transform: translateX(-80%); }
+  35% { opacity: 0.19; }
+  to { opacity: 0; transform: translateX(80%); }
+}
+
+@keyframes kxl-workspace-dialog {
+  from { opacity: 0.4; transform: translateY(11px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes kxl-workspace-dialog-out {
+  to { opacity: 0; transform: translateY(6px) scale(0.99); }
+}
+
+@media (max-width: 900px) {
+  .app { --workspace-inset: clamp(15px, 3.2vw, 30px); }
+  .app .page-content .settings-page .setting-row {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    column-gap: 12px;
+  }
+}
+
+@media (max-width: 700px) {
+  .app .page-content .settings-page .settings-layout {
+    grid-template-columns: 1fr;
+  }
+  .app .page-content .settings-page .setting-row { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .home-dock {
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 8px;
+    padding-right: 46px;
+  }
+  .home-account-trigger { width: 46px; height: 46px; }
+  .home-account-trigger .player-avatar { width: 35px; height: 35px; }
+  .home-launch-popover { left: -26px; right: auto; }
+}

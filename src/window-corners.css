@@ -59,6 +59,11 @@ body,
   height: auto;
   margin: 0;
 }
+/* In browser previews the window surface fills the viewport. The native
+   compositor uses the transparent safety gutter above. */
+.app:not([data-native-window]) {
+  inset: 0;
+}
 .app > .taskbar {
   left: 0;
   right: 0;

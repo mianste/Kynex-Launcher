@@ -102,7 +102,7 @@ export function Library() {
       <GameDirectoryBar />
       <div className="page-head">
         <div className="actions">
-          <Button onClick={() => s.setPage("workshop")}>AI 整合包工坊</Button>
+          <Button onClick={() => s.setPage("workshop")}>AI 整合包工坊（测试）</Button>
           <SearchInput
             value={q}
             onChange={Q}

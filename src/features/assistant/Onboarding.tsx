@@ -102,6 +102,7 @@ export function Onboarding({
     useStore.getState().setPage(item.page);
   }, [item]);
   useLayoutEffect(() => {
+    const app = document.querySelector<HTMLElement>(".app");
     let target: HTMLElement | null = null;
     const observer = new ResizeObserver(() => measure());
     function measure() {
@@ -118,8 +119,9 @@ export function Onboarding({
         }
       }
       const r = target?.getBoundingClientRect();
-      const w = window.innerWidth,
-        h = window.innerHeight,
+      const frame = app?.getBoundingClientRect();
+      const w = frame?.width ?? window.innerWidth,
+        h = frame?.height ?? window.innerHeight,
         gap = 16,
         margin = 18;
       const width = card.current?.offsetWidth || 370,
@@ -129,11 +131,15 @@ export function Onboarding({
         P({ x: (w - width) / 2, y: (h - height) / 2 });
         return;
       }
+      const left = r.left - (frame?.left ?? 0);
+      const top = r.top - (frame?.top ?? 0);
+      const x = Math.max(4, left - 7);
+      const y = Math.max(4, top - 7);
       const rect = {
-        x: Math.max(4, r.left - 7),
-        y: Math.max(4, r.top - 7),
-        width: r.width + 14,
-        height: r.height + 14,
+        x,
+        y,
+        width: Math.max(0, Math.min(w - 4, left + r.width + 7) - x),
+        height: Math.max(0, Math.min(h - 4, top + r.height + 7) - y),
       };
       H(rect);
       const clampX = (x: number) =>
@@ -170,7 +176,6 @@ export function Onboarding({
     const frame = requestAnimationFrame(measure);
     const settled = window.setTimeout(measure, 300);
     const mutation = new MutationObserver(() => measure());
-    const app = document.querySelector(".app");
     if (app)
       mutation.observe(app, {
         childList: true,
@@ -249,7 +254,7 @@ export function Onboarding({
         <rect
           width="100%"
           height="100%"
-          fill="rgba(0,0,0,.58)"
+          fill="var(--guide-dimmer)"
           mask={`url(#${maskId})`}
         />
         {hole && (
@@ -281,8 +286,10 @@ export function Onboarding({
             <X size={17} />
           </button>
         </header>
-        <h2 id={titleId}>{item.title}</h2>
-        <p>{item.text}</p>
+        <div className="onboarding-step-copy" key={step}>
+          <h2 id={titleId}>{item.title}</h2>
+          <p>{item.text}</p>
+        </div>
         <div className="onboarding-jump">
           <span>跳转到页面</span>
           <ChoiceSelect

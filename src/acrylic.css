@@ -482,9 +482,6 @@
 .app .music-shell.open {
   inset: 108px 22px 46px;
 }
-.app.page-home .music-shell.compact {
-  display: none;
-}
 .app .music-sidebar {
   font-size: 12px;
 }
