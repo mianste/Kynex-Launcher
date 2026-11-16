@@ -274,11 +274,16 @@ pub async fn search(
                     .into_iter()
                     .flatten()
                     .filter_map(|image| {
-                        let url = [&image["url"], &image["thumbnailUrl"]]
-                            .into_iter()
-                            .filter_map(Value::as_str)
-                            .find(|url| crate::https(url).is_ok())?;
-                        Some(json!({"url": url, "title": image["title"].as_str()}))
+                        let thumbnail = image["thumbnailUrl"].as_str()
+                            .filter(|url| crate::https(url).is_ok());
+                        let url = image["url"].as_str()
+                            .filter(|url| crate::https(url).is_ok())
+                            .or(thumbnail)?;
+                        Some(json!({
+                            "url": url,
+                            "thumbnailUrl": thumbnail.filter(|thumbnail| *thumbnail != url),
+                            "title": image["title"].as_str()
+                        }))
                     })
                     .collect();
             hit["gallery"] = json!(gallery);

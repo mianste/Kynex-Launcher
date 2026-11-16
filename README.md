@@ -2,7 +2,7 @@
 
 Kynex 是一个给 Windows 用的 Minecraft Java 版启动器。可以在这里装游戏、下模组和整合包，也可以让不同版本各用各的游戏文件夹。首页可以用自定义组件排版。
 
-[下载 Windows 安装器](https://github.com/mianste/Kynex-Launcher/releases/download/v1.5.0/Kynex.Launcher.v1.5.0.Setup.exe) · [看这版改了什么](CHANGELOG.md) · [下载源码](https://github.com/mianste/Kynex-Launcher/releases/download/v1.5.0/Kynex.Launcher.v1.5.0.Open.Source.zip) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
+[下载 Windows 安装器](https://github.com/mianste/Kynex-Launcher/releases/download/v1.5.1/Kynex.Launcher.v1.5.1.Setup.exe) · [看这版改了什么](CHANGELOG.md) · [下载源码](https://github.com/mianste/Kynex-Launcher/releases/download/v1.5.1/Kynex.Launcher.v1.5.1.Open.Source.zip) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
 
 ## 怎么装
 
@@ -11,7 +11,7 @@ Kynex 是一个给 Windows 用的 Minecraft Java 版启动器。可以在这里�
 ## 能做什么
 
 - 安装原版 Minecraft，也可以装 Fabric、Forge、NeoForge、Quilt 和 OptiFine。
-- 在「下载」里找模组、整合包、资源包、数据包和光影。作者有放截图的话，可以先看再装。
+- 在「下载」里找 Modrinth 和 CurseForge 上的模组、整合包、资源包、数据包和光影。点「安装」就能在选版本时翻看作者上传的预览图。
 - 让不同版本各用各的文件夹，分开管理模组和存档。建好存档后，可以选中它安装数据包。
 - 管理微软账号、离线账号、皮肤和披风。
 - 从首页左下角打开组件库，在缩小的首页预览里拖动和拉伸组件，可调整形状、圆角与配色，点「确定」应用布局。

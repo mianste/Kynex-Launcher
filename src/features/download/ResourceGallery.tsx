@@ -4,9 +4,34 @@ import { Button } from "../../components/ui";
 import type { Project } from "../../lib/types";
 
 type GalleryImage = NonNullable<Project["gallery"]>[number];
+const warmedImages = new Map<string, HTMLImageElement>();
 
-function Screenshot({ image, number }: { image: GalleryImage; number: number }) {
+export function prefetchGalleryImage(image?: GalleryImage) {
+  if (!image) return;
+  const src = image.thumbnailUrl || image.url;
+  if (warmedImages.has(src)) return;
+
+  const preload = new Image();
+  preload.referrerPolicy = "no-referrer";
+  preload.fetchPriority = "low";
+  preload.onerror = () => {
+    if (warmedImages.get(src) === preload) warmedImages.delete(src);
+  };
+  warmedImages.set(src, preload);
+  if (warmedImages.size > 16) {
+    const oldest = warmedImages.keys().next().value;
+    if (oldest !== undefined) warmedImages.delete(oldest);
+  }
+  preload.src = src;
+}
+
+function Screenshot({ image, number, onReady }: {
+  image: GalleryImage;
+  number: number;
+  onReady: () => void;
+}) {
   const [state, setState] = useState<"loading" | "ready" | "failed">("loading");
+  const [src, setSrc] = useState(image.thumbnailUrl || image.url);
   if (state === "failed") {
     return <GalleryMessage>暂时无法加载预览</GalleryMessage>;
   }
@@ -16,12 +41,19 @@ function Screenshot({ image, number }: { image: GalleryImage; number: number }) 
         <p className="resource-gallery-message" role="status">正在加载预览…</p>
       )}
       <img
-        src={image.url}
+        src={src}
         alt={image.title || `预览 ${number}`}
+        decoding="async"
         referrerPolicy="no-referrer"
         style={{ visibility: state === "ready" ? "visible" : "hidden" }}
-        onLoad={() => setState("ready")}
-        onError={() => setState("failed")}
+        onLoad={() => {
+          setState("ready");
+          onReady();
+        }}
+        onError={() => {
+          if (src !== image.url) setSrc(image.url);
+          else setState("failed");
+        }}
       />
     </>
   );
@@ -45,9 +77,12 @@ export function ResourceGallery({ images }: { images: GalleryImage[] }) {
       <div className="resource-gallery-frame">
         {image ? (
           <Screenshot
-            key={`${index}:${image.url}`}
+            key={`${index}:${image.url}:${image.thumbnailUrl ?? ""}`}
             image={image}
             number={index + 1}
+            onReady={() => {
+              if (images.length > 1) prefetchGalleryImage(images[(index + 1) % images.length]);
+            }}
           />
         ) : (
           <GalleryMessage>暂无预览</GalleryMessage>

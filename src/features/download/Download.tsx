@@ -30,6 +30,7 @@ import {
 import { ResourceVersionPicker, DataPackWorldPicker } from "./ModManagement";
 import { resourceTags } from "./resourceTags";
 import { ProjectIcon } from "./ProjectIcon";
+import { prefetchGalleryImage } from "./ResourceGallery";
 import { catalogCache, appendCatalog } from "./catalogCache";
 import { versionCatalog, versionQuery } from "./versionCatalog";
 import { SchematicCatalog } from "./SchematicCatalog";
@@ -138,17 +139,17 @@ export function Download() {
   const [pageCount, PageCount] = useState(1);
   const [searchRevision, RetrySearch] = useState(0);
   const request = useRef(0);
-  const versionPrefetch = useRef<ReturnType<typeof setTimeout>>();
+  const projectPrefetch = useRef<ReturnType<typeof setTimeout>>();
   const previousKind = useRef(kind);
   const previousQuery = useRef(q);
   const previousRevision = useRef(searchRevision);
   const target = s.instances.find((i) => i.id === s.selected);
   const busy = manifestBusy || (searchBusy && projects.length === 0);
-  useEffect(() => () => clearTimeout(versionPrefetch.current), []);
+  useEffect(() => () => clearTimeout(projectPrefetch.current), []);
 
-  function prefetchVersions(project: Project) {
+  function prefetchProject(project: Project) {
     if (!desktop || !projectKinds[kind]) return;
-    clearTimeout(versionPrefetch.current);
+    clearTimeout(projectPrefetch.current);
     const serial = request.current;
     const query = versionQuery(project, {
       id: s.selected,
@@ -158,8 +159,10 @@ export function Download() {
       directoryId: s.directoryId,
       curseforgeKey: s.settings.curseforgeKey,
     });
-    versionPrefetch.current = setTimeout(() => {
-      if (serial === request.current) void versionCatalog.get(query).catch(() => {});
+    projectPrefetch.current = setTimeout(() => {
+      if (serial !== request.current) return;
+      prefetchGalleryImage(project.gallery?.[0]);
+      void versionCatalog.get(query).catch(() => {});
     }, 150);
   }
 
@@ -726,8 +729,8 @@ export function Download() {
                         key={p.project_id}
                         className="project-result-row"
                         role="listitem"
-                        onPointerEnter={() => prefetchVersions(p)}
-                        onPointerLeave={() => clearTimeout(versionPrefetch.current)}
+                        onPointerEnter={() => prefetchProject(p)}
+                        onPointerLeave={() => clearTimeout(projectPrefetch.current)}
                       >
                         <ProjectIcon url={p.icon_url} name={localized.name} />
                         <div className="project-copy">
@@ -774,8 +777,8 @@ export function Download() {
                           </div>
                         </div>
                         <Button
-                          onFocus={() => prefetchVersions(p)}
-                          onBlur={() => clearTimeout(versionPrefetch.current)}
+                          onFocus={() => prefetchProject(p)}
+                          onBlur={() => clearTimeout(projectPrefetch.current)}
                           onClick={() => {
                             VP({
                               project: p,

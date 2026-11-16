@@ -1,4 +1,11 @@
-# v1.5.0
+# v1.5.1
+
+- 点「安装」后，CurseForge 和 Modrinth 的预览图显示更快，切到下一张也少等一会儿。
+- CurseForge 的缩略图打不开时，会自动尝试加载原图。
+
+[下载 v1.5.1](https://github.com/mianste/Kynex-Launcher/releases/tag/v1.5.1)
+
+## v1.5.0
 
 - 新增自定义组件
 - 首页布局排版大改

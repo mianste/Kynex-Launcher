@@ -117,7 +117,7 @@ export interface Project {
   project_type: string;
   slug: string;
   icon_url?: string | null;
-  gallery?: { url: string; title?: string | null }[];
+  gallery?: { url: string; thumbnailUrl?: string | null; title?: string | null }[];
   source?: "modrinth" | "curseforge";
 }
 export interface NewsArticle {
