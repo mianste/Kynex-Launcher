@@ -68,10 +68,7 @@ export const catalogCache = new CatalogCache((payload) =>
 
 const identity = (p: Project) =>
   (p.slug || p.title).toLocaleLowerCase().replace(/[\s_-]/g, "");
-export function appendCatalog(
-  existing: Project[],
-  incoming: Project[],
-): Project[] {
+export function appendCatalog<T extends Project>(existing: T[], incoming: T[]): T[] {
   const seen = new Set(existing.map(identity));
   const appended = incoming
     .slice()

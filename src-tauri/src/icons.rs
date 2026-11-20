@@ -42,6 +42,9 @@ pub async fn fetch(core: &Core, p: &Value) -> Result<Value> {
             return Ok(json!({ "data": data_url(mime, &bytes) }));
         }
     }
+    if p["cacheOnly"] == true {
+        return Ok(json!({ "data": "" }));
+    }
     let bytes = match download(core, url, 15).await {
         Ok(bytes) => bytes,
         Err(direct) => {
@@ -123,6 +126,20 @@ mod tests {
         assert_eq!(a, b);
         assert_ne!(a, c);
         assert!(a.starts_with(root.path()));
+    }
+
+    #[tokio::test]
+    async fn cache_only_returns_a_local_icon_or_an_empty_result() {
+        let root = tempfile::tempdir().unwrap();
+        let core = crate::Core::new(root.path().to_path_buf(), std::sync::Arc::new(|_| {})).unwrap();
+        let url = "https://example.invalid/icon.png";
+        let request = json!({"url": url, "cacheOnly": true});
+        assert_eq!(fetch(&core, &request).await.unwrap()["data"], "");
+        let path = cache_path(&core, url);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let bytes = b"\x89PNG\r\n\x1a\n";
+        std::fs::write(&path, bytes).unwrap();
+        assert_eq!(fetch(&core, &request).await.unwrap()["data"], data_url("image/png", bytes));
     }
 
     #[test]

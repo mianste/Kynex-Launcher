@@ -15,6 +15,7 @@
 - 阅读范围：`ModLaunch.vb` 的启动阶段，以及 `ModDownload.vb`、`ModDownloadLib.vb`、`ResourceSearcher.vb` 的源优先级、错峰回退、并发文件任务、双站资源搜索与筛选组织。KXL 仅采用这些架构思路，以 Rust 独立实现，未复制 PCL 的代码、控件或品牌资产。
 - 署名：龙腾猫跃及 PCL 贡献者。PCL 仓库包含自定义《PCL 分发有限许可》及合理使用指南，不能视作 MIT 项目。本工程独立实现，不是 PCL 分支，不使用其源代码或品牌资产；关于页已署名和提供仓库链接。
 - 许可原文：https://github.com/Meloong-Git/PCL/blob/main/LICENCE
+- 下载完成提示参考 [PCL 帮助中的左下角提示条](https://github.com/Meloong-Git/PCL/wiki/%E8%87%AA%E5%AE%9A%E4%B9%89%E4%BA%8B%E4%BB%B6#%E5%BC%B9%E5%87%BA%E6%8F%90%E7%A4%BA)，KXL 使用自身主题、控件和任务结果。
 - 头像流程参考：[PCL 旧版 UUID 默认皮肤规则](https://github.com/Meloong-Git/PCL/blob/93ede5d9e638c99fcec853a9ba1eecd91ceee7f5/Plain%20Craft%20Launcher%202/Modules/Minecraft/ModMinecraft.vb#L1395-L1417)及[皮肤头像预览行为](https://github.com/Meloong-Git/PCL/blob/8c8b1066bff6476a14437a14bc16a281e25145bd/Plain%20Craft%20Launcher%202/Pages/PageLaunch/MySkin.xaml.vb#L74-L128)。KXL 独立使用 Java UUID 哈希的奇偶位选择 Steve 或 Alex，并将游戏皮肤正脸与外层合成。仅用于启动器内显示，纹理来源见 `src/assets/skins/SOURCES.json`。
 
 ## 启动动画检索

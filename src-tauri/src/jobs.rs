@@ -5,6 +5,37 @@ use tokio::sync::{Mutex as AsyncMutex, OwnedSemaphorePermit, Semaphore};
 
 pub const TRANSLATION_CONCURRENCY: usize = 3;
 
+pub(crate) fn download_completion(action: &str, payload: &Value, result: &Value) -> Option<Value> {
+    let map = action == "install_map" || action == "install_project" && payload["kind"] == "worlds";
+    let detail = if map {
+        match result["status"].as_str()? {
+            "installed" => None,
+            "downloaded" => Some(result["note"].as_str().unwrap_or("文件已保存。").to_owned()),
+            _ => return None,
+        }
+    } else {
+        match action {
+            "download_resource_file" => Some("文件已保存。".into()),
+            "schematic_catalog_download" | "install_java" if result["alreadyPresent"] == true => {
+                Some("已存在，可直接使用。".into())
+            }
+            "install_project" if result["files"].as_u64() == Some(0) => {
+                Some("已存在，可直接使用。".into())
+            }
+            "install_project" if payload["kind"] == "datapacks" => payload["world"]
+                .as_str()
+                .map(|world| format!("已添加到「{world}」，请在游戏中启用。")),
+            "install" | "install_project" | "import_pack" | "install_java" | "schematic_catalog_download" => None,
+            "update_mods" => {
+                let count = result["updated"].as_u64().filter(|&count| count > 0)?;
+                Some(format!("已更新 {count} 个模组。"))
+            }
+            _ => return None,
+        }
+    };
+    Some(json!({"title": "安装完成", "detail": detail}))
+}
+
 pub struct Jobs {
     slots: Arc<Semaphore>,
     pub download_slots: Semaphore,
@@ -117,6 +148,36 @@ impl Drop for Job {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn successful_resource_jobs_share_the_installation_completion_title() {
+        for kind in ["mods", "resourcepacks", "shaderpacks", "datapacks", "modpacks"] {
+            assert_eq!(download_completion("install_project", &json!({"kind":kind}), &json!({"files":1})).unwrap()["title"], "安装完成");
+        }
+        for action in ["install", "install_java", "import_pack", "schematic_catalog_download"] {
+            assert_eq!(download_completion(action, &json!({}), &json!({})).unwrap()["title"], "安装完成");
+        }
+        assert_eq!(download_completion("install_map", &json!({}), &json!({"status":"installed"})).unwrap()["title"], "安装完成");
+        assert_eq!(
+            download_completion("install_map", &json!({}), &json!({"status":"downloaded","note":"仅保存压缩包"})),
+            Some(json!({"title":"安装完成","detail":"仅保存压缩包"})),
+        );
+        assert_eq!(
+            download_completion("download_resource_file", &json!({}), &json!({})),
+            Some(json!({"title":"安装完成","detail":"文件已保存。"})),
+        );
+        assert_eq!(
+            download_completion("install_project", &json!({"kind":"mods"}), &json!({"files":0})),
+            Some(json!({"title":"安装完成","detail":"已存在，可直接使用。"})),
+        );
+        assert_eq!(
+            download_completion("install_java", &json!({}), &json!({"alreadyPresent":true})),
+            Some(json!({"title":"安装完成","detail":"已存在，可直接使用。"})),
+        );
+        assert!(download_completion("install_map", &json!({}), &json!({"status":"external"})).is_none());
+        assert!(download_completion("launch", &json!({}), &json!({})).is_none());
+        assert!(download_completion("update_mods", &json!({}), &json!({"updated":0})).is_none());
+    }
     #[test]fn installed_mod_scans_coalesce_per_instance(){
         let jobs=Jobs::default();assert!(jobs.request_mod_scan("a"));let first=jobs.mod_scan_generation("a");
         assert!(!jobs.request_mod_scan("a"));assert!(jobs.request_mod_scan("b"));assert!(!jobs.finish_mod_scan("a",first));

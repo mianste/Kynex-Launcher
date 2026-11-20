@@ -1,16 +1,18 @@
 {
   "channel": "stable",
-  "version": "1.5.1",
-  "displayVersion": "v1.5.1",
-  "label": "公开构建 v1.5.1",
+  "version": "1.6.1",
+  "displayVersion": "v1.6.1",
+  "label": "公开构建 v1.6.1",
   "repositoryUrl": "https://github.com/mianste/Kynex-Launcher",
   "supportUrl": "https://afdian.com/a/keke_657",
   "changes": [
-    "点「安装」后，CurseForge 和 Modrinth 的预览图显示更快，切到下一张也少等一会儿。",
-    "CurseForge 的缩略图打不开时，会自动尝试加载原图。"
+    "修复部分像素茶艺地图下载失败和地图封面有黑边的问题。",
+    "地图入口统一显示「安装」，有可安装文件的地图可以直接装进实例。",
+    "修复模组、资源包、光影、数据包和存档缺图。提前加载图标，原图不可用时显示备用图标。",
+    "资源任务成功后，左下角的灵动岛显示「安装完成」，跟随主题透明度，2.5 秒后自动消失。"
   ],
   "productName": "Kynex Launcher Public",
   "identifier": "com.keke.kynex.public",
   "mainBinaryName": "Kynex Launcher Public",
-  "releaseTag": "v1.5.1-source"
+  "releaseTag": "v1.6.1"
 }

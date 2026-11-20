@@ -13,8 +13,15 @@ fn curseforge_row(v: &Value, game: &str, loader: &str) -> Value {
  json!({"id":v["id"].to_string(),"name":v["displayName"],"number":v["fileName"],"date":v["fileDate"],"type":match v["releaseType"].as_u64(){Some(1)=>"release",Some(2)=>"beta",_=>"alpha"},"gameVersions":games,"loaders":loaders,"compatible":curseforge::compatible(v,Some(game),Some(loader))})
 }
 pub async fn versions(core: &Core, p: &Value) -> Result<Value> {
+    if p["source"] == "pixelmap" {
+        return maps::versions(core, p).await;
+    }
+    resource_versions(core, p).await
+}
+
+pub(crate) async fn resource_versions(core: &Core, p: &Value) -> Result<Value> {
     let kind = p["kind"].as_str().unwrap_or("mods");
-    if !["mods", "modpacks", "resourcepacks", "shaderpacks", "datapacks"].contains(&kind) {
+    if !["mods", "modpacks", "resourcepacks", "shaderpacks", "datapacks", "worlds"].contains(&kind) {
         return Err("资源类型无效".into());
     }
     let config = p["id"].as_str()
@@ -60,6 +67,9 @@ pub async fn versions(core: &Core, p: &Value) -> Result<Value> {
             let name = file["fileName"].as_str()?;
             if file["isAvailable"] == false || file["isServerPack"] == true
                 || !resource_downloads::extension_matches(name, kind) {
+                return None;
+            }
+            if kind == "worlds" && maps::curseforge_archive(file).is_none() {
                 return None;
             }
             let mut row = curseforge_row(file, game, loader);

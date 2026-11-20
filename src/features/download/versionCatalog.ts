@@ -12,9 +12,10 @@ export type Version = {
   loaders?: string[];
   compatible?: boolean;
   filename?: string;
+  fileSource?: "CurseForge";
 };
 
-type VersionPage = { versions: Version[]; nextOffset?: number | null; warning?: string };
+type VersionPage = { versions: Version[]; nextOffset?: number | null; warning?: string; unavailable?: string };
 
 export const versionCatalog = new CatalogCache<VersionPage>(async (query) => {
   const reply = await api<VersionPage | Version[]>("project_versions", query);

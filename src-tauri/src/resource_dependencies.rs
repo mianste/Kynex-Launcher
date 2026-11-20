@@ -95,6 +95,7 @@ fn shader_notes(core:&Core,p:&Value)->Result<Vec<String>> {
 }
 pub async fn preview(core:&Core,p:&Value)->Result<Value>{
     if p["kind"]=="modpacks"{return Ok(json!({"dependencies":[],"notes":["整合包按自身清单安装游戏、加载器与资源。"]}));}
+    if p["kind"]=="worlds"{return Ok(json!({"dependencies":[],"notes":["地图会下载到所选实例的存档文件夹。ZIP 会安装为新存档，已有存档不会被覆盖。"]}));}
     let entries=plan(core,p).await?;
     let deps=entries.iter().skip(1).map(|e|json!({"project_id":e.project,"versionId":e.version,"name":e.name,"kind":e.kind,"installed":installed(core,p,e)})).collect::<Vec<_>>();
     let mut notes=shader_notes(core,p)?;

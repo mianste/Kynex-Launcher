@@ -269,7 +269,6 @@ function Install({ version, preset }: { version: string; preset?: Loader }) {
         settings: s.settings,
       });
       await s.refresh();
-      s.notify("实例安装完成");
     } finally {
       I(false);
     }
@@ -1091,7 +1090,6 @@ function Pack({ path }: { path: string }) {
                     curseforgeKey: s.settings.curseforgeKey,
                   });
                   useStore.setState({ selected: instance.id });
-                  s.notify("整合包安装完成");
                   s.setPage("library");
                 } finally {
                   // 即使资源下载阶段失败，实例目录可能已经建好；先刷新再报错，

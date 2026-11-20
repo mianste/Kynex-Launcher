@@ -43,6 +43,30 @@
 .app .pcl-resource-page .resource-selection-content { display:flex; align-items:center; gap:10px; flex:1; min-width:0; border:0; background:none; padding:0; color:inherit; font:inherit; box-shadow:none; text-align:left; cursor:pointer; }
 .resource-selection-content:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:4px; }
 .app .pcl-resource-page .resource-monogram { width: 34px; height: 34px; border-radius: 4px; }
+.resource-mark {
+  color: var(--text);
+  font-weight: 700;
+  font-size: 12px;
+}
+.save-resource-list .resource-selection-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.save-resource-list .resource-monogram {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+}
+.save-resource-list .resource-monogram > img {
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+}
+.save-resource-list .resource-selection-content .grow { min-width: 0; overflow-wrap: anywhere; }
 .pcl-resource-page .resource-row .grow { min-width: 0; }
 .pcl-resource-page .resource-row { content-visibility: auto; contain-intrinsic-size: auto 72px; }
 .pcl-resource-page .resource-row .grow > b,

@@ -39,7 +39,7 @@ impl Source {
 }
 // CurseForge's public fingerprint format: MurmurHash2, seed 1, excluding
 // ASCII tab, line-feed, carriage-return and space. SHA-1 still verifies identity.
-fn fingerprint(bytes: &[u8]) -> u32 {
+pub(crate) fn fingerprint(bytes: &[u8]) -> u32 {
     let bytes: Vec<u8> = bytes
         .iter()
         .copied()
@@ -182,7 +182,7 @@ fn compatible(old: &Value, new: &Value, source: &str, game: &str, loader: &str) 
         && date_key(old, source).is_some()
         && date_key(new, source).is_some()
 }
-async fn mr_post(core: &Core, path: &str, body: &Value) -> Result<Value> {
+pub(crate) async fn mr_post(core: &Core, path: &str, body: &Value) -> Result<Value> {
     let request = |base: &str| {
         let url = format!("{base}/{path}");
         async move {

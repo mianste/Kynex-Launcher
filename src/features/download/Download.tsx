@@ -29,13 +29,14 @@ import {
 } from "./modLocalization";
 import { ResourceVersionPicker, DataPackWorldPicker } from "./ModManagement";
 import { resourceTags } from "./resourceTags";
-import { ProjectIcon } from "./ProjectIcon";
+import { prepareProjectIcons, ProjectIcon } from "./ProjectIcon";
 import { prefetchGalleryImage } from "./ResourceGallery";
 import { catalogCache, appendCatalog } from "./catalogCache";
 import { versionCatalog, versionQuery } from "./versionCatalog";
 import { SchematicCatalog } from "./SchematicCatalog";
+import { MAP_COPYRIGHT_BODY, MAP_COPYRIGHT_TITLE } from "./mapSources";
 import "./downloadCatalog.css";
-const categories = ["游戏本体", "整合包", "模组", "资源包", "光影", "数据包", "投影"];
+const categories = ["游戏本体", "整合包", "模组", "资源包", "光影", "数据包", "地图", "投影"];
 
 const projectKinds: Record<string, { type: string; install: string }> = {
   整合包: { type: "modpack", install: "modpacks" },
@@ -43,6 +44,7 @@ const projectKinds: Record<string, { type: string; install: string }> = {
   资源包: { type: "resourcepack", install: "resourcepacks" },
   光影: { type: "shader", install: "shaderpacks" },
   数据包: { type: "datapack", install: "datapacks" },
+  地图: { type: "world", install: "worlds" },
 };
 
 type InstallSelection = {
@@ -111,7 +113,7 @@ export function Download() {
   }, [kind]);
   const [types, Ty] = useState(["release"]);
   const [q, Q] = useState("");
-  const [source, Src] = useState<"all" | "modrinth" | "curseforge">("all");
+  const [source, Src] = useState<"all" | "modrinth" | "curseforge" | "pixelmap">("all");
   const [tag, Tag] = useState("");
   const [gameFilter, GameFilter] = useState("");
   const [loaderFilter, LoaderFilter] = useState("");
@@ -125,7 +127,7 @@ export function Download() {
       return [];
     }
   });
-  const [projects, P] = useState<Project[]>([]);
+  const [projects, P] = useState<(Project & { displayIcon?: string })[]>([]);
   const [page, Page] = useState(0);
   const [total, Total] = useState(0);
   const [versionProject, VP] = useState<InstallSelection | null>(null);
@@ -148,7 +150,7 @@ export function Download() {
   useEffect(() => () => clearTimeout(projectPrefetch.current), []);
 
   function prefetchProject(project: Project) {
-    if (!desktop || !projectKinds[kind]) return;
+    if (!desktop || !projectKinds[kind] || kind === "地图" && project.download_state === "closed") return;
     clearTimeout(projectPrefetch.current);
     const serial = request.current;
     const query = versionQuery(project, {
@@ -182,6 +184,10 @@ export function Download() {
   useEffect(() => {
     Page(0);
   }, [kind, q, source, gameFilter, loaderFilter, tag]);
+  useEffect(() => {
+    if (kind === "地图" && source === "modrinth") Src("all");
+    if (kind !== "地图" && source === "pixelmap") Src("all");
+  }, [kind, source]);
   useEffect(() => {
     // 切换资源类型时清空搜索词，避免把上一类的关键词带进新列表。
     Tag("");
@@ -225,10 +231,13 @@ export function Download() {
       if (serial !== request.current) return;
       SearchBusy(true);
       E("");
-      const sources: Array<"modrinth" | "curseforge"> =
-        source === "all" ? ["modrinth", "curseforge"] : [source];
-      let visible: Project[] = [];
+      const sources: Array<"modrinth" | "curseforge" | "pixelmap"> =
+        source === "all"
+          ? kind === "地图" ? ["pixelmap", "curseforge"] : ["modrinth", "curseforge"]
+          : [source];
+      let visible: typeof projects = [];
       const totals = new Map<string, number>();
+      const pageSizes = new Map<string, number>();
       const warnings: string[] = [];
       let successes = 0;
       const payload = (selectedSource: string, next = page) => ({
@@ -236,8 +245,8 @@ export function Download() {
         query: searchQuery,
         source: selectedSource,
         game: gameFilter,
-        loader: loaderFilter,
-        tag,
+        loader: kind === "地图" ? "" : loaderFilter,
+        tag: kind === "地图" ? "" : tag,
         curseforgeKey: s.settings.curseforgeKey,
         page: next,
       });
@@ -250,25 +259,36 @@ export function Download() {
               force,
             );
             if (serial !== request.current) return;
+            const hits = value.hits ?? [];
+            const icons = await prepareProjectIcons(hits.flatMap((hit) => hit.icon_url ? [hit.icon_url] : []));
+            if (serial !== request.current) return;
             successes += 1;
+            const pageSize = value.pageSize && value.pageSize > 0 ? value.pageSize : 30;
             totals.set(selectedSource, value.total ?? value.hits?.length ?? 0);
+            pageSizes.set(selectedSource, pageSize);
             // Publish the first source immediately. Late arrivals only append;
             // existing rows and their install targets never jump or change source.
-            visible = appendCatalog(visible, value.hits ?? []);
+            visible = appendCatalog(visible, hits.map((hit) => ({
+              ...hit,
+              displayIcon: hit.icon_url ? icons.get(hit.icon_url) : undefined,
+            })));
             P(visible);
             Total([...totals.values()].reduce((sum, n) => sum + n, 0));
             PageCount(
               Math.max(
                 1,
-                ...[...totals.values()].map((n) => Math.ceil(n / 30)),
+                ...[...totals.entries()].map(([name, count]) =>
+                  Math.ceil(count / (pageSizes.get(name) || 30)),
+                ),
               ),
             );
-            if ((page + 1) * 30 < (value.total ?? 0)) {
+            if ((page + 1) * pageSize < (value.total ?? 0)) {
               prefetchTimers.push(
                 setTimeout(() => {
                   if (serial === request.current)
                     void catalogCache
                       .get(payload(selectedSource, page + 1))
+                      .then(({ hits }) => prepareProjectIcons((hits ?? []).flatMap((hit) => hit.icon_url ? [hit.icon_url] : [])))
                       .catch(() => {});
                 }, 500),
               );
@@ -277,7 +297,7 @@ export function Download() {
           } catch (error) {
             if (serial === request.current) {
               warnings.push(
-                `${selectedSource === "modrinth" ? "Modrinth" : "CurseForge"} 暂时不可用：${String(error).replace(/^Error: /, "")}`,
+                `${selectedSource === "pixelmap" ? "像素茶艺" : selectedSource === "modrinth" ? "Modrinth" : "CurseForge"} 暂时不可用：${String(error).replace(/^Error: /, "")}`,
               );
             }
           }
@@ -334,7 +354,7 @@ export function Download() {
     world?: string,
   ) {
     const { project: p, category, targetId, game, loader } = selection;
-    const projectSource = p.source === "curseforge" ? "curseforge" : "modrinth";
+    const projectSource = p.source === "curseforge" ? "curseforge" : p.source === "pixelmap" ? "pixelmap" : "modrinth";
     E("");
     try {
       if (category === "整合包") {
@@ -352,10 +372,21 @@ export function Download() {
         });
         await s.refresh();
         useStore.setState({ selected: instance.id });
-        s.notify("整合包安装完成");
         return;
       }
       if (!targetId) throw new Error("先选择资源安装目标");
+      if (category === "地图") {
+        await api("install_map", {
+          id: targetId,
+          project: p.project_id,
+          versionId,
+          name: p.title,
+          game: game || undefined,
+          source: projectSource,
+          curseforgeKey: s.settings.curseforgeKey,
+        });
+        return;
+      }
       await api("install_project", {
         id: targetId,
         project: p.project_id,
@@ -367,11 +398,6 @@ export function Download() {
         curseforgeKey: s.settings.curseforgeKey,
         world,
       });
-      s.notify(
-        category === "数据包"
-          ? `已安装到存档「${world}」，请在游戏中启用数据包。`
-          : "资源下载完成",
-      );
     } catch (e) {
       if (category === "数据包") throw e;
       E(String(e).replace(/^Error: /, ""));
@@ -434,25 +460,25 @@ export function Download() {
             placeholder={
               kind === "模组"
                 ? "搜索模组，支持中文 / English"
-                : kind === "投影" ? "搜索投影" : "搜索游戏版本或资源"
+                : kind === "投影" ? "搜索投影" : kind === "地图" ? "搜索地图" : "搜索游戏版本或资源"
             }
           />
+          {kind !== "投影" && kind !== "地图" && (
+            <Button onClick={() => guarded(importPack)}>
+              <PackagePlus size={15} />
+              导入整合包
+            </Button>
+          )}
           {kind !== "投影" && (
-            <>
-              <Button onClick={() => guarded(importPack)}>
-                <PackagePlus size={15} />
-                导入整合包
-              </Button>
-              <Button
-                onClick={() =>
-                  projectKinds[kind] ? RetrySearch((n) => n + 1) : refresh(true)
-                }
-                disabled={busy}
-              >
-                <RefreshCw size={15} />
-                刷新
-              </Button>
-            </>
+            <Button
+              onClick={() =>
+                projectKinds[kind] ? RetrySearch((n) => n + 1) : refresh(true)
+              }
+              disabled={busy}
+            >
+              <RefreshCw size={15} />
+              刷新
+            </Button>
           )}
         </div>
       </div>
@@ -492,6 +518,15 @@ export function Download() {
           <h4>{kind === "投影" ? "作品来源" : "下载来源"}</h4>
           {kind === "投影" ? (
             <><Badge>GitHub</Badge><Badge>Block Library</Badge></>
+          ) : kind === "地图" ? (
+            <>
+              <Badge tone="ok">资源：像素茶艺</Badge>
+              <Badge tone="warn">资源：CurseForge</Badge>
+              <aside className="notice map-copyright" role="note">
+                <strong>{MAP_COPYRIGHT_TITLE}</strong>
+                <p>{MAP_COPYRIGHT_BODY}</p>
+              </aside>
+            </>
           ) : (
             <>
               <Badge>
@@ -513,7 +548,9 @@ export function Download() {
               />
               <p className="target-instance-hint">
                 {kind === "投影"
-                  ? target ? `投影将保存到 ${target.name} 的投影文件夹` : "选择一个 Java 实例后可保存投影。"
+                    ? target ? `投影将保存到 ${target.name} 的投影文件夹` : "选择一个 Java 实例后可保存投影。"
+                  : kind === "地图"
+                    ? target ? `点安装后下载到 ${target.name} 的存档文件夹，已有存档不会被覆盖。` : "选择一个 Java 实例后才能安装地图。"
                   : target ? `将安装到 ${target.name} · ${target.version} · ${target.loader}`
                     : "先安装或选择一个 Java 实例，资源会按该实例的版本与加载器匹配。"}
               </p>
@@ -612,7 +649,6 @@ export function Download() {
                           { major },
                         );
                         s.updateSettings({ java: runtime.path });
-                        s.notify("Java " + major + " 已安装并设为全局默认");
                       })
                     }
                   >
@@ -665,7 +701,7 @@ export function Download() {
                     </label>
                   </>
                 )}
-                {resourceTags[projectKinds[kind]?.type] && (
+                {kind !== "地图" && resourceTags[projectKinds[kind]?.type] && (
                   <label>
                     <span>类型</span>
                     <ChoiceSelect
@@ -689,12 +725,12 @@ export function Download() {
                 </button>
                 <button
                   role="tab"
-                  aria-selected={source === "modrinth"}
-                  className={source === "modrinth" ? "on" : ""}
-                  onClick={() => Src("modrinth")}
+                  aria-selected={source === (kind === "地图" ? "pixelmap" : "modrinth")}
+                  className={source === (kind === "地图" ? "pixelmap" : "modrinth") ? "on" : ""}
+                  onClick={() => Src(kind === "地图" ? "pixelmap" : "modrinth")}
                 >
                   <Boxes size={15} />
-                  Modrinth
+                  {kind === "地图" ? "像素茶艺" : "Modrinth"}
                 </button>
                 <button
                   role="tab"
@@ -722,17 +758,22 @@ export function Download() {
                   aria-label={`${kind}资源列表`}
                   aria-busy={searchBusy}
                 >
-                  {projects.map((p) => {
+                  {projects.map((p, index) => {
                     const localized = localizeProject(p);
                     return (
                       <article
-                        key={p.project_id}
-                        className="project-result-row"
+                        key={`${p.source}:${p.project_id}`}
+                        className={`project-result-row${kind === "地图" && p.source === "pixelmap" ? " pixelmap-result-row" : ""}`}
                         role="listitem"
                         onPointerEnter={() => prefetchProject(p)}
                         onPointerLeave={() => clearTimeout(projectPrefetch.current)}
                       >
-                        <ProjectIcon url={p.icon_url} name={localized.name} />
+                        <ProjectIcon
+                          url={p.displayIcon}
+                          prepared
+                          name={localized.name}
+                          priority={kind !== "地图" || index < 8}
+                        />
                         <div className="project-copy">
                           <div className="project-title-line">
                             <h3>
@@ -751,10 +792,12 @@ export function Download() {
                               )}
                               {p.source === "curseforge"
                                 ? "CurseForge"
-                                : "Modrinth"}
+                                : p.source === "pixelmap"
+                                  ? "像素茶艺"
+                                  : "Modrinth"}
                             </Badge>
                           </div>
-                          {localized.tags.length > 0 && (
+                          {kind !== "地图" && localized.tags.length > 0 && (
                             <div className="project-tags">
                               {localized.tags.map((tag) => (
                                 <span key={tag}>{tag}</span>
@@ -768,7 +811,11 @@ export function Download() {
                             </small>
                           )}
                           <div className="project-meta">
-                            <span>{p.downloads.toLocaleString()} 次下载</span>
+                            {p.author && <span>作者 {p.author}</span>}
+                            <span>
+                              {p.downloads.toLocaleString()}{" "}
+                              {p.source === "pixelmap" ? "次浏览" : "次下载"}
+                            </span>
                             {gameFilter && <span>Minecraft {gameFilter}</span>}
                             {loaderFilter &&
                               ["模组", "整合包"].includes(kind) && (
@@ -799,11 +846,19 @@ export function Download() {
                 !searchBusy &&
                 !error && (
                   <Empty
-                    title={desktop ? "没有找到资源" : "资源搜索需要桌面版"}
+                    title={
+                      !desktop
+                        ? "资源搜索需要桌面版"
+                        : kind === "地图"
+                          ? "没有找到地图"
+                          : "没有找到资源"
+                    }
                     detail={
                       kind === "模组"
                         ? "可尝试中文名、英文名或功能词，例如“钠”“Sodium”“性能优化”。"
-                        : "可尝试资源名称、英文名，或选择全部游戏版本。"
+                        : kind === "地图"
+                          ? "可以换一个搜索词或游戏版本。"
+                          : "可尝试资源名称、英文名，或选择全部游戏版本。"
                     }
                   />
                 )
@@ -826,11 +881,11 @@ export function Download() {
                   ))}
                 </div>
               )}
-              {projects.length > 0 && (
+              {(projects.length > 0 || kind === "地图" && pages > 1) && (
                 <div className="pagination">
                   <span>
-                    共 {total.toLocaleString()} 个资源 · 第 {page + 1} / {pages}{" "}
-                    页
+                    {kind !== "地图" && `共 ${total.toLocaleString()} 个资源 · `}
+                    第 {page + 1} / {pages} 页
                   </span>
                   <div className="actions">
                     <Button

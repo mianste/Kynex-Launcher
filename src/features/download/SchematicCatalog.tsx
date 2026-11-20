@@ -35,7 +35,11 @@ export function SchematicCatalog({ instanceId, query }: { instanceId: string; qu
     const directoryId = useStore.getState().directoryId;
     try {
       if (entryId) {
-        const file = await api<DownloadedSchematic>("schematic_catalog_download", { id: instanceId, entry: entryId });
+        const file = await api<DownloadedSchematic>("schematic_catalog_download", {
+          id: instanceId,
+          entry: entryId,
+          name: entries.find((entry) => entry.id === entryId)?.name,
+        });
         setReceipt({ ...file, instanceId, directoryId });
         return;
       }

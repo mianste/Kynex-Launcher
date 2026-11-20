@@ -1,7 +1,7 @@
 use crate::*;
 pub(crate) fn needs_game_match(kind:&str)->bool{matches!(kind,"mods"|"datapacks")}
 pub(crate) fn extension_matches(name:&str,kind:&str)->bool{
- let name=name.to_ascii_lowercase();match kind{"mods"=>name.ends_with(".jar")||name.ends_with(".litemod"),"modpacks"=>name.ends_with(".mrpack")||name.ends_with(".zip"),"resourcepacks"|"shaderpacks"|"datapacks"=>name.ends_with(".zip"),_=>false}
+ let name=name.to_ascii_lowercase();match kind{"mods"=>name.ends_with(".jar")||name.ends_with(".litemod"),"modpacks"=>name.ends_with(".mrpack")||name.ends_with(".zip"),"resourcepacks"|"shaderpacks"|"datapacks"=>name.ends_with(".zip"),"worlds"=>name.ends_with(".zip")||name.ends_with(".rar")||name.ends_with(".7z"),_=>false}
 }
 pub(crate) fn modrinth_file<'a>(version:&'a Value,kind:&str)->Result<&'a Value>{
  if kind=="datapacks" && !version["loaders"].as_array().is_some_and(|a|a.iter().any(|v|v=="datapack")){return Err("此发行版不是数据包".into());}
@@ -58,6 +58,9 @@ pub(crate) fn lock_path(core:&Core,p:&Value)->Result<PathBuf>{
  if p["kind"]=="datapacks"{Ok(world_dir(core,p)?.join("kxl-datapacks.json"))}else{Ok(core.instance(string(p,"id")?)?.join("installed-projects.json"))}
 }
 pub async fn save(core:&Core,p:&Value)->Result<Value>{
+ if p["kind"]=="worlds" && matches!(p["source"].as_str(), Some("pixelmap" | "curseforge")) {
+     return maps::save(core,p).await;
+ }
  let kind=string(p,"kind")?;let vid=string(p,"versionId")?;
  let (url,hash,name)=if p["source"]=="curseforge"{
   let project=p["project"].as_u64().or_else(||p["project"].as_str()?.parse().ok()).ok_or("项目 ID 无效")?;

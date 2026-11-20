@@ -142,6 +142,7 @@ fn class_id(kind: &str) -> Result<u32> {
         "resourcepack" => Ok(12),
         "shader" => Ok(6552),
         "datapack" => Ok(6945),
+        "world" => Ok(17),
         _ => Err("CurseForge 不支持此资源类型".into()),
     }
 }
@@ -287,6 +288,39 @@ pub async fn search(
                     })
                     .collect();
             hit["gallery"] = json!(gallery);
+            if kind == "world" {
+                hit["distribution_allowed"] = item["allowModDistribution"].clone();
+                if let Some(author) = item["authors"].as_array().and_then(|authors| {
+                    authors.iter().find_map(|author| {
+                        author["name"].as_str().map(str::trim).filter(|name| !name.is_empty())
+                    })
+                }) {
+                    hit["author"] = json!(author);
+                }
+                if let Some(url) = item["links"]["websiteUrl"].as_str().filter(|url| {
+                    crate::https(url).is_ok()
+                        && reqwest::Url::parse(url).ok().is_some_and(|parsed| {
+                            parsed.scheme() == "https"
+                                && matches!(parsed.host_str(), Some("www.curseforge.com" | "curseforge.com"))
+                        })
+                }) {
+                    hit["page_url"] = json!(url);
+                }
+                let mut versions = Vec::new();
+                for row in item["latestFilesIndexes"].as_array().into_iter().flatten() {
+                    if let Some(version) = row["gameVersion"].as_str().map(str::trim).filter(|version| !version.is_empty()) {
+                        if !versions.contains(&version) {
+                            versions.push(version);
+                        }
+                    }
+                    if versions.len() == 8 {
+                        break;
+                    }
+                }
+                if !versions.is_empty() {
+                    hit["versions"] = json!(versions);
+                }
+            }
             hit
         })
         .collect();
@@ -414,6 +448,21 @@ pub(crate) async fn project_info(core: &Core, mod_id: u64, key: Option<&str>) ->
         .as_object()
         .map(|_| value["data"].clone())
         .ok_or_else(|| format!("CurseForge 项目 {mod_id} 不存在"))
+}
+
+pub(crate) async fn world_by_slug(core: &Core, slug: &str, key: Option<&str>) -> Result<Option<u64>> {
+    let mut url = reqwest::Url::parse(&format!("{}/mods/search", endpoint(key))).map_err(err)?;
+    url.query_pairs_mut()
+        .append_pair("gameId", GAME_ID)
+        .append_pair("classId", "17")
+        .append_pair("slug", slug);
+    let value = get(core, url.as_str(), key).await?;
+    let worlds = value["data"].as_array().ok_or("CurseForge 地图查询响应无效")?;
+    Ok(worlds.iter().find_map(|world| {
+        (world["slug"] == slug && world["classId"] == 17 && world["allowModDistribution"] != false)
+            .then(|| world["id"].as_u64())
+            .flatten()
+    }))
 }
 
 pub(crate) fn file_name(file: &Value) -> Result<&str> {
@@ -678,6 +727,7 @@ mod tests {
     #[test]
     fn ids_and_cdn_fallback() {
         assert_eq!(class_id("mod").unwrap(), 6);
+        assert_eq!(class_id("world").unwrap(), 17);
         assert_eq!(loader_type("neoforge"), Some(6));
         let file = json!({"id": 9298209u64, "fileName": "jei-test.jar"});
         assert_eq!(

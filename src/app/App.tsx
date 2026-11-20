@@ -1,4 +1,5 @@
 import { DownloadTasks } from "../features/download/DownloadTasks";
+import { DownloadCompletions, type DownloadCompletion } from "../features/download/DownloadCompletions";
 import { progressBuffer } from "../lib/progressBuffer";
 import { useModUpdateState, type ModScanEvent } from "../lib/modUpdateState";
 import { RELEASE } from "../lib/release";
@@ -39,6 +40,7 @@ import { useStore, guarded } from "../store";
 import { api, assetUrl, desktop, onProgress, pickFile } from "../lib/bridge";
 import { Home } from "../features/launch/Home";
 import { Library, InstanceDetail } from "../features/library/Library";
+import { warmInstanceResources } from "../features/library/resourcePreviews";
 import { Download as Discover } from "../features/download/Download";
 import { News } from "../features/news/News";
 import { Accounts } from "../features/account/Accounts";
@@ -86,12 +88,26 @@ export function App() {
   const s = useStore();
   useWorkshopEvents();
   const [ready, R] = useState(false);
+  useEffect(() => {
+    if (!ready || !desktop) return;
+    const id = s.selected || s.instances[0]?.id;
+    if (!id) return;
+    const timer = window.setTimeout(
+      () => warmInstanceResources(id, s.directoryId, s.settings.curseforgeKey),
+      150,
+    );
+    return () => window.clearTimeout(timer);
+  }, [ready, s.selected, s.instances[0]?.id, s.directoryId, s.settings.curseforgeKey]);
   const [splash, S] = useState(
     !new URLSearchParams(location.search).has("nosplash"),
   );
   useEffect(() => { if (s.page === "diagnose") { s.setPage("home"); window.dispatchEvent(new Event("kynex-open-assistant")); } }, [s.page]);
   const [drag, D] = useState(false);
   const [tasksOpen, TasksOpen] = useState(false);
+  const [completions, setCompletions] = useState<DownloadCompletion[]>([]);
+  const dismissCompletion = useCallback((id: string) => {
+    setCompletions((current) => current.filter((item) => item.id !== id));
+  }, []);
   const depth = useRef(0);
   const appRoot = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -209,12 +225,17 @@ export function App() {
     const progress = progressBuffer((events) => {
       if (!live) return;
       const tasks = { ...useStore.getState().tasks };
+      const completed: DownloadCompletion[] = [];
       for (const task of events) {
         const id = task.taskId;
         if (!id) continue;
+        if (task.finished && !task.error && task.completion && !tasks[id]?.finished) {
+          completed.push({ id, name: task.name ?? tasks[id]?.name, ...task.completion });
+        }
         tasks[id] = { ...tasks[id], ...task };
         if (task.error) s.notify(task.error);
       }
+      if (completed.length) setCompletions((current) => [...current, ...completed]);
       const active = Object.values(tasks).filter(
         (t) => !t.finished && !t.error,
       );
@@ -543,6 +564,7 @@ export function App() {
       <Modals />
       <Assistant ready={ready && !splash} />
       <Toast />
+      <DownloadCompletions items={completions} dismiss={dismissCompletion} />
       <ReleaseNotices ready={ready && !splash} />
       <HotfixStartup ready={ready && !splash} />
       {splash && <Splash ready={ready} finish={finish} />}

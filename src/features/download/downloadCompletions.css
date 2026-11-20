@@ -1,0 +1,71 @@
+.download-completions {
+  position: absolute;
+  inset: auto 16px 54px 22px;
+  z-index: 122;
+  display: grid;
+  justify-items: start;
+  pointer-events: none;
+}
+
+.download-completion-island {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(360px, 100%);
+  min-height: 34px;
+  padding: 5px 12px 5px 6px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) var(--ui-alpha), transparent);
+  border-radius: 999px;
+  color: var(--text);
+  background: var(--glass);
+  box-shadow: 0 6px 18px color-mix(in srgb, rgb(0 0 0 / 22%) var(--ui-alpha), transparent);
+  backdrop-filter: blur(min(14px, var(--ui-blur)));
+  animation:
+    download-island-in 180ms var(--motion-fluent) both,
+    download-island-out 140ms ease-out calc(var(--notice-duration) - 140ms) forwards;
+}
+
+.download-completion-check {
+  display: grid;
+  flex: 0 0 22px;
+  place-items: center;
+  height: 22px;
+  border-radius: 50%;
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) calc(var(--ui-alpha) * 0.15), transparent);
+}
+
+.download-completion-island strong {
+  flex: none;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.download-completion-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text2);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes download-island-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes download-island-out {
+  to { opacity: 0; transform: translateY(4px) scale(0.97); }
+}
+
+@keyframes download-island-fade-in { from { opacity: 0; } }
+@keyframes download-island-fade-out { to { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .download-completion-island {
+    animation:
+      download-island-fade-in 120ms ease-out both,
+      download-island-fade-out 120ms ease-out calc(var(--notice-duration) - 120ms) forwards;
+  }
+}

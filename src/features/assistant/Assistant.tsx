@@ -354,7 +354,6 @@ export function Assistant({ ready }: { ready: boolean }) {
         source: picker.project.source,
         curseforgeKey: s.settings.curseforgeKey,
       });
-      s.notify(`模组已安装到「${picker.instance.name}」`);
       P(null);
     } catch (e) {
       E(String(e));

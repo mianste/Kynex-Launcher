@@ -423,7 +423,6 @@ export function Settings() {
                       for (const major of [8, 17, 21, 25]) {
                         await api("install_java", { major });
                       }
-                      s.notify("Java 8 / 17 / 21 / 25 已补齐");
                     } finally {
                       FillingJava(false);
                     }

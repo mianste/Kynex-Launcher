@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, useRef, useId, type ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
-import { api, desktop, saveFile } from "../../lib/bridge";
-import { useStore } from "../../store";
+import { api, desktop, external, saveFile } from "../../lib/bridge";
+import { guarded, useStore } from "../../store";
 import { useModUpdateState, type ModUpdate } from "../../lib/modUpdateState";
 export type { ModUpdate } from "../../lib/modUpdateState";
 import { Button, Chip, OptionSelect, Modal, Badge } from "../../components/ui";
@@ -32,24 +32,33 @@ export function ResourceVersionPicker({
   install: (id: string) => void;
 }) {
   const s = useStore();
+  const map = kind === "worlds";
   const visualResource = kind === "shaderpacks" || kind === "resourcepacks";
-  const visualList = visualResource || !!project.gallery?.length;
+  const visualList = map || visualResource || !!project.gallery?.length;
+  const knownUnavailable = map && project.download_state === "closed"
+    ? project.download_note || "此地图暂未提供可安装的文件。"
+    : "";
   const query = versionQuery(project, {
     id, kind, game: gameFilter, loader: loaderFilter,
     directoryId: s.directoryId, curseforgeKey: s.settings.curseforgeKey,
   });
-  const seed = versionCatalog.peek(query);
+  const seed = knownUnavailable ? undefined : versionCatalog.peek(query);
   const versionGroup = useId();
   const [rows, R] = useState<Version[]>(seed?.versions ?? []);
   const [selected, S] = useState(() => preferredVersion(seed?.versions ?? []));
   const [nextOffset, Next] = useState<number | null>(seed?.nextOffset ?? null);
-  const [busy, B] = useState(!seed);
+  const [busy, B] = useState(!seed && !knownUnavailable);
   const [moreBusy, MoreBusy] = useState(false);
   const [saving, Saving] = useState(false);
+  const [saveError, SaveError] = useState("");
   const [error, E] = useState("");
   const [warning, Warning] = useState("");
+  const [unavailable, Unavailable] = useState(knownUnavailable || seed?.unavailable || "");
   const generation = useRef(0);
   const chosen = rows.find((v) => v.id === selected);
+  const originalPage = map ? project.page_url : undefined;
+  const targetGame = map ? s.instances.find((instance) => instance.id === id)?.version : undefined;
+  const mapVersionMismatch = targetGame && !!chosen?.gameVersions?.length && !chosen.gameVersions.includes(targetGame);
   const [requirements, Requirements] = useState<{
     dependencies: { name: string; kind: string; installed: boolean }[];
     notes: string[];
@@ -62,7 +71,7 @@ export function ResourceVersionPicker({
     Requirements({ dependencies: [], notes: [] });
     RequirementError("");
     RequirementBusy(false);
-    if (!chosen || chosen.compatible === false || !id || kind === "modpacks")
+    if (!chosen || chosen.compatible === false || !id || kind === "modpacks" || map)
       return;
     RequirementBusy(true);
     void api<{
@@ -91,6 +100,7 @@ export function ResourceVersionPicker({
   }, [
     id,
     kind,
+    map,
     chosen?.id,
     chosen?.compatible,
     project.project_id,
@@ -113,6 +123,7 @@ export function ResourceVersionPicker({
       ]);
       Next(reply.nextOffset ?? null);
       if (offset === 0 || reply.warning) Warning(reply.warning ?? "");
+      if (offset === 0) Unavailable(reply.unavailable ?? "");
       if (offset === 0) S(preferredVersion(values));
       else S((current) => current || preferredVersion(values));
     } catch (e) {
@@ -126,19 +137,27 @@ export function ResourceVersionPicker({
   }
   useEffect(() => {
     const token = ++generation.current;
-    const cached = versionCatalog.peek(query);
+    const cached = knownUnavailable ? undefined : versionCatalog.peek(query);
     R(cached?.versions ?? []);
     S(preferredVersion(cached?.versions ?? []));
     Next(cached?.nextOffset ?? null);
     Warning("");
+    Unavailable(knownUnavailable || cached?.unavailable || "");
+    SaveError("");
     MoreBusy(false);
-    void loadPage(0, token);
+    if (knownUnavailable) {
+      B(false);
+      E("");
+    } else {
+      void loadPage(0, token);
+    }
     return () => {
       generation.current++;
     };
   }, [
     id,
     kind,
+    knownUnavailable,
     project.project_id,
     project.source,
     gameFilter,
@@ -149,7 +168,7 @@ export function ResourceVersionPicker({
   async function saveSelected() {
     if (!chosen || saving) return;
     Saving(true);
-    E("");
+    SaveError("");
     try {
       const path = await saveFile(
         chosen.filename ||
@@ -163,12 +182,11 @@ export function ResourceVersionPicker({
         versionId: chosen.id,
         kind,
         path,
-        name: chosen.filename,
+        name: chosen.filename || project.title,
         curseforgeKey: s.settings.curseforgeKey,
       });
-      s.notify("所选版本已下载到指定位置");
     } catch (e) {
-      E(String(e));
+      SaveError(String(e));
     } finally {
       Saving(false);
     }
@@ -239,6 +257,9 @@ export function ResourceVersionPicker({
           <Button disabled={saving} onClick={close}>
             取消
           </Button>
+          {originalPage && (
+            <Button onClick={() => guarded(() => external(originalPage))}>查看原页</Button>
+          )}
           <Button
             busy={saving}
             disabled={busy || !chosen}
@@ -264,6 +285,7 @@ export function ResourceVersionPicker({
     >
       {targetControls}
       {warning && <p className="notice" role="status">{warning}</p>}
+      {saveError && <p className="notice error" role="alert">{saveError}</p>}
       {visualList ? (
         <div className="resource-version-picker">
           <div className="resource-version-intro">
@@ -272,20 +294,24 @@ export function ResourceVersionPicker({
               {[
                 gameFilter ? `Minecraft ${gameFilter}` : "全部游戏版本",
                 loaderFilter,
-                project.source === "curseforge" ? "CurseForge" : "Modrinth",
+                project.source === "curseforge"
+                  ? "CurseForge"
+                  : project.source === "pixelmap"
+                    ? "像素茶艺"
+                    : "Modrinth",
               ]
                 .filter(Boolean)
                 .join(" · ")}
             </p>
           </div>
-          <div className="resource-version-columns">
+          <div className={`resource-version-columns${map && !chosen ? " map-version-empty" : ""}`}>
             <section
               className="resource-version-catalogue"
               aria-label="可下载版本"
             >
               <div className="resource-version-list-heading">
                 <h4>版本列表</h4>
-                <span>已加载 {rows.length} 个版本</span>
+                {!unavailable && <span>已加载 {rows.length} 个版本</span>}
               </div>
               {busy && <p role="status">正在获取版本…</p>}
               {error && (
@@ -300,7 +326,11 @@ export function ResourceVersionPicker({
                 </div>
               )}
               {!busy && !rows.length && !error && nextOffset === null && (
-                <p>没有符合条件的版本，请返回下载页调整筛选。</p>
+                <p className={unavailable ? "notice" : undefined} role="status">
+                  {unavailable || (map
+                    ? "当前筛选下暂无可下载的地图文件。"
+                    : "没有符合条件的版本，请返回下载页调整筛选。")}
+                </p>
               )}
               {!!rows.length && (
                 <div
@@ -342,7 +372,7 @@ export function ResourceVersionPicker({
                 </Button>
               )}
             </section>
-            <aside
+            {(!map || chosen) && <aside
               className="resource-version-detail"
               aria-label="所选版本信息"
             >
@@ -358,6 +388,12 @@ export function ResourceVersionPicker({
                       <dt>发布时间</dt>
                       <dd>{chosen.date?.slice(0, 10) || "未标注"}</dd>
                     </div>
+                    {chosen.fileSource && (
+                      <div>
+                        <dt>文件来源</dt>
+                        <dd>{chosen.fileSource}</dd>
+                      </div>
+                    )}
                     {!!chosen.loaders?.length && (
                       <div>
                         <dt>
@@ -391,12 +427,17 @@ export function ResourceVersionPicker({
                   )}
                   <div className="resource-version-requirements">
                     {requirementContent}
+                    {mapVersionMismatch && (
+                      <p className="notice" role="status">
+                        当前实例是 Minecraft {targetGame}，作者标注的支持版本未包含它。
+                      </p>
+                    )}
                   </div>
                 </>
               ) : (
                 <p>选择版本后查看支持信息和必需前置。</p>
               )}
-            </aside>
+            </aside>}
             <ResourceGallery
               key={`${project.source}:${project.project_id}`}
               images={project.gallery ?? []}

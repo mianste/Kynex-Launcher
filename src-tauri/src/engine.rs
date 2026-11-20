@@ -1156,7 +1156,7 @@ pub async fn install_java(core: &Core, major: u64) -> Result<Value> {
     let runtime_lock = core.jobs.file_lock(&destination);
     let _runtime_guard = crate::jobs::wait(core, runtime_lock.lock()).await?;
     if let Some(p) = runtime_java_paths(&destination).first() {
-        return Ok(json!({"path":p}));
+        return Ok(json!({"path":p, "alreadyPresent":true}));
     }
     core.stage("读取 Java 运行时清单", 0, 1);
     let (link, hash) = java_package(core, major).await?;
@@ -1597,6 +1597,9 @@ pub(crate) fn resource_dir(core: &Core, p: &Value) -> Result<PathBuf> {
     if kind=="datapacks" && p["world"].as_str().is_some_and(|s|!s.is_empty()){return crate::resource_downloads::install_dir(core,p);}
     if kind == schematics::KIND {
         return schematics::directory(&game_directories::running_directory(core, &config)?);
+    }
+    if kind == "map-downloads" {
+        return Ok(game_directories::running_directory(core, &config)?.join(kind));
     }
     if !["mods", "resourcepacks", "saves", "shaderpacks", "datapacks"].contains(&kind) {
         return Err("资源分类无效".into());

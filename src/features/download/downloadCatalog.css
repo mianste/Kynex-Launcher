@@ -32,6 +32,10 @@
   z-index: 0;
   background: var(--control-bg);
 }
+.pixelmap-result-row .project-icon img {
+  object-fit: cover;
+  background: transparent;
+}
 .project-result-row .project-icon > span {
   position: relative;
   z-index: 1;
@@ -90,8 +94,15 @@
   flex-wrap: wrap;
   font-size: 11px;
 }
-.project-result-row > .btn {
+.project-result-row > .btn,
+.project-result-row > .map-download-note {
   flex: none;
+}
+.map-download-note {
+  max-width: 180px;
+  color: var(--text2);
+  font-size: 12px;
+  line-height: 1.45;
 }
 .catalog-loading .resource-skeleton-row {
   min-height: 116px;
@@ -116,6 +127,89 @@
   color: var(--text2);
 }
 
+.filters .notice.map-copyright {
+  display: grid;
+  align-items: start;
+  gap: 6px;
+  margin: 12px 0 0;
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--warn) 48%, var(--line));
+}
+.map-copyright strong {
+  display: block;
+  margin: 0;
+  color: var(--warn);
+  font-size: 14px;
+}
+.map-copyright p,
+.map-receipt p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.map-catalog-tools,
+.map-row,
+.map-actions,
+.map-receipt,
+.map-receipt-actions {
+  flex-wrap: wrap;
+}
+.map-actions,
+.map-receipt-actions {
+  display: flex;
+  gap: 6px;
+}
+.map-version {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 12px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.map-version select {
+  min-width: 140px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--control-bg);
+}
+.map-preview {
+  width: 128px;
+  height: 80px;
+  flex: none;
+  object-fit: cover;
+  border-radius: 10px;
+  background: var(--control-bg);
+}
+.map-preview-missing {
+  width: 128px;
+  height: 80px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  padding: 6px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text2);
+  background: var(--control-bg);
+  border-radius: 10px;
+}
+.map-preview-missing img {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.map-receipt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
 .schematic-catalog-tools,
 .schematic-catalog-row {
   flex-wrap: wrap;

@@ -1,6 +1,6 @@
 [package]
 name = "kynex-launcher"
-version = "1.5.1"
+version = "1.6.1"
 edition = "2021"
 [lib]
 name = "kynex_core"
@@ -27,6 +27,8 @@ sha1 = "0.10"
 sha2 = "0.10"
 md5 = "0.7"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+sevenz-rust2 = { version = "0.25", default-features = false, features = ["deflate"] }
+unrar-rs = { version = "0.15.3", default-features = false, features = ["crypto-rust"] }
 base64 = "0.22"
 fastnbt = "2.6.3"
 flate2 = "1"

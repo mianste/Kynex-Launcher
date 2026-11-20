@@ -9,6 +9,7 @@ mod mod_updates;
 mod project_versions;
 mod mod_check;
 mod resource_downloads;
+mod resource_artwork;
 mod resource_dependencies;
 mod pack_logos;
 mod asset_download;
@@ -33,6 +34,7 @@ mod resource_delete;
 mod schematics;
 mod schematic_preview;
 mod schematic_catalog;
+mod maps;
 mod schematic_appearance;
 mod pack_export;
 pub mod skins;
@@ -74,25 +76,10 @@ impl Core {
             .and_then(|v| v["source"].as_str().map(str::to_string))
             .filter(|v| v == "official")
             .unwrap_or_else(|| "bmclapi".into());
-        let http = reqwest::Client::builder();
-        // Schannel uses the Windows certificate-chain builder, including AIA
-        // intermediates. Keep certificate and hostname verification enabled.
-        #[cfg(windows)]
-        let http = http.use_native_tls();
-        #[cfg(not(windows))]
-        let http = http.use_rustls_tls();
-        let http = http.min_tls_version(reqwest::tls::Version::TLS_1_2);
         Ok(Self {
             data_root: root.clone(),
             root,
-            http: http
-                .user_agent(format!(
-                    "Kynex Launcher/{} (independent launcher)",
-                    crate::release::version()
-                ))
-                .connect_timeout(std::time::Duration::from_secs(8))
-                .build()
-                .map_err(err)?,
+            http: launcher_http()?,
             progress,
             cancel: Arc::new(AtomicBool::new(false)),
             busy: Arc::new(AtomicBool::new(false)),
@@ -222,12 +209,23 @@ impl Core {
             "wallpaper_engine_scan" => wallpaper_engine::scan().await,
             "warm_loader_catalogs" => loader_catalog::warm(self).await,
             "optifine_versions" => optifine::releases(self, string(&p, "game")?).await,
-            "download_resource_file" | "update_mods" | "export_pack" | "install" | "launch" | "import_pack" | "install_project" | "install_java" => {
+            "download_resource_file" | "update_mods" | "export_pack" | "install" | "launch" | "import_pack" | "install_project" | "install_java" | "install_map" | "schematic_catalog_download" => {
                 let job = self.jobs.start(action, &p);
-                (self.progress)(json!({"taskId":job.id,"stage":"排队等待","done":0,"total":1,"action":action,"payload":p}));
                 let progress = self.progress.clone();
                 let task_id = job.id.clone();
-                let task_name = p["name"].as_str().or(p["project"].as_str()).or(p["id"].as_str()).unwrap_or(match action {"install_project" => "安装资源", "import_pack" => "导入整合包", "export_pack" => "导出整合包", "install_java" => "安装 Java", "launch" => "启动游戏", _ => "安装游戏"}).to_string();
+                let task_name = p["name"].as_str().filter(|name| !name.trim().is_empty()).map(str::to_owned)
+                    .unwrap_or_else(|| match action {
+                        "install_java" => p["major"].as_u64().map_or_else(|| "Java".into(), |major| format!("Java {major}")),
+                        "install" => p["version"].as_str().map_or_else(|| "Minecraft".into(), |version| format!("Minecraft {version}")),
+                        "schematic_catalog_download" => "投影".into(),
+                        "update_mods" => "模组更新".into(),
+                        _ => p["project"].as_str().or(p["id"].as_str()).unwrap_or(match action {
+                            "install_project" => "安装资源", "download_resource_file" => "资源文件",
+                            "import_pack" => "导入整合包", "export_pack" => "导出整合包",
+                            "launch" => "启动游戏", "install_map" => "地图", _ => "下载任务"
+                        }).to_owned(),
+                    });
+                (self.progress)(json!({"taskId":job.id,"name":task_name,"stage":"排队等待","done":0,"total":1,"action":action,"payload":p}));
                 let task = Core {
                     cancel: job.cancel.clone(),
                     progress: Arc::new(move |mut value| {
@@ -242,7 +240,7 @@ impl Core {
                     let _target = jobs::wait(&task, job.target.lock()).await?;
                     let _slot = job.acquire(&task).await?;
                     task.stopped()?;
-                    task.stage(match action {"install_project" => "获取资源下载信息", "import_pack" => "读取整合包清单", "export_pack" => "读取导出内容", "install_java" => "准备 Java 环境", "launch" => "检查启动环境", _ => "读取游戏版本配置"}, 0, 1);
+                    task.stage(match action {"install_project" => "获取资源下载信息", "import_pack" => "读取整合包清单", "export_pack" => "读取导出内容", "install_java" => "准备 Java 环境", "launch" => "检查启动环境", "install_map" => "准备地图", "download_resource_file" => "获取文件下载信息", "schematic_catalog_download" => "保存投影文件", _ => "读取游戏版本配置"}, 0, 1);
                 let result = match action {
                     "install" => engine::install(&task, &p).await,
                     "install_java" => {
@@ -257,6 +255,9 @@ impl Core {
                         engine::launch(&task, &p).await
                     },
                     "import_pack" => packs::import(&task, &p).await,
+                    "install_map" => maps::install(&task, &p).await,
+                    "schematic_catalog_download" => schematic_catalog::download(&task, &p).await,
+                    "install_project" if p["kind"].as_str() == Some("worlds") => maps::install(&task, &p).await,
                     "install_project" if p["kind"].as_str() == Some("modpacks") && p["source"].as_str() != Some("curseforge") => packs::install_modrinth(&task, &p).await,
                     "install_project" if p["source"].as_str() == Some("curseforge") => {
                         if p["kind"].as_str() == Some("modpacks") {
@@ -269,7 +270,13 @@ impl Core {
                 };
                     result
                 }.await;
-                (task.progress)(json!({"stage":if result.is_ok(){"完成"}else{"任务失败"},"done":1,"total":1,"finished":true,"error":result.as_ref().err()}));
+                let mut completion = json!({"stage":if result.is_ok(){"完成"}else{"任务失败"},"done":1,"total":1,"finished":true,"error":result.as_ref().err()});
+                if let Ok(value) = &result {
+                    if let Some(receipt) = jobs::download_completion(action, &p, value) {
+                        completion["completion"] = receipt;
+                    }
+                }
+                (task.progress)(completion);
                 if let Ok(value)=&result{mod_check::after_install(self,action,&p,value);}
                 if action=="launch" && result.is_err() && !task.cancel.load(Ordering::Relaxed) {
                     let options=read_json(&task.data_root.join("ai-options.json")).unwrap_or_else(|_|json!({}));
@@ -363,6 +370,7 @@ impl Core {
                 tokio::task::spawn_blocking(move || resources::list(&core,&p)).await.map_err(err)?
             },
             "delete_resources" => resource_delete::remove(self, &p).await,
+            "resource_artwork" => resource_artwork::lookup(self, &p).await,
             "schematic_preview" => {
                 let core = self.clone();
                 let lock = schematic_preview::worker(&core);
@@ -371,7 +379,8 @@ impl Core {
                     .await.map_err(err)?
             }
             "schematic_catalog_preview" => schematic_catalog::preview(self, &p).await,
-            "schematic_catalog_download" => schematic_catalog::download(self, &p).await,
+            "map_search" => maps::search(self, &p).await,
+            "map_world_covers" => maps::restore_world_covers(self, &p).await,
             "schematic_appearance" => schematic_appearance::load(self, &p).await,
             "project_dependencies" => curseforge::dependencies(self, &p).await,
             "delete_instance" => {
@@ -654,6 +663,11 @@ async fn search_projects(core: &Core, p: &Value) -> Result<Value> {
             return Ok(value);
         }
     }
+    if p["kind"].as_str() == Some("world") {
+        let value = maps::catalog(core, p).await?;
+        let _ = write_json(&cache, &value);
+        return Ok(value);
+    }
     let source = p["source"].as_str().unwrap_or("all");
     let page = p["page"].as_u64().unwrap_or(0);
     // 标签形如「CurseForge 分类 ID/Modrinth 分类 slug」：
@@ -754,6 +768,36 @@ fn split_tag(tag: &str) -> (Option<u64>, Option<&str>) {
 }
 pub fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
+}
+/// Same TLS policy as the running launcher: Windows uses Schannel and the
+/// system trust store; certificate and hostname checks stay enabled.
+pub use maps::{pixelmap_file_probe, pixelmap_search_probe, prefer_system_addresses};
+pub fn launcher_http() -> Result<reqwest::Client> {
+    let http = reqwest::Client::builder();
+    #[cfg(windows)]
+    let http = http.use_native_tls();
+    #[cfg(not(windows))]
+    let http = http.use_rustls_tls();
+    http.user_agent(format!(
+        "Kynex Launcher/{} (independent launcher)",
+        crate::release::version()
+    ))
+    .connect_timeout(std::time::Duration::from_secs(8))
+    .min_tls_version(reqwest::tls::Version::TLS_1_2)
+    .build()
+    .map_err(err)
+}
+pub fn error_chain(error: &dyn std::error::Error) -> String {
+    let mut parts = vec![error.to_string()];
+    let mut source = error.source();
+    while let Some(next) = source {
+        let text = next.to_string();
+        if !parts.iter().any(|item| item == &text) {
+            parts.push(text);
+        }
+        source = next.source();
+    }
+    parts.join("：")
 }
 /// Windows GUI 程序启动控制台子进程时隐藏黑色命令提示框。
 pub fn hidden(cmd: &mut std::process::Command) -> &mut std::process::Command {

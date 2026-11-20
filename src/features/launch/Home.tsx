@@ -12,7 +12,6 @@ import { Button } from "../../components/ui";
 import { external } from "../../lib/bridge";
 import { useStore, launch, guarded } from "../../store";
 import { AccountAvatar } from "../account/AccountAvatar";
-import { HomeWidgets } from "./HomeWidgets";
 
 const accountLabels = {
   offline: "离线账号",
@@ -59,7 +58,6 @@ export function Home({ onOpenDownloads }: { onOpenDownloads: () => void }) {
   return (
     <div className="home-layout">
       <h1 className="sr-only">启动</h1>
-      {s.page === "home" && <HomeWidgets onOpenDownloads={onOpenDownloads} />}
       <div className="home-dock">
         <div className="home-account-area" ref={accountArea}>
           <button

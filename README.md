@@ -2,18 +2,19 @@
 
 Kynex 是一个给 Windows 用的 Minecraft Java 版启动器。可以在这里装游戏、下模组和整合包，也可以让不同版本各用各的游戏文件夹。
 
-[下载 Windows 安装器](https://github.com/mianste/Kynex-Launcher/releases/download/v1.6.0/Kynex.Launcher.v1.6.0.Setup.exe) · [看这版改了什么](CHANGELOG.md) · [下载源码](https://github.com/mianste/Kynex-Launcher/releases/download/v1.6.0/Kynex.Launcher.v1.6.0.Open.Source.zip) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
+[下载 Windows 安装器](https://github.com/mianste/Kynex-Launcher/releases/download/v1.6.1/Kynex.Launcher.v1.6.1.Setup.exe) · [看这版改了什么](CHANGELOG.md) · [下载源码](https://github.com/mianste/Kynex-Launcher/releases/download/v1.6.1/Kynex.Launcher.v1.6.1.Open.Source.zip) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
 
 ## 怎么装
 
 用 Windows 10 或 11 的 64 位电脑下载安装器，双击打开，按提示装好就能用。已经在用 Kynex 的玩家，可以在启动器里检查更新，也可以下载新版安装器直接覆盖安装。很早的版本请先手动覆盖安装一次。
 
-这版把首页的自定义组件去掉了；之前摆好的组件不会再显示，但存档、账号和设置都还在。
+v1.6.1 改进了地图安装和资源图标。资源装好后，窗口左下角会弹出「安装完成」提示。
 
 ## 能做什么
 
 - 安装原版 Minecraft，也可以装 Fabric、Forge、NeoForge、Quilt 和 OptiFine。
 - 在「下载」里找 Modrinth 和 CurseForge 上的模组、整合包、资源包、数据包和光影。点「安装」就能在选版本时翻看作者上传的预览图。
+- 在「下载 → 地图」找像素茶艺和 CurseForge 的地图。有可安装文件时，可以直接安装到选中的实例。
 - 让不同版本各用各的文件夹，分开管理模组和存档。建好存档后，可以选中它安装数据包。
 - 管理微软账号、离线账号、皮肤和披风。
 - 首页保持简单的启动布局：左边账号，中间启动，右边音乐。v1.6.0 起不再提供自定义组件。

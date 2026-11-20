@@ -27,6 +27,9 @@
   gap: 24px;
   min-height: 0;
 }
+.resource-version-columns.map-version-empty {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+}
 .resource-version-catalogue,
 .resource-version-detail {
   min-width: 0;
@@ -47,6 +50,8 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text2) 55%, transparent) transparent;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }

@@ -1637,6 +1637,8 @@
   padding: 6px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text2) 55%, transparent) transparent;
   border: 1px solid var(--line);
   border-radius: 16px;
   color: var(--text);
@@ -1645,6 +1647,16 @@
     0 14px 42px rgb(0 0 0 / 22%),
     inset 0 1px 0 var(--glass-highlight);
   animation: choice-in 150ms var(--motion-fluent);
+}
+.choice-popover::-webkit-scrollbar {
+  width: 8px;
+}
+.choice-popover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text2) 55%, transparent);
+  border-radius: 8px;
+}
+.choice-popover::-webkit-scrollbar-track {
+  background: transparent;
 }
 .choice-option {
   display: flex;

@@ -47,6 +47,10 @@ export function DownloadTasks({ onClose }: { onClose: () => void }) {
         )}
         {entries.map(([id, t]) => {
           const ended = t.finished || !!t.error;
+          const completion = t.finished && !t.error ? t.completion : undefined;
+          const detail = completion
+            ? completion.detail
+            : t.error || (ended ? "已完成" : t.detail || `${t.done} / ${t.total}`);
           return (
             <article className="download-task-card" key={id}>
               <div className="download-task-heading">
@@ -59,7 +63,7 @@ export function DownloadTasks({ onClose }: { onClose: () => void }) {
                 )}
                 <div>
                   <strong>{t.name || "下载任务"}</strong>
-                  <small>{t.stage}</small>
+                  <small>{completion?.title ?? t.stage}</small>
                 </div>
                 {!ended && (
                   <Button
@@ -71,11 +75,7 @@ export function DownloadTasks({ onClose }: { onClose: () => void }) {
                 )}
               </div>
               {!ended && <ProgressBar done={t.done} total={t.total} />}
-              <p className={t.error ? "download-task-error" : ""}>
-                {t.error ||
-                  t.detail ||
-                  (!ended ? `${t.done} / ${t.total}` : "下载完成")}
-              </p>
+              {detail && <p className={t.error ? "download-task-error" : ""}>{detail}</p>}
               {t.error && t.action && t.payload && (
                 <Button
                   onClick={() =>

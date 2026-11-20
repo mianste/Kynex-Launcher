@@ -181,7 +181,7 @@ fn image_from_archive<R: Read + Seek>(
         return None;
     }
     let mut bytes = Vec::with_capacity(file.size() as usize);
-    file.read_to_end(&mut bytes).ok()?;
+    (&mut file).take(2 * 1024 * 1024 + 1).read_to_end(&mut bytes).ok()?;
     image_data(bytes)
 }
 fn icon_from_anywhere<R: Read + Seek>(
@@ -227,8 +227,66 @@ fn packaged_icon(path: &Path, kind: &str) -> String {
             return icon;
         }
     }
-    // 很多光影/资源包把图标放在 shaders/ 或子目录里，扫描任意层级的图标文件。
-    icon_from_anywhere(&mut archive).unwrap_or_default()
+    if let Some(icon) = icon_from_anywhere(&mut archive) {
+        return icon;
+    }
+    if kind == "resourcepacks" {
+        // A pack without artwork can still show a texture from the pack itself.
+        let mut textures: Vec<_> = archive.file_names().filter(|name| {
+            name.starts_with("assets/") && name.ends_with(".png")
+                && (name.contains("/textures/block/") || name.contains("/textures/item/"))
+                && !name.ends_with("_n.png") && !name.ends_with("_s.png")
+        }).map(str::to_owned).collect();
+        textures.sort_unstable_by(|left, right| {
+            (!left.ends_with("_ore.png"), left).cmp(&(!right.ends_with("_ore.png"), right))
+        });
+        return textures.iter().take(16).find_map(|name| image_from_archive(&mut archive, name))
+            .unwrap_or_default();
+    }
+    String::new()
+}
+
+fn local_image(core: &Core, path: &Path, cache_kind: &str) -> Option<String> {
+    let meta = std::fs::symlink_metadata(path).ok()?;
+    if !meta.is_file() || resource_delete::is_link(&meta) || meta.len() > 2 * 1024 * 1024 {
+        return None;
+    }
+    cached_resource(core, path, cache_kind, || {
+        let file = std::fs::File::open(path).ok()?;
+        let mut bytes = Vec::new();
+        file.take(2 * 1024 * 1024 + 1).read_to_end(&mut bytes).ok()?;
+        image_data(bytes)
+    })
+}
+
+fn directory_pack_icon(core: &Core, directory: &Path) -> Option<String> {
+    if !std::fs::symlink_metadata(directory).is_ok_and(|meta| meta.is_dir() && !resource_delete::is_link(&meta)) {
+        return None;
+    }
+    ["pack.png", "icon.png", "logo.png", "pack.webp"].iter()
+        .find_map(|name| local_image(core, &directory.join(name), "pack-directory-icon"))
+}
+
+fn shader_project_icon(name: &str) -> Option<&'static str> {
+    let name = name.to_ascii_lowercase();
+    let has_release = |prefix: &str| name.strip_prefix(prefix).is_some_and(|rest| {
+        rest.as_bytes().first().is_some_and(u8::is_ascii_digit)
+    });
+    if has_release("bliss_v") {
+        return Some("https://cdn.modrinth.com/data/ZvMtQlho/90145c971ea24387775108fc86c89bed9bd2c8f1_96.webp");
+    }
+    let reimagined = has_release("complementaryreimagined_r");
+    let unbound = has_release("complementaryunbound_r");
+    if (reimagined || unbound) && name.contains(" + euphoriapatches_") {
+        return Some("https://cdn.modrinth.com/data/4H6sumDB/437130f3f10997f720ff0b788cb24cde3b3b8541.png");
+    }
+    if reimagined {
+        Some("https://cdn.modrinth.com/data/HVnmMxH1/79cb7c8123bbc54945305b2ebad6b8881efdf5f8_96.webp")
+    } else if unbound {
+        Some("https://cdn.modrinth.com/data/R6NEzAwj/c85ce4049aac76360d2cd24fd9a7003de01ef312_96.webp")
+    } else {
+        None
+    }
 }
 pub fn list(core: &Core, p: &Value) -> Result<Value> {
     if p["kind"] == schematics::KIND {
@@ -253,11 +311,25 @@ pub fn list(core: &Core, p: &Value) -> Result<Value> {
         let names:std::collections::HashSet<&str>=names.iter().take(64).filter_map(Value::as_str).collect();
         rows.retain(|row|row["name"].as_str().is_some_and(|name|names.contains(name)));
     }
-    let lock = read_json(
-        &core
-            .instance(string(p, "id")?)?
-            .join("installed-projects.json"),
-    )
+    if kind == "saves" {
+        for row in &mut rows {
+            if row["dir"] != true {
+                continue;
+            }
+            let world = dir.join(string(row, "name")?);
+            let icon = world.join("icon.png");
+            if std::fs::symlink_metadata(&world).is_ok_and(|meta| resource_delete::is_link(&meta)) {
+                continue;
+            }
+            if let Some(data) = local_image(core, &icon, "world-icon")
+                .or_else(|| crate::maps::world_cover(core, &world))
+            {
+                row["icon_url"] = json!(data);
+            }
+        }
+        return Ok(json!(rows));
+    }
+    let lock = resource_downloads::lock_path(core, p).and_then(|path| read_json(&path))
     .unwrap_or_else(|_| json!({}));
     let remote_icons: BTreeMap<String, String> = lock
         .as_object()
@@ -364,7 +436,9 @@ pub fn list(core: &Core, p: &Value) -> Result<Value> {
             }
             if row["icon_url"].is_null() {
                 let clean = name.strip_suffix(".disabled").unwrap_or(&name);
-                if let Some(icon) = remote_icons.get(clean) {
+                if let Some(icon) = remote_icons.get(clean).cloned()
+                    .or_else(|| crate::resource_artwork::cached(core, &dir.join(name)))
+                {
                     row["icon_url"] = json!(icon);
                 }
             }
@@ -376,10 +450,17 @@ pub fn list(core: &Core, p: &Value) -> Result<Value> {
             let name = string(row, "name")?.to_string();
             let clean = name.strip_suffix(".disabled").unwrap_or(&name);
             let path = dir.join(&name);
-            let icon:String=cached_resource(core,&path,kind,||packaged_icon(&path,kind));
-            if !icon.is_empty() {
+            let icon = if row["dir"] == true {
+                directory_pack_icon(core, &path)
+            } else {
+                let icon: String = cached_resource(core, &path, &format!("{kind}-icon-v2"), || packaged_icon(&path, kind));
+                (!icon.is_empty()).then_some(icon)
+            };
+            let source = icon.as_deref().or_else(|| remote_icons.get(clean).map(String::as_str))
+                .or_else(|| (kind == "shaderpacks").then(|| shader_project_icon(clean)).flatten());
+            if let Some(icon) = source {
                 row["icon_url"] = json!(icon);
-            } else if let Some(icon) = remote_icons.get(clean) {
+            } else if let Some(icon) = crate::resource_artwork::cached(core, &path) {
                 row["icon_url"] = json!(icon);
             }
         }
@@ -621,6 +702,54 @@ pub async fn ensure_loader_components(core: &Core, p: &Value) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn installed_pack_icons_cover_folders_textures_and_known_shaders() {
+        let temp = tempfile::tempdir().unwrap();
+        let core = Core::new(temp.path().join("game"), std::sync::Arc::new(|_| {})).unwrap();
+        let instance = core.instance("pack-test").unwrap();
+        write_json(&instance.join("kxl.json"), &json!({"settings":{"isolation":"all"}})).unwrap();
+        let packs = instance.join("resourcepacks");
+        let dir = packs.join("本地资源包");
+        std::fs::create_dir_all(&dir).unwrap();
+        let png = include_bytes!("../../src/assets/loaders/minecraft.png");
+        std::fs::write(dir.join("pack.png"), png).unwrap();
+        let zip = std::fs::File::create(packs.join("Textures.zip")).unwrap();
+        let mut archive = zip::ZipWriter::new(zip);
+        archive.start_file("assets/example/textures/block/gold_ore.png", zip::write::SimpleFileOptions::default()).unwrap();
+        std::io::Write::write_all(&mut archive, png).unwrap();
+        archive.finish().unwrap();
+        let rows = list(&core, &json!({"id":"pack-test","kind":"resourcepacks"})).unwrap();
+        let expected = json!(image_data(png.to_vec()).unwrap());
+        assert_eq!(rows[0]["icon_url"], expected);
+        assert_eq!(rows[1]["icon_url"], expected);
+        assert!(shader_project_icon("Bliss_v2.1.2_(Chocapic13_Shaders_edit).zip").unwrap().contains("/ZvMtQlho/"));
+        assert!(shader_project_icon("ComplementaryUnbound_r5.9.3 + EuphoriaPatches_1.10.5").unwrap().contains("/4H6sumDB/"));
+        assert!(shader_project_icon("My Complementary edit.zip").is_none());
+    }
+
+    #[test]
+    fn saved_worlds_return_their_own_icon_when_present() {
+        let temp = tempfile::tempdir().unwrap();
+        let core = Core::new(temp.path().join("game"), std::sync::Arc::new(|_| {})).unwrap();
+        let instance = core.instance("map-test").unwrap();
+        write_json(&instance.join("kxl.json"), &json!({"settings":{"isolation":"all"}})).unwrap();
+        let saves = instance.join("saves");
+        let png = include_bytes!("../../src/assets/loaders/minecraft.png");
+        for (name, icon) in [("Old Fallen Castle", Some(png.as_slice())), ("无图标", None)] {
+            let world = saves.join(name);
+            std::fs::create_dir_all(&world).unwrap();
+            if let Some(bytes) = icon {
+                std::fs::write(world.join("icon.png"), bytes).unwrap();
+            }
+        }
+        let p = json!({"id":"map-test","kind":"saves"});
+        let rows = list(&core, &p).unwrap();
+        assert_eq!(rows[0]["icon_url"], json!(image_data(png.to_vec()).unwrap()));
+        assert!(rows[1]["icon_url"].is_null());
+        let basic = list(&core, &json!({"id":"map-test","kind":"saves","basic":true})).unwrap();
+        assert!(basic[0]["icon_url"].is_null());
+    }
     #[test]
     fn options_preserve_other_settings() {
         let t = tempfile::tempdir().unwrap();

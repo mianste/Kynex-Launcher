@@ -11,7 +11,6 @@ import "./appearance.css";
 import "./interaction-motion.css";
 import "./window-corners.css";
 import "./workspace.css";
-import "./features/launch/homeWidgets.css";
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { error: string }

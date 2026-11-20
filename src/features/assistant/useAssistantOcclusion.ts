@@ -22,7 +22,7 @@ export function useAssistantOcclusion(
       if (!surface) return;
       const box = surface.getBoundingClientRect();
       const layers = document.querySelectorAll<HTMLElement>(
-        ".app > .nav,.app > .page-content,.app > .music-shell,.app > .taskbar",
+        ".app > .nav,.app > .top-navigation > .nav,.app > .page-content,.app > .music-shell,.app > .taskbar",
       );
       const present = new Set(layers);
       for (const old of touched)

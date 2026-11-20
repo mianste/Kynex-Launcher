@@ -108,6 +108,7 @@ export interface Task {
   total: number;
   detail?: string;
   error?: string;
+  completion?: { title: string; detail?: string | null };
 }
 export interface Project {
   project_id: string;
@@ -118,7 +119,11 @@ export interface Project {
   slug: string;
   icon_url?: string | null;
   gallery?: { url: string; thumbnailUrl?: string | null; title?: string | null }[];
-  source?: "modrinth" | "curseforge";
+  source?: "modrinth" | "curseforge" | "pixelmap";
+  author?: string;
+  page_url?: string;
+  download_state?: "file" | "check" | "closed";
+  download_note?: string;
 }
 export interface NewsArticle {
   id: string;

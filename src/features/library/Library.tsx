@@ -5,7 +5,9 @@ import { ResourceDeleteDialog, type DeleteRequest } from "./ResourceDeleteDialog
 import { SchematicPreviewDialog, type SchematicPreviewRequest } from "./SchematicPreviewDialog";
 import { useResourceDragSelection } from "./useResourceDragSelection";
 import { useModUpdateState } from "../../lib/modUpdateState";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ProjectIcon } from "../download/ProjectIcon";
+import { cachedResourcePreview, resourcePreview, warmInstanceResources } from "./resourcePreviews";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Box,
   Globe,
@@ -25,6 +27,9 @@ import {
   CircleMinus,
   CircleCheck,
   Eye,
+  Sun,
+  Image as ImageIcon,
+  Map as MapIcon,
 } from "lucide-react";
 import {
   Button,
@@ -47,6 +52,17 @@ import {
   readableSize,
 } from "../../lib/bridge";
 import type { Resource } from "../../lib/types";
+
+function ResourceMark({ name, fallback }: { name: string; fallback: ReactNode }) {
+  const base = name.replace(/\.(jar|litemod|zip)(\.disabled)?$/i, "");
+  const localLabel = base.match(/^\[([\u4e00-\u9fff]{2})/u)?.[1];
+  const words = base.split(/[^\p{L}]+/u).filter(Boolean);
+  const first = words[0] ?? "";
+  const mark = localLabel ?? (words.length > 1
+    ? `${first[0]}${words[1][0]}`
+    : first.slice(0, 2)).toUpperCase();
+  return <span className="resource-mark" aria-hidden="true">{mark || fallback}</span>;
+}
 async function chooseInstanceIcon(id: string) {
   const file = await pickImageFile("wallpaper");
   if (!file) return false;
@@ -66,6 +82,15 @@ export function Library() {
   const s = useStore();
   const [q, Q] = useState("");
   const [type, T] = useState("全部");
+  const hoveredInstance = useRef<number>();
+  useEffect(() => () => window.clearTimeout(hoveredInstance.current), []);
+  const warmHoveredInstance = (id: string) => {
+    window.clearTimeout(hoveredInstance.current);
+    hoveredInstance.current = window.setTimeout(
+      () => warmInstanceResources(id, s.directoryId, s.settings.curseforgeKey),
+      240,
+    );
+  };
   useGuideSection("library", T);
   const [worlds, W] = useState<
     { name: string; id: string; instance: string; version: string }[]
@@ -129,6 +154,9 @@ export function Library() {
               className={`instance-card game-${i.game}`}
               key={i.id}
               style={{ animationDelay: `${n * 30}ms` }}
+              onPointerEnter={() => warmHoveredInstance(i.id)}
+              onPointerLeave={() => window.clearTimeout(hoveredInstance.current)}
+              onFocus={() => warmHoveredInstance(i.id)}
             >
               <button
                 className={`instance-cover cover-${i.loader}`}
@@ -258,6 +286,9 @@ export function InstanceDetail() {
   const s = useStore();
   const i = s.instances.find((i) => i.id === s.selected);
   const [tab, T] = useState("概览");
+  useEffect(() => {
+    if (i) warmInstanceResources(i.id, s.directoryId, s.settings.curseforgeKey);
+  }, [i?.id, s.directoryId, s.settings.curseforgeKey]);
   useGuideSection("instance", T);
   const [, NamesReady] = useState(0);
   useEffect(() => {
@@ -302,11 +333,18 @@ export function InstanceDetail() {
   const [dragging, Dragging] = useState(false);
   const schematic = tab === "投影";
   const managed = ["Mod", "资源包", "光影", "数据包", "投影"].includes(tab);
-  const currentResourceScope = `${i?.id ?? ""}:${tabKinds[tab] ?? ""}:${tab === "数据包" ? dataWorld : ""}`;
+  const currentResourceScope = `${s.directoryId}:${i?.id ?? ""}:${tabKinds[tab] ?? ""}:${tab === "数据包" ? dataWorld : ""}`;
   const resourceScope = useRef(currentResourceScope);
   resourceScope.current = currentResourceScope;
-  const scopeRows = loadedResources === currentResourceScope ? rows : [];
-  const resourceBusy = loading || loadedResources !== currentResourceScope || !!deleteRequest || Object.values(s.tasks).some((task) =>
+  const cachedRows = cachedResourcePreview({
+    id: i?.id ?? "",
+    kind: tabKinds[tab] ?? "",
+    world: tab === "数据包" ? dataWorld : "",
+    directoryId: s.directoryId,
+  });
+  const resourcesReady = loadedResources === currentResourceScope || !!cachedRows;
+  const scopeRows = loadedResources === currentResourceScope ? rows : cachedRows ?? [];
+  const resourceBusy = loading || !resourcesReady || !!deleteRequest || Object.values(s.tasks).some((task) =>
     !task.finished && !task.error && task.payload?.id === i?.id && ["install_project", "update_mods", "export_pack"].includes(task.action || ""));
   const updateMap = new Map((cachedModRows || []).map((row) => [row.file, row]));
   const visibleResources = scopeRows.filter((r) => (tab !== "Mod" || !r.dir && /\.(jar|litemod)(\.disabled)?$/i.test(r.name)) &&
@@ -327,89 +365,53 @@ export function InstanceDetail() {
     });
   }, [visibleSignature]);
   const ensuredLoaders = useRef(new Set<string>());
-  const resourceRequests = useRef(new Map<string, Promise<void>>());
-  const resourceRows = useRef(new Map<string, Resource[]>());
-  const displayedResourceScope = useRef("");
-  const detailedResourceScopes = useRef(new Set<string>());
-  const refreshResources = useCallback(async () => {
+  const schematicDirectory = useRef<string>();
+  const refreshResources = useCallback(async (force = true) => {
     if (!i || !tabKinds[tab] || !desktop) return;
-    const scope = `${i.id}:${tabKinds[tab]}:${tab === "数据包" ? dataWorld : ""}`;
-    const pending = resourceRequests.current.get(scope);
-    if (pending) {
-      const cached = resourceRows.current.get(scope);
-      if (cached && resourceScope.current === scope) {
-        R(cached); LoadedResources(scope); Loading(false); displayedResourceScope.current = scope;
-      }
-      return pending;
-    }
-    const payload = {
+    const scope = currentResourceScope;
+    const value = await resourcePreview({
       id: i.id,
       kind: tabKinds[tab],
       world: tab === "数据包" ? dataWorld || undefined : undefined,
-    };
-    const request = (async () => {
-    if (!schematic && displayedResourceScope.current !== scope) {
-    const first = resourceRows.current.get(scope) ?? await api<Resource[]>("resources", { ...payload, basic: true });
-    resourceRows.current.set(scope, first);
-    if (resourceScope.current === scope) {
-      R(first);
-      displayedResourceScope.current = scope;
-      LoadedResources(scope);
-      Loading(false);
-    }
-    }
-    if (!schematic && !detailedResourceScopes.current.has(scope) && tab !== "存档") {
-      const initial = resourceRows.current.get(scope) || [];
-      for (let offset = 0; offset < initial.length; offset += 32) {
-        if (resourceScope.current !== scope) return;
-        const preview = await api<Resource[]>("resources", { ...payload, previewNames: initial.slice(offset, offset + 32).map(row => row.name) });
-        const byName = new Map(preview.map(row => [row.name, row]));
-        const merged = (resourceRows.current.get(scope) || initial).map(row => byName.get(row.name) || row);
-        resourceRows.current.set(scope, merged);
-        if (resourceScope.current === scope) R(merged);
-      }
-    }
-    const value = await api<Resource[]>("resources", schematic ? { ...payload, basic: true } : payload);
-    const previousDirectory = resourceRows.current.get(scope)?.[0]?.directory;
-    detailedResourceScopes.current.add(scope);
-    if (resourceRows.current.size > 12) resourceRows.current.clear();
-    resourceRows.current.set(scope, value);
+      directoryId: s.directoryId || undefined,
+      curseforgeKey: s.settings.curseforgeKey,
+    }, force);
     if (resourceScope.current !== scope) return;
     E("");
-    if (schematic && previousDirectory !== value[0]?.directory) SelectResources([]);
-    R((before) =>
-      before.length === value.length && before.every((row,n) => {
-        const other = value[n];
-        return row.name === other.name && row.size === other.size && row.modified === other.modified &&
-          row.enabled === other.enabled && row.version === other.version && row.icon_url === other.icon_url &&
-          row.order === other.order && row.directory === other.directory && JSON.stringify(row.modIds) === JSON.stringify(other.modIds) &&
-          JSON.stringify(row.problems) === JSON.stringify(other.problems);
-      }) ? before : value,
-    );
+    if (schematic && schematicDirectory.current !== value[0]?.directory) SelectResources([]);
+    if (schematic) schematicDirectory.current = value[0]?.directory;
+    R(value);
     LoadedResources(scope);
-    })().finally(() => resourceRequests.current.delete(scope));
-    resourceRequests.current.set(scope, request);
-    return request;
-  }, [i?.id, tab, dataWorld, schematic]);
+  }, [i?.id, tab, dataWorld, schematic, currentResourceScope, s.directoryId, s.settings.curseforgeKey]);
   const importPaths = useCallback(
     async (paths: string[]) => {
       if (!i || !tabKinds[tab] || !paths.length) return;
       Loading(true);
       try {
-        const value = await api<Resource[]>("import_resource_paths", {
+        if (tab === "存档") {
+          let imported = false;
+          try {
+            for (const path of paths) {
+              await api("install_map", {
+                id: i.id, source: "file", path,
+                name: path.split(/[\\/]/).at(-1) ?? "地图",
+              });
+              imported = true;
+            }
+          } finally {
+            if (imported && resourceScope.current === currentResourceScope) {
+              await refreshResources();
+            }
+          }
+          return;
+        }
+        await api<Resource[]>("import_resource_paths", {
           id: i.id,
           kind: tabKinds[tab],
           world: tab === "数据包" ? dataWorld || undefined : undefined,
           paths,
         });
-        if (resourceScope.current === currentResourceScope) {
-          if (schematic) {
-            if (resourceRows.current.get(currentResourceScope)?.[0]?.directory !== value[0]?.directory) SelectResources([]);
-            resourceRows.current.set(currentResourceScope, value);
-            LoadedResources(currentResourceScope);
-          }
-          R(value);
-        }
+        if (resourceScope.current === currentResourceScope) await refreshResources();
         useStore.getState().notify(`已添加 ${paths.length} 个${schematic ? "投影文件" : tab}`);
       } finally {
         if (resourceScope.current === currentResourceScope) {
@@ -418,19 +420,17 @@ export function InstanceDetail() {
         }
       }
     },
-    [i?.id, tab, dataWorld, schematic, currentResourceScope],
+    [i?.id, tab, dataWorld, schematic, currentResourceScope, refreshResources],
   );
   useEffect(() => {
     E("");
     if (i && tabKinds[tab] && desktop) {
       let live = true;
-      LoadedResources("");
-      Loading(true);
       let running = false;
       const update = () => {
         if (running || !live || document.hidden) return;
         running = true;
-        return refreshResources()
+        return refreshResources(false)
           .catch((reason) => {
             if (live) E(String(reason));
           })
@@ -450,7 +450,6 @@ export function InstanceDetail() {
     } else {
       R([]);
       LoadedResources("");
-      displayedResourceScope.current = "";
     }
   }, [i?.id, tab, refreshResources]);
   useEffect(() => {
@@ -496,12 +495,12 @@ export function InstanceDetail() {
     );
   async function moveResource(r: Resource, direction: number) {
     if (!i) return;
-    const value = await api<Resource[]>("resource_move", {
+    await api<Resource[]>("resource_move", {
       id: i.id,
       name: r.name,
       direction,
     });
-    R(value);
+    await refreshResources();
   }
   async function toggle(r: Resource) {
     if (!i) return;
@@ -515,6 +514,10 @@ export function InstanceDetail() {
   }
   async function importDropped(files: FileList) {
     if (!i || !tabKinds[tab] || !desktop) return;
+    if (tab === "存档") {
+      Dragging(false);
+      return;
+    }
     const accepted = Array.from(files);
     if (!accepted.length) return;
     Loading(true);
@@ -552,8 +555,8 @@ export function InstanceDetail() {
     }
     const path = await pickFile([
       {
-        name: tab === "Mod" ? "Mod" : tab,
-        extensions: [tab === "Mod" ? "jar" : "zip"],
+        name: tab === "存档" ? "地图压缩包" : tab,
+        extensions: tab === "存档" ? ["zip", "rar", "7z"] : [tab === "Mod" ? "jar" : "zip"],
       },
     ]);
     if (path) await importPaths([path]);
@@ -572,13 +575,14 @@ export function InstanceDetail() {
       label: tab === "Mod" ? "模组" : schematic ? "投影文件" : tab, names, shared: i.settings.isolation === "shared" || i.settings.isolation === "modded" && i.loader === "vanilla" });
   }
   function renderResources(updates?: ModUpdateContext) {
-    if (desktop && loadedResources !== currentResourceScope) return <p className="resource-loading" role="status">正在读取{tab}…</p>;
+    if (desktop && !resourcesReady) return <p className="resource-loading" role="status">正在读取{tab}…</p>;
     const visible = visibleResources;
+    const DefaultIcon = tab === "光影" ? Sun : tab === "资源包" ? ImageIcon : tab === "存档" ? MapIcon : Box;
     return (
       <>
         {visible.length ? (
           <div
-            className={`resource-list ${tab === "Mod" ? "mod-resource-list" : ""}`}
+            className={`resource-list ${tab === "Mod" ? "mod-resource-list" : tab === "存档" ? "save-resource-list" : ""}`}
             {...(managed ? dragSelection : {})}
           >
             {visible.map((r, n) => {
@@ -589,20 +593,15 @@ export function InstanceDetail() {
                   data-resource-name={r.name}>
                   <SelectionContent className="resource-selection-content"
                     {...(managed ? { type: "button" as const, "aria-label": `选择 ${r.name}`, "aria-pressed": selectedResources.includes(r.name), disabled: resourceBusy || updates?.applying, onClick: () => selectResource(r.name) } : {})}>
-                  <div className="resource-monogram">
-                    {!r.icon_url && <span><Box size={20} /></span>}
-                    {r.icon_url && (
-                      <img
-                        src={r.icon_url}
-                        draggable={false}
-                        alt=""
-                        loading="lazy"
-                        onError={(event) => {
-                          event.currentTarget.style.display = "none";
-                        }}
-                      />
-                    )}
-                  </div>
+                  <ProjectIcon
+                    className="resource-monogram"
+                    name={r.name}
+                    url={r.icon_url}
+                    prepared
+                    fallbackIcon={tab === "存档" || schematic
+                      ? <DefaultIcon size={20} aria-hidden="true" />
+                      : <ResourceMark name={r.name} fallback={<DefaultIcon size={20} />} />}
+                  />
                   <div className="grow">
                     <b title={r.name}>
                       {tab === "Mod"
@@ -970,7 +969,7 @@ export function InstanceDetail() {
               <FolderOpen size={14} /> 打开{tab}文件夹
             </Button>
             <Button disabled={resourceBusy} onClick={() => guarded(browseResource)}>
-              <Upload size={14} /> {schematic ? "导入投影文件" : managed ? "从文件安装" : `添加${tab}`}
+              <Upload size={14} /> {schematic ? "导入投影文件" : tab === "存档" ? "导入地图" : "从文件安装"}
             </Button>
             {managed && <Button disabled={resourceBusy || !visibleResources.length} onClick={() => SelectResources(
               selectedResources.length === visibleResources.length ? [] : visibleResources.map((r) => r.name))}>
@@ -1019,7 +1018,7 @@ export function InstanceDetail() {
               id={i.id}
               refresh={refreshResources}
               resources={modResources}
-              resourcesReady={loadedResources === currentResourceScope}
+              resourcesReady={resourcesReady}
               filter={resourceFilter}
               onFilterChange={ResourceFilter}
               disabled={!!deleteRequest}
