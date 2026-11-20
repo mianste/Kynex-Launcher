@@ -1,18 +1,17 @@
 {
   "channel": "stable",
-  "version": "1.6.1",
-  "displayVersion": "v1.6.1",
-  "label": "公开构建 v1.6.1",
+  "version": "1.7.0",
+  "displayVersion": "v1.7.0",
+  "label": "公开构建 v1.7.0",
   "repositoryUrl": "https://github.com/mianste/Kynex-Launcher",
   "supportUrl": "https://afdian.com/a/keke_657",
   "changes": [
-    "修复部分像素茶艺地图下载失败和地图封面有黑边的问题。",
-    "地图入口统一显示「安装」，有可安装文件的地图可以直接装进实例。",
-    "修复模组、资源包、光影、数据包和存档缺图。提前加载图标，原图不可用时显示备用图标。",
-    "资源任务成功后，左下角的灵动岛显示「安装完成」，跟随主题透明度，2.5 秒后自动消失。"
+    "投影预览新增原版生物。投影里保存的牛、羊、村民等生物可以用原版模型和贴图查看。",
+    "补齐了箱子、床、潜影盒和告示牌的模型，也改进了玻璃、红石和水的显示。",
+    "修复原木和其他方块朝向错误的问题，旧版投影里的门和下界疣也能按保存的方向或生长阶段显示。"
   ],
   "productName": "Kynex Launcher Public",
   "identifier": "com.keke.kynex.public",
   "mainBinaryName": "Kynex Launcher Public",
-  "releaseTag": "v1.6.1"
+  "releaseTag": "v1.7.0"
 }

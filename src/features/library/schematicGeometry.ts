@@ -6,6 +6,15 @@ export type SchematicModel = {
   step: number;
   palette: string[];
   cells: string;
+  entities?: SchematicEntity[];
+  movingBlocks?: Record<number, [number, number, number]>;
+};
+
+export type SchematicEntity = {
+  id: string;
+  position: [number, number, number];
+  yaw: number;
+  pitch: number;
 };
 
 const dyes: Record<string, string> = {

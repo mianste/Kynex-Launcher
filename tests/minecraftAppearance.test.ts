@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { minecraftTintColor } from "../src/features/library/minecraftAppearance";
+import { describe, expect, it, vi } from "vitest";
+import { minecraftTintColor, texturedSchematic } from "../src/features/library/minecraftAppearance";
 
 describe("Minecraft schematic tint", () => {
   it("keeps the material color when block properties include waterlogged", () => {
@@ -33,4 +33,57 @@ describe("Minecraft schematic tint", () => {
     expect(minecraftTintColor("minecraft:pumpkin_stem[age=0]", 0)).toBe("rgb(0,255,0)");
     expect(minecraftTintColor("minecraft:melon_stem[age=7]", 0)).toBe("rgb(224,199,28)");
   });
+});
+
+it("keeps the shape of a block with missing textures and draws a fallback for an empty model", async () => {
+  vi.stubGlobal("document", { createElement: () => ({ getContext: () => ({ fillRect() {} }) }) });
+  try {
+    const rendered = await texturedSchematic({
+      size: [2, 1, 1], grid: [2, 1, 1], step: 1, cells: "",
+      palette: ["minecraft:air", "example:slab", "example:empty"],
+    }, new Uint16Array([1, 2]), {
+      version: "test", textures: {}, states: [[], [{ model: "slab" }], [{ model: "empty" }]],
+      models: {
+        slab: [{ from: [0, 0, 0], to: [16, 8, 16], faces: { up: { texture: "example:block/missing" } } }],
+        empty: [{ from: [0, 0, 0], to: [16, 16, 16], faces: {} }],
+      },
+    });
+    expect(rendered?.incomplete).toBe(true);
+    const positions = rendered?.geometry.getAttribute("position");
+    expect(positions?.count).toBe(28);
+    expect(positions?.getY(0)).toBe(0.5);
+    expect(positions?.getX(4)).toBe(1);
+    rendered?.geometry.dispose();
+    rendered?.texture.dispose();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it("turns the front face to each horizontal and vertical facing", async () => {
+  vi.stubGlobal("document", { createElement: () => ({ getContext: () => ({ fillRect() {} }) }) });
+  try {
+    const rotations = [
+      { x: 0, y: 0, axis: 2, edge: 0 }, { x: 0, y: 90, axis: 0, edge: 1 },
+      { x: 0, y: 180, axis: 2, edge: 1 }, { x: 0, y: 270, axis: 0, edge: 0 },
+      { x: 90, y: 0, axis: 1, edge: 0 }, { x: 270, y: 0, axis: 1, edge: 1 },
+    ];
+    for (const { x, y, axis, edge } of rotations) {
+      const rendered = await texturedSchematic({
+        size: [1, 1, 1], grid: [1, 1, 1], step: 1, cells: "", palette: ["minecraft:air", "minecraft:furnace"],
+      }, new Uint16Array([1]), {
+        version: "test", textures: {}, states: [[], [{ model: "front", x, y, uvlock: true }]],
+        models: { front: [{ from: [0, 0, 0], to: [16, 16, 16], faces: { north: { texture: "", cullface: "north" } } }] },
+      });
+      const positions = rendered?.geometry.getAttribute("position");
+      expect(positions?.count).toBe(4);
+      for (let vertex = 0; vertex < 4; vertex++) {
+        expect(positions?.array[vertex * 3 + axis]).toBeCloseTo(edge);
+      }
+      rendered?.geometry.dispose();
+      rendered?.texture.dispose();
+    }
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

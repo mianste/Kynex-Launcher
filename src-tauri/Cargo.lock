@@ -2224,7 +2224,7 @@ dependencies = [
 
 [[package]]
 name = "kynex-launcher"
-version = "1.6.1"
+version = "1.7.0"
 dependencies = [
  "aes 0.8.4",
  "base64 0.22.1",

@@ -2,10 +2,14 @@ import {
   BufferAttribute, BufferGeometry, CanvasTexture, Color, NearestFilter, SRGBColorSpace, Vector3,
 } from "three";
 import { materialColor, type SchematicModel } from "./schematicGeometry";
+import type { EntityAppearance } from "./schematicEntityModels";
 
 type Point = [number, number, number];
 type Direction = "up" | "down" | "north" | "south" | "east" | "west";
-type Face = { texture: string; cullface?: Direction; uv?: number[]; rotation?: number; tintindex?: number };
+type Face = {
+  texture: string; cullface?: Direction; uv?: number[]; rotation?: number; tintindex?: number;
+  force_translucent?: boolean;
+};
 type Element = {
   from: Point;
   to: Point;
@@ -13,7 +17,7 @@ type Element = {
   faces: Partial<Record<Direction, Face>>;
 };
 type Part = { model: string; x?: number; y?: number; uvlock?: boolean };
-export type MinecraftAppearance = {
+export type MinecraftAppearance = EntityAppearance & {
   version: string;
   states: Part[][];
   models: Record<string, Element[]>;
@@ -52,46 +56,64 @@ function defaultUV([x, y, z]: Point, [X, Y, Z]: Point, direction: Direction) {
   }
 }
 
-type Tile = { x: number; y: number; opaque: boolean; translucent: boolean };
-const tileSize = 18;
+type Tile = { x: number; y: number; resolution: number; opaque: boolean; translucent: boolean };
 
 async function textureAtlas(textures: MinecraftAppearance["textures"]) {
-  const images = Object.entries(textures);
-  const columns = Math.ceil(Math.sqrt(images.length + 1));
-  const size = columns * tileSize;
+  const blockImages: [string, string][] = [];
+  const entityImages: [string, string][] = [];
+  for (const image of Object.entries(textures)) {
+    (image[0].includes(":entity/") ? entityImages : blockImages).push(image);
+  }
+  const blockSize = 34;
+  const entitySize = 66;
+  const area = (blockImages.length + 1) * blockSize ** 2 + entityImages.length * entitySize ** 2;
+  const width = Math.max(entitySize, Math.ceil(Math.sqrt(area) / blockSize) * blockSize);
+  const blockColumns = Math.floor(width / blockSize);
+  const entityColumns = Math.floor(width / entitySize);
+  const blockHeight = Math.ceil((blockImages.length + 1) / blockColumns) * blockSize;
+  const height = blockHeight + Math.ceil(entityImages.length / entityColumns) * entitySize;
   const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) throw new Error("无法生成方块纹理图集");
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, tileSize, tileSize);
-  const tiles = new Map<string, Tile>([["", { x: 1, y: 1, opaque: true, translucent: false }]]);
+  ctx.fillRect(0, 0, blockSize, blockSize);
+  const tiles = new Map<string, Tile>([["", { x: 1, y: 1, resolution: blockSize - 2, opaque: true, translucent: false }]]);
   // Keep image decode bounded when several hundred textures share the atlas.
-  for (let start = 0; start < images.length; start += 32) {
-    await Promise.all(images.slice(start, start + 32).map(async ([id, encoded], i) => {
-      const data = Uint8Array.from(atob(encoded), (ch) => ch.charCodeAt(0));
-      const bitmap = await createImageBitmap(new Blob([data], { type: "image/png" })).catch(() => undefined);
-      if (!bitmap) return;
-      const index = start + i + 1;
-      const x = (index % columns) * tileSize + 1;
-      const y = Math.floor(index / columns) * tileSize + 1;
-      const frame = Math.min(bitmap.width, bitmap.height);
-      ctx.drawImage(bitmap, 0, 0, frame, frame, x, y, 16, 16);
-      bitmap.close();
-      const pixels = ctx.getImageData(x, y, 16, 16).data;
-      const opaque = !pixels.some((value, channel) => channel % 4 === 3 && value < 255);
-      const translucent = /glass|water|ice/.test(id) && !opaque;
-      tiles.set(id, { x, y, opaque, translucent });
-    }));
+  for (const { images, columns, size, offsetY, entity } of [
+    { images: blockImages, columns: blockColumns, size: blockSize, offsetY: 0, entity: false },
+    { images: entityImages, columns: entityColumns, size: entitySize, offsetY: blockHeight, entity: true },
+  ]) {
+    for (let start = 0; start < images.length; start += 32) {
+      await Promise.all(images.slice(start, start + 32).map(async ([id, encoded], i) => {
+        const data = Uint8Array.from(atob(encoded), (ch) => ch.charCodeAt(0));
+        const bitmap = await createImageBitmap(new Blob([data], { type: "image/png" })).catch(() => undefined);
+        if (!bitmap) return;
+        const index = start + i + (entity ? 0 : 1);
+        const x = (index % columns) * size + 1;
+        const y = offsetY + Math.floor(index / columns) * size + 1;
+        const resolution = size - 2;
+        const frame = Math.min(bitmap.width, bitmap.height);
+        ctx.drawImage(bitmap, 0, 0, entity ? bitmap.width : frame, entity ? bitmap.height : frame,
+          x, y, resolution, resolution);
+        bitmap.close();
+        const pixels = ctx.getImageData(x, y, resolution, resolution).data;
+        const alphas = pixels.filter((_, channel) => channel % 4 === 3);
+        const opaque = alphas.every(alpha => alpha === 255);
+        const translucent = !entity && /glass|water|(?:^|\/)ice$/.test(id)
+          && alphas.some(alpha => alpha > 0 && alpha < 255);
+        tiles.set(id, { x, y, resolution, opaque, translucent });
+      }));
+    }
   }
   const texture = new CanvasTexture(canvas);
   texture.colorSpace = SRGBColorSpace;
   texture.magFilter = NearestFilter;
   texture.minFilter = NearestFilter;
   texture.generateMipmaps = false;
-  return { texture, tiles, size };
+  return { texture, tiles, width, height };
 }
 
 type BakedFace = {
@@ -196,27 +218,35 @@ function bakeFace(element: Element, direction: Direction, face: Face, part: Part
     rotated(point.sub(blockCenter), part).add(blockCenter).divideScalar(16);
   }
   const tile = atlas.tiles.get(face.texture);
-  const { x, y } = tile ?? atlas.tiles.get("")!;
+  const { x, y, resolution } = tile ?? atlas.tiles.get("")!;
   const [u0, v0, u1, v1] = face.uv ?? defaultUV(element.from, element.to, direction);
   const corners = [[u0,v0], [u0,v1], [u1,v1], [u1,v0]];
   const uv = order.map((index) => {
     const [u, v] = corners[(index + (face.rotation ?? 0) / 90) % 4] ?? corners[index];
-    return [(x + Math.max(0.02, Math.min(15.98, u))) / atlas.size,
-      1 - (y + Math.max(0.02, Math.min(15.98, v))) / atlas.size];
+    return [(x + Math.max(0.02, Math.min(15.98, u)) * resolution / 16) / atlas.width,
+      1 - (y + Math.max(0.02, Math.min(15.98, v)) * resolution / 16) / atlas.height];
   });
   const missing = !tile || !face.texture;
   const color = new Color(missing ? materialColor(name) : minecraftTintColor(name, face.tintindex ?? -1));
   color.multiplyScalar(shade[faceDirection] ?? 1);
-  return { points, uv, color, cull, missing, translucent: tile?.translucent ?? false, opaque: tile?.opaque ?? true };
+  const translucent = !missing && Boolean(face.force_translucent || tile?.translucent);
+  return { points, uv, color, cull, missing, translucent, opaque: !translucent && (tile?.opaque ?? true) };
 }
 
 function bakeStates(palette: string[], appearance: MinecraftAppearance, atlas: Awaited<ReturnType<typeof textureAtlas>>) {
   return palette.map((name, id) => {
-    if (!id) return { faces: [], cube: false, occludes: false };
+    const key = name.split("[", 1)[0];
+    const resource = key.includes(":") ? key : `minecraft:${key}`;
+    const block = resource === "minecraft:bubble_column" ? "minecraft:water" : resource;
+    const fluid = block === "minecraft:water" || block === "minecraft:lava";
+    if (!id || block === "minecraft:barrier" || block === "minecraft:light" || appearance.blockEntities?.[id]?.replace) {
+      return { faces: [], block, fluid: false, fluidHeight: 0, merge: false, occludes: false };
+    }
     const parts = appearance.states[id] ?? [];
     let elements = parts.flatMap((part) =>
       (appearance.models[part.model] ?? []).map((element) => ({ element, part })),
-    ).filter(({ element }) => element.from?.length === 3 && element.to?.length === 3 && element.faces);
+    ).filter(({ element }) => element.from?.length === 3 && element.to?.length === 3
+      && directions.some(direction => element.faces?.[direction]));
     if (!elements.length) elements = [{ element: cube, part: { model: "" } }];
     const faces = elements.flatMap(({ element, part }) => directions.flatMap((direction) => {
       const face = element.faces[direction];
@@ -226,32 +256,58 @@ function bakeStates(palette: string[], appearance: MinecraftAppearance, atlas: A
       && !elements[0].element.rotation
       && elements[0].element.from.every((axis) => axis === 0)
       && elements[0].element.to.every((axis) => axis === 16);
-    return { faces, cube: isCube, occludes: isCube && faces.every((face) => face.opaque) };
+    const clearCube = /(?:^|:)(?:[a-z_]+_)?glass$|^minecraft:ice$/.test(block);
+    const leaves = block.endsWith("_leaves");
+    return {
+      faces, block, fluid, fluidHeight: fluid ? elements[0].element.to[1] / 16 : 0,
+      merge: isCube && clearCube,
+      occludes: isCube && !fluid && !clearCube && !leaves && faces.every(face => face.opaque && !face.missing),
+    };
   });
 }
 
 export async function texturedSchematic(model: SchematicModel, cells: Uint16Array, appearance: MinecraftAppearance) {
-  if (!Object.keys(appearance.textures).length) return undefined;
   const atlas = await textureAtlas(appearance.textures);
   try {
     const shapes = bakeStates(model.palette, appearance, atlas);
     const [width, height, depth] = model.grid;
     const layer = width * depth;
-    function walk(visit: (face: BakedFace, x: number, y: number, z: number) => boolean) {
+    const offsets = [-layer, layer, -width, width, -1, 1];
+    function walk(visit: (face: BakedFace, x: number, y: number, z: number, fullFluid: boolean) => boolean) {
+      const neighbors = [0, 0, 0, 0, 0, 0];
       for (let i = 0; i < cells.length; i++) {
         const id = cells[i];
         if (!id) continue;
         const x = i % width;
         const y = Math.floor(i / layer);
         const z = Math.floor(i / width) % depth;
-        const neighbors = [y > 0 ? cells[i - layer] : 0, y + 1 < height ? cells[i + layer] : 0,
-          z > 0 ? cells[i - width] : 0, z + 1 < depth ? cells[i + width] : 0,
-          x > 0 ? cells[i - 1] : 0, x + 1 < width ? cells[i + 1] : 0];
+        neighbors[0] = y > 0 ? cells[i - layer] : 0;
+        neighbors[1] = y + 1 < height ? cells[i + layer] : 0;
+        neighbors[2] = z > 0 ? cells[i - width] : 0;
+        neighbors[3] = z + 1 < depth ? cells[i + width] : 0;
+        neighbors[4] = x > 0 ? cells[i - 1] : 0;
+        neighbors[5] = x + 1 < width ? cells[i + 1] : 0;
+        const offset = model.movingBlocks?.[i];
         const shape = shapes[id];
+        const fullFluid = shape.fluid && shapes[neighbors[1]].block === shape.block;
         for (const face of shape.faces) {
-          const adjacent = neighbors[face.cull] ?? 0;
-          if (shapes[adjacent].occludes || (adjacent === id && shape.cube)) continue;
-          if (!visit(face, x, y, z)) return false;
+          if (offset) {
+            if (!visit(face, x + offset[0], y + offset[1], z + offset[2], false)) return false;
+            continue;
+          }
+          if (face.cull >= 0 && neighbors[face.cull] && model.movingBlocks?.[i + offsets[face.cull]]) {
+            if (!visit(face, x, y, z, fullFluid)) return false;
+            continue;
+          }
+          const adjacent = shapes[neighbors[face.cull] ?? 0];
+          if (adjacent.occludes || (shape.merge && adjacent.merge && adjacent.block === shape.block)) continue;
+          if (shape.fluid && adjacent.block === shape.block) {
+            if (face.cull < 2) continue;
+            const aboveAdjacent = y + 1 < height ? cells[i + layer + offsets[face.cull]] : 0;
+            if (shapes[aboveAdjacent].block === shape.block
+              || (!fullFluid && adjacent.fluidHeight >= shape.fluidHeight)) continue;
+          }
+          if (!visit(face, x, y, z, fullFluid)) return false;
         }
       }
       return true;
@@ -263,7 +319,7 @@ export async function texturedSchematic(model: SchematicModel, cells: Uint16Arra
       if (face.translucent) translucent++;
       else opaque++;
       if (face.missing) incomplete = true;
-      return opaque + translucent <= 440_000;
+      return opaque + translucent <= 800_000;
     });
     if (!fits) {
       atlas.texture.dispose();
@@ -276,13 +332,13 @@ export async function texturedSchematic(model: SchematicModel, cells: Uint16Arra
     const indices = new Uint32Array(quads * 6);
     let first = 0;
     let last = opaque;
-    walk((face, x, y, z) => {
+    walk((face, x, y, z, fullFluid) => {
       const quad = face.translucent ? last++ : first++;
       for (let corner = 0; corner < 4; corner++) {
         const point = face.points[corner];
         const offset = quad * 12 + corner * 3;
         positions[offset] = point.x + x;
-        positions[offset + 1] = point.y + y;
+        positions[offset + 1] = (fullFluid && point.y > 0 ? 1 : point.y) + y;
         positions[offset + 2] = point.z + z;
         colors[offset] = Math.round(face.color.r * 255);
         colors[offset + 1] = Math.round(face.color.g * 255);
@@ -297,10 +353,45 @@ export async function texturedSchematic(model: SchematicModel, cells: Uint16Arra
     geometry.setAttribute("position", new BufferAttribute(positions, 3));
     geometry.setAttribute("uv", new BufferAttribute(uv, 2));
     geometry.setAttribute("color", new BufferAttribute(colors, 3, true));
-    geometry.setIndex(new BufferAttribute(indices, 1));
+    const index = new BufferAttribute(indices, 1);
+    geometry.setIndex(index);
     if (opaque) geometry.addGroup(0, opaque * 6, 0);
     if (translucent) geometry.addGroup(opaque * 6, translucent * 6, 1);
-    return { geometry, texture: atlas.texture, incomplete };
+    // Blended faces in one mesh otherwise use file order, so orbiting can make glass obscure water.
+    let sortTransparency: ((direction: Vector3) => void) | undefined;
+    if (translucent > 1 && translucent <= 24_000) {
+      const lastDirection = new Vector3();
+      const byDepth = Float32Array.from({ length: translucent }, () => 0);
+      const order = Uint32Array.from({ length: translucent }, (_, face) => face);
+      const centers = new Float32Array(translucent * 3);
+      for (let face = 0; face < translucent; face++) {
+        const start = (opaque + face) * 12;
+        for (let axis = 0; axis < 3; axis++) {
+          centers[face * 3 + axis] = (positions[start + axis] + positions[start + 6 + axis]) * 0.5;
+        }
+      }
+      sortTransparency = direction => {
+        if (direction.dot(lastDirection) > 0.999) return;
+        lastDirection.copy(direction);
+        for (let face = 0; face < translucent; face++) {
+          const start = face * 3;
+          byDepth[face] = centers[start] * direction.x + centers[start + 1] * direction.y + centers[start + 2] * direction.z;
+        }
+        order.sort((a, b) => byDepth[b] - byDepth[a]);
+        for (let face = 0; face < translucent; face++) {
+          const vertex = (opaque + order[face]) * 4;
+          const start = (opaque + face) * 6;
+          indices[start] = vertex;
+          indices[start + 1] = vertex + 1;
+          indices[start + 2] = vertex + 2;
+          indices[start + 3] = vertex;
+          indices[start + 4] = vertex + 2;
+          indices[start + 5] = vertex + 3;
+        }
+        index.needsUpdate = true;
+      };
+    }
+    return { geometry, texture: atlas.texture, incomplete, sortTransparency };
   } catch (error) {
     atlas.texture.dispose();
     throw error;

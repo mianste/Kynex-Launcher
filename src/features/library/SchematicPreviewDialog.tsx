@@ -30,9 +30,9 @@ export function SchematicPreviewDialog({ request, onClose }: {
       async (model) => {
         if (!live) return;
         const appearance = await api<MinecraftAppearance>("schematic_appearance", {
-          id: request.instanceId, palette: model.palette,
+          id: request.instanceId, palette: model.palette, entities: model.entities,
         }).catch(() => undefined);
-        if (live) Result({ model, appearance: appearance?.textures ? appearance : undefined });
+        if (live) Result({ model, appearance });
       },
       error => { if (live) Result({ error: String(error).replace(/^Error: /, "") }); },
     );
@@ -48,7 +48,7 @@ export function SchematicPreviewDialog({ request, onClose }: {
     >
       <p className="schematic-preview-name">{request.name}</p>
       {!result ? (
-        <div className="schematic-viewport"><p role="status">正在读取建筑和 Minecraft 方块纹理…</p></div>
+        <div className="schematic-viewport"><p role="status">正在读取投影模型和 Minecraft 纹理…</p></div>
       ) : "error" in result ? (
         <div className="notice error" role="alert">{result.error}</div>
       ) : (

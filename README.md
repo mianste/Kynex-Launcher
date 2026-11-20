@@ -2,13 +2,13 @@
 
 Kynex 是一个给 Windows 用的 Minecraft Java 版启动器。可以在这里装游戏、下模组和整合包，也可以让不同版本各用各的游戏文件夹。
 
-[下载 Windows 安装器](https://github.com/mianste/Kynex-Launcher/releases/download/v1.6.1/Kynex.Launcher.v1.6.1.Setup.exe) · [看这版改了什么](CHANGELOG.md) · [下载源码](https://github.com/mianste/Kynex-Launcher/releases/download/v1.6.1/Kynex.Launcher.v1.6.1.Open.Source.zip) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
+[下载 Windows 安装器](https://github.com/mianste/Kynex-Launcher/releases/download/v1.7.0/Kynex.Launcher.v1.7.0.Setup.exe) · [看这版改了什么](CHANGELOG.md) · [下载源码](https://github.com/mianste/Kynex-Launcher/releases/download/v1.7.0/Kynex.Launcher.v1.7.0.Open.Source.zip) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
 
 ## 怎么装
 
 用 Windows 10 或 11 的 64 位电脑下载安装器，双击打开，按提示装好就能用。已经在用 Kynex 的玩家，可以在启动器里检查更新，也可以下载新版安装器直接覆盖安装。很早的版本请先手动覆盖安装一次。
 
-v1.6.1 改进了地图安装和资源图标。资源装好后，窗口左下角会弹出「安装完成」提示。
+v1.7.0 投影预览新增原版生物。投影里保存的牛、羊、村民等生物可以用原版模型和贴图查看。
 
 ## 能做什么
 
