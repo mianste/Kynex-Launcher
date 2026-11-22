@@ -54,7 +54,7 @@ class PackExportTest {
     }
 
     @Test void exportsOnlySelectedGameFilesAndSharedLicenseWithAnImportableManifest() throws Exception {
-        Path game = Files.createDirectory(temp.resolve("game"));
+        Path game = Files.createDirectory(temp.toRealPath().resolve("game"));
         Path instance = Files.createDirectories(game.resolve("instances/pack"));
         write(instance, "kxl.json", """
             {"id":"pack","name":"Fixture","version":"1.20.1","loader":"fabric","loaderVersion":"0.16.14",

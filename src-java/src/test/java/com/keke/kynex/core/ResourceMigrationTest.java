@@ -105,7 +105,8 @@ final class ResourceMigrationTest {
     }
 
     @Test
-    void stagesBothTheModAndItsRequiredDependencyBeforeChangingTheInstance(@TempDir Path root) throws Exception {
+    void stagesBothTheModAndItsRequiredDependencyBeforeChangingTheInstance(@TempDir Path temporary) throws Exception {
+        Path root = temporary.toRealPath();
         Path instance = Files.createDirectories(root.resolve("instances/test"));
         Files.writeString(instance.resolve("kxl.json"), """
             {"id":"test","version":"1.20.1","loader":"fabric","settings":{"isolation":"all"}}
@@ -142,7 +143,8 @@ final class ResourceMigrationTest {
     }
 
     @Test
-    void importsASevenZipWorldWithChinesePaths(@TempDir Path root) throws Exception {
+    void importsASevenZipWorldWithChinesePaths(@TempDir Path temporary) throws Exception {
+        Path root = temporary.toRealPath();
         Path instance = Files.createDirectories(root.resolve("instances/test"));
         Files.writeString(instance.resolve("kxl.json"), "{\"id\":\"test\",\"settings\":{\"isolation\":\"all\"}}");
         Path archive = root.resolve("fixture.7z");
@@ -163,7 +165,8 @@ final class ResourceMigrationTest {
     }
 
     @Test
-    void importsNestedZipWorldsWithoutReplacingAnExistingWorld(@TempDir Path root) throws Exception {
+    void importsNestedZipWorldsWithoutReplacingAnExistingWorld(@TempDir Path temporary) throws Exception {
+        Path root = temporary.toRealPath();
         Path instance = Files.createDirectories(root.resolve("instances/test"));
         Path existing = Files.createDirectories(instance.resolve("saves/地图")).resolve("level.dat");
         Files.writeString(existing, "existing");
