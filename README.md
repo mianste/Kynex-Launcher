@@ -2,7 +2,7 @@
 
 Kynex 是一个给 Windows 用的 Minecraft Java 版启动器。可以在这里装游戏、下模组和整合包，也可以让不同版本各用各的游戏文件夹。
 
-[下载 Windows 安装器](https://github.com/mianste/Kynex-Launcher/releases/download/v2.0.0/Kynex.Launcher.v2.0.0.Setup.exe) · [看这版改了什么](CHANGELOG.md) · [下载源码](https://github.com/mianste/Kynex-Launcher/releases/download/v2.0.0/Kynex.Launcher.v2.0.0.Open.Source.zip) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
+[下载 Windows 安装器](https://github.com/mianste/Kynex-Launcher/releases/download/v2.0.1/Kynex.Launcher.v2.0.1.Setup.exe) · [看这版改了什么](CHANGELOG.md) · [下载源码](https://github.com/mianste/Kynex-Launcher/releases/download/v2.0.1/Kynex.Launcher.v2.0.1.Open.Source.zip) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
 
 ## 怎么装
 

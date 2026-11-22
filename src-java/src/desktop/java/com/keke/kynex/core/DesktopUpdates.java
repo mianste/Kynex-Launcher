@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.Executors;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
@@ -27,7 +28,7 @@ final class DesktopUpdates {
     final ReleaseSignature signature;
     private volatile Candidate pending;
     private final java.util.concurrent.atomic.AtomicBoolean installing = new java.util.concurrent.atomic.AtomicBoolean();
-    private record Candidate(URI url, String signature, JsonObject display) {}
+    private record Candidate(String version, URI url, String signature, JsonObject display) {}
     private record Response(Candidate update, boolean official) {}
 
     DesktopUpdates(Path root) throws IOException {
@@ -65,29 +66,39 @@ final class DesktopUpdates {
             for (int i = 0; i < urls.size(); i++) {
                 try {
                     Response result = tasks.take().get();
-                    if (result.update() != null) {
+                    if (result.update() != null && (pending == null || newer(result.update().version(), pending.version()))) {
                         pending = result.update();
-                        break;
                     }
                     current = true;
                     if (result.official()) break;
                 } catch (java.util.concurrent.ExecutionException unavailable) { /* The other endpoint may still be reachable. */ }
             }
         } finally { pool.shutdownNow(); }
-        if (pending != null) return fields("status", "available", "update", pending.display());
+        if (pending != null) {
+            var failure = root.resolve("launcher-updates").resolve(WindowsUpdateHandoff.FAILURE);
+            boolean previousFailure = Files.isRegularFile(failure, java.nio.file.LinkOption.NOFOLLOW_LINKS) &&
+                Files.size(failure) <= 256 && Files.readString(failure).strip().equals(pending.version().replaceFirst("^v", ""));
+            return fields("status", "available", "update", pending.display(), "previousFailure", previousFailure);
+        }
         if (current) return fields("status", "current");
         throw new IOException("更新源暂不可用，请稍后重试");
     }
 
-    JsonElement install(Consumer<JsonObject> notify) throws IOException {
-        if (!installing.compareAndSet(false, true)) throw new IOException("正在安装更新");
+    JsonElement install(boolean silent, BooleanSupplier busy, Consumer<JsonObject> notify) throws IOException, InterruptedException {
+        Candidate candidate;
+        synchronized (this) {
+            if (pending == null) throw new IOException("请先检查新版本");
+            if (!installing.compareAndSet(false, true)) throw new IOException("正在安装更新");
+            candidate = pending;
+        }
         Path stage = null;
+        boolean handedOff = false;
         try {
-            Candidate candidate = pending;
-            if (candidate == null) throw new IOException("请先检查新版本");
             var parent = GameFiles.target(root, "launcher-updates/.directory").getParent();
             stage = Files.createTempDirectory(parent, "verified-");
             Path installer = stage.resolve("Kynex Launcher Update.exe");
+            boolean verified = false;
+            IOException lastError = null;
             for (URI url : ReleaseDownload.locations(candidate.url())) {
                 try {
                     try (var stream = Files.newOutputStream(installer)) {
@@ -95,22 +106,36 @@ final class DesktopUpdates {
                             (done, total) -> notify.accept(fields("stage", "downloading", "downloaded", done, "total", total)));
                     }
                     notify.accept(fields("stage", "verifying", "downloaded", 0, "total", 0));
-                    try (var stream = Files.newInputStream(installer)) { signature.verify(stream, candidate.signature()); }
+                    try (var stream = Files.newInputStream(installer)) {
+                        String comment = signature.verify(stream, candidate.signature());
+                        if (silent && !signedVersionMatches(comment, candidate.version())) {
+                            throw new IOException("更新包签名中的版本与更新清单不一致");
+                        }
+                    }
                     try (var stream = Files.newInputStream(installer)) {
                         if (stream.read() != 'M' || stream.read() != 'Z') throw new IOException("更新包不是 Windows 可执行文件");
                     }
-                    long length = Files.size(installer);
-                    notify.accept(fields("stage", "installing", "downloaded", length, "total", length));
-                    new ProcessBuilder(installer.toString()).directory(stage.toFile()).start();
-                    stage = null;
-                    pending = null;
-                    return new JsonPrimitive(true);
-                } catch (IOException retry) { /* Only a verified update can be installed. */ }
+                    verified = true;
+                    break;
+                } catch (IOException retry) { lastError = retry; }
             }
-            throw new IOException("更新下载或签名校验失败，未安装任何文件");
+            if (!verified) throw new IOException("更新下载或签名校验失败，未安装任何文件：" + lastError.getMessage(), lastError);
+            long length = Files.size(installer);
+            if (silent && busy.getAsBoolean()) {
+                notify.accept(fields("stage", "waiting", "downloaded", length, "total", length));
+                while (busy.getAsBoolean()) Thread.sleep(500);
+            }
+            notify.accept(fields("stage", "installing", "downloaded", length, "total", length));
+            if (silent) WindowsUpdateHandoff.start(installer, candidate.version());
+            else new ProcessBuilder(installer.toString()).directory(stage.toFile()).start();
+            handedOff = true;
+            pending = null;
+            return new JsonPrimitive(true);
         } finally {
-            if (stage != null) GameFiles.removeStaging(stage);
-            installing.set(false);
+            if (!handedOff) {
+                installing.set(false);
+                if (stage != null) GameFiles.removeStaging(stage);
+            }
         }
     }
 
@@ -122,8 +147,14 @@ final class DesktopUpdates {
         JsonObject windows = object(object(manifest.get("platforms")).get("windows-x86_64-java"));
         if (windows.isEmpty()) return null;
         URI url = ReleaseDownload.github(required(windows, "url"));
-        return new Candidate(url, required(windows, "signature"), fields("version", text(manifest, "displayVersion", remote),
+        return new Candidate(remote, url, required(windows, "signature"), fields("version", text(manifest, "displayVersion", remote),
             "notes", text(manifest, "notes", ""), "date", manifest.get("pub_date")));
+    }
+
+    static boolean signedVersionMatches(String comment, String version) {
+        String expected = "version:" + version.replaceFirst("^v", "");
+        var fields = java.util.Arrays.stream(comment.split("\t")).filter(field -> field.startsWith("version:")).toList();
+        return fields.size() == 1 && fields.getFirst().equals(expected);
     }
 
     private static boolean newer(String proposed, String current) throws IOException {

@@ -32,7 +32,7 @@ final class ReleaseSignature {
         }
     }
 
-    void verify(InputStream stream, String encoded) throws IOException {
+    String verify(InputStream stream, String encoded) throws IOException {
         if (encoded.length() > 16_384) throw new IOException("更新签名过大");
         try {
             String[] rows = decode(encoded).split("\\R", -1);
@@ -52,8 +52,10 @@ final class ReleaseSignature {
             if (!verifier.verify(signature, 10, 64)) throw new IOException("更新文件签名校验失败");
             verifier.initVerify(key);
             verifier.update(signature, 10, 64);
-            verifier.update(rows[2].substring(COMMENT.length()).getBytes(StandardCharsets.UTF_8));
+            String comment = rows[2].substring(COMMENT.length());
+            verifier.update(comment.getBytes(StandardCharsets.UTF_8));
             if (!verifier.verify(commentSignature)) throw new IOException("更新说明签名校验失败");
+            return comment;
         } catch (IllegalArgumentException | GeneralSecurityException invalid) { throw new IOException("更新签名无效"); }
     }
 

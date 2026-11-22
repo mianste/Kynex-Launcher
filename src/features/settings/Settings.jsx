@@ -697,17 +697,20 @@ export function Settings() {
                 <h3>启动器更新</h3>
                 <Row
                   title="启动时检测新版"
-                  hint="同一个新版只自动提醒一次，主动检测仍可再次打开更新窗口。"
+                  hint={s.settings.updateMode === "automatic"
+                    ? "自动模式会在启动时和运行期间检测新版。"
+                    : "同一个新版只自动提醒一次，主动检测仍可再次打开更新窗口。"}
                 >
                   <Switch
                     label="启动时检测新版"
-                    on={s.settings.checkUpdatesOnStartup !== false}
+                    on={s.settings.updateMode === "automatic" || s.settings.checkUpdatesOnStartup !== false}
+                    disabled={s.settings.updateMode === "automatic"}
                     change={(value) => update({ checkUpdatesOnStartup: value })}
                   />
                 </Row>
                 <Row
                   title="更新方式"
-                  hint="自动下载安装会在检测到新版后下载、校验并运行更新安装程序。"
+                  hint="自动模式会下载并校验更新，空闲时静默安装后重新打开启动器。"
                 >
                   <OptionSelect
                     label="启动器更新方式"

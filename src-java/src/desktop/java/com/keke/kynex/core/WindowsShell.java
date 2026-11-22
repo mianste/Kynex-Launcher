@@ -25,17 +25,23 @@ final class WindowsShell {
 
     static String name() { return NAME; }
 
-    static void applyIcon(Shell shell) {
-        if (EXECUTABLE.isEmpty()) return;
+    static void applyIcon(Shell shell) { applyIcon(shell, EXECUTABLE); }
+
+    static void applyIcon(Shell shell, String executable) {
+        if (executable.isEmpty()) return;
         var large = new PointerByReference();
         var small = new PointerByReference();
-        if (ShellApi.API.ExtractIconExW(new WString(EXECUTABLE), 0, large, small, 1) != 1) return;
+        // One icon group can produce two handles. Check the outputs rather than expecting a count of one.
+        ShellApi.API.ExtractIconExW(new WString(executable), 0, large, small, 1);
+        Pointer largeIcon = large.getValue();
+        Pointer smallIcon = small.getValue();
+        if (largeIcon == null && smallIcon == null) return;
         var window = new Pointer(shell.handle);
-        UserApi.API.SendMessageW(window, 0x0080, Pointer.createConstant(1), large.getValue()); // WM_SETICON / ICON_BIG
-        UserApi.API.SendMessageW(window, 0x0080, null, small.getValue()); // WM_SETICON / ICON_SMALL
+        UserApi.API.SendMessageW(window, 0x0080, Pointer.createConstant(1), largeIcon != null ? largeIcon : smallIcon); // WM_SETICON / ICON_BIG
+        UserApi.API.SendMessageW(window, 0x0080, null, smallIcon != null ? smallIcon : largeIcon); // WM_SETICON / ICON_SMALL
         shell.addDisposeListener(event -> {
-            if (large.getValue() != null) UserApi.API.DestroyIcon(large.getValue());
-            if (small.getValue() != null && !small.getValue().equals(large.getValue())) UserApi.API.DestroyIcon(small.getValue());
+            if (largeIcon != null) UserApi.API.DestroyIcon(largeIcon);
+            if (smallIcon != null && !smallIcon.equals(largeIcon)) UserApi.API.DestroyIcon(smallIcon);
         });
     }
 

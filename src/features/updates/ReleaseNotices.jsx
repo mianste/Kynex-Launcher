@@ -25,17 +25,21 @@ export function ReleaseNotices({ ready }) {
   });
   const started = useRef(false);
   const inFlight = useRef(false);
-  const manualRequest = useRef(false);
+  const installInFlight = useRef(false);
   const autoStarted = useRef("");
   const promptKey = `kynex-update-prompted-${RELEASE.channel}`;
   const modal = useStore((state) => state.modal);
+  const automatic = useStore((state) => state.settings.updateMode === "automatic");
+  const startupCheck = useStore((state) => state.settings.checkUpdatesOnStartup !== false);
+  const busy = useStore((state) => state.busy || state.directoryBusy ||
+    Object.values(state.tasks).some((task) => !task.finished && !task.error));
   const check = useCallback(
     async (manual = false) => {
       if (!desktop) {
         if (manual) useStore.getState().notify("请在桌面版检查更新");
         return;
       }
-      if (inFlight.current) return;
+      if (inFlight.current || installInFlight.current) return;
       inFlight.current = true;
       setChecking(true);
       try {
@@ -46,19 +50,18 @@ export function ReleaseNotices({ ready }) {
             const raw = JSON.parse(localStorage.getItem(promptKey) || "[]");
             if (Array.isArray(raw)) seen = raw;
           } catch {}
-          if (manual || !seen.includes(result.update.version)) {
-            manualRequest.current = manual;
+          const auto = useStore.getState().settings.updateMode === "automatic";
+          if (auto || manual || !seen.includes(result.update.version)) {
+            autoStarted.current = auto && result.previousFailure ? result.update.version : "";
             setUpdate(result.update);
-            setError("");
+            setError(auto && result.previousFailure ? "上次静默安装未完成，请重试或切换为手动安装。" : "");
           }
-        } else if (manual)
-          useStore
-            .getState()
-            .notify(
-              result.status === "unconfigured"
-                ? "更新源尚未配置"
-                : "当前已经是最新版本",
-            );
+        } else {
+          setUpdate(null);
+          if (manual) useStore.getState().notify(
+            result.status === "unconfigured" ? "更新源尚未配置" : "当前已经是最新版本",
+          );
+        }
       } catch {
         if (manual) useStore.getState().notify("检查更新失败，请稍后重试");
       } finally {
@@ -71,11 +74,15 @@ export function ReleaseNotices({ ready }) {
   useEffect(() => {
     if (!ready || !desktop || started.current) return;
     started.current = true;
-    if (localStorage.getItem(RELEASE_SEEN_KEY) !== RELEASE.version)
-      setLog(true);
-    if (useStore.getState().settings.checkUpdatesOnStartup !== false)
-      void check();
-  }, [ready, check]);
+    if (localStorage.getItem(RELEASE_SEEN_KEY) !== RELEASE.version) setLog(true);
+  }, [ready]);
+  useEffect(() => {
+    if (!ready || !desktop || (!automatic && !startupCheck)) return;
+    void check();
+    if (!automatic) return;
+    const timer = window.setInterval(() => void check(), 30 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [ready, automatic, startupCheck, check]);
   useEffect(() => {
     const openLog = () => setLog(true);
     const openGuide = (e) => {
@@ -122,54 +129,49 @@ export function ReleaseNotices({ ready }) {
     // The tour takes priority even while an update check is pending.
     if (localStorage.getItem(GUIDE_KEY) !== "done") setGuide(true);
   };
-  async function install() {
+  const install = useCallback(async (silent) => {
+    if (installInFlight.current || inFlight.current) return;
+    installInFlight.current = true;
     setInstalling(true);
+    setProgress({ stage: "downloading", downloaded: 0, total: 0 });
     setError("");
     try {
-      await api("install_update");
-    } catch {
-      setError("更新未完成，请检查网络后重试");
+      await api("install_update", { silent });
+    } catch (reason) {
+      const message = String(reason).replace(/^Error: /, "");
+      setError(message || "更新未完成，请稍后重试");
+      if (silent) useStore.getState().notify(message || "自动更新失败，请稍后重试");
+      installInFlight.current = false;
       setInstalling(false);
     }
-  }
+  }, []);
   useEffect(() => {
-    if (
-      !update ||
-      log ||
-      guide ||
-      modal ||
-      localStorage.getItem(GUIDE_KEY) !== "done"
-    )
-      return;
+    if (ready && automatic && update && !busy && !checking && !installing &&
+        autoStarted.current !== update.version) {
+      autoStarted.current = update.version;
+      void install(true);
+    }
+  }, [ready, automatic, update, busy, checking, installing, install]);
+  useEffect(() => {
+    if (!update || automatic || log || guide || modal || localStorage.getItem(GUIDE_KEY) !== "done") return;
     let seen = [];
     try {
       const value = JSON.parse(localStorage.getItem(promptKey) || "[]");
       if (Array.isArray(value)) seen = value;
     } catch {}
-    if (!seen.includes(update.version))
-      localStorage.setItem(
-        promptKey,
-        JSON.stringify([...seen, update.version]),
-      );
-    if (
-      !manualRequest.current &&
-      useStore.getState().settings.updateMode === "automatic" &&
-      autoStarted.current !== update.version
-    ) {
-      autoStarted.current = update.version;
-      void install();
-    }
-  }, [update, log, guide, modal, promptKey]);
+    if (!seen.includes(update.version)) localStorage.setItem(promptKey, JSON.stringify([...seen, update.version]));
+  }, [update, automatic, log, guide, modal, promptKey]);
   useEffect(() => {
     if (!ready || log || modal || !started.current) return;
     // Don't pre-empt a changelog scheduled by the startup effect.
     if (localStorage.getItem(RELEASE_SEEN_KEY) !== RELEASE.version) return;
     if (localStorage.getItem(GUIDE_KEY) !== "done") setGuide(true);
   }, [ready, log, update, checking, modal]);
-  if (modal) return null;
+  const showUpdate = update && (automatic ? installing || !!error : !modal && !log && !guide);
+  if (modal && !showUpdate) return null;
   return (
     <>
-      {guide && !log && (
+      {!showUpdate && guide && !log && (
         <Onboarding
           initialPage={guidePage}
           initialSection={guideSection}
@@ -182,7 +184,7 @@ export function ReleaseNotices({ ready }) {
           正在检查更新
         </span>
       )}
-      {log && (
+      {!showUpdate && log && (
         <Modal
           title="更新日志"
           className="changelog-modal"
@@ -212,9 +214,9 @@ export function ReleaseNotices({ ready }) {
           </ul>
         </Modal>
       )}
-      {!log && !guide && update && (
+      {showUpdate && (
         <Modal
-          title="发现新版本"
+          title={automatic ? "启动器自动更新" : "发现新版本"}
           onClose={() => {
             if (!installing) setUpdate(null);
           }}
@@ -227,10 +229,10 @@ export function ReleaseNotices({ ready }) {
                 primary
                 busy={installing}
                 disabled={installing}
-                onClick={() => void install()}
+                onClick={() => void install(automatic)}
               >
                 <ArrowDownToLine size={15} />
-                {installing ? "正在更新" : "立即更新"}
+                {installing ? "正在更新" : automatic ? "重试" : "立即更新"}
               </Button>
             </>
           }
@@ -254,9 +256,11 @@ export function ReleaseNotices({ ready }) {
               <span>
                 {progress.stage === "installing"
                   ? "校验完成，正在安装更新…"
-                  : progress.stage === "verifying"
-                    ? "正在校验更新包…"
-                    : progress.total
+                  : progress.stage === "waiting"
+                    ? "更新已校验，等待当前任务完成…"
+                    : progress.stage === "verifying"
+                      ? "正在校验更新包…"
+                      : progress.total
                       ? `正在下载 ${Math.min(100, Math.round((progress.downloaded / progress.total) * 100))}%`
                       : "正在连接下载源…"}
               </span>
