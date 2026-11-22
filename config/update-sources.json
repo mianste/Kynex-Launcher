@@ -1,8 +1,4 @@
 {
-  "stable": {
-    "github": ""
-  },
-  "beta": {
-    "github": ""
-  }
+  "stable": {"github": ""},
+  "beta": {"github": ""}
 }

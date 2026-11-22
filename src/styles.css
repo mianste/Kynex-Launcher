@@ -238,20 +238,10 @@ pre {
 .window-controls button:active {
   transform: scale(0.94);
 }
-.window-controls .window-refresh {
-  width: 31px;
-  color: var(--text3);
-}
 .window-controls .window-close:hover {
   background: #e5484d;
   color: var(--white);
   box-shadow: 0 0 0 1px color-mix(in srgb, #e5484d 50%, transparent);
-}
-.window-divider {
-  width: 1px;
-  height: 14px;
-  margin: 0 4px;
-  background: var(--line);
 }
 .nav {
   position: absolute;
@@ -1168,22 +1158,6 @@ progress::-webkit-progress-value {
 .add-account b {
   font-size: 13px;
 }
-.account-explainer {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-  margin-top: 32px;
-}
-.account-explainer .card {
-  background: transparent;
-}
-.account-explainer svg {
-  color: var(--accent);
-  margin-bottom: 14px;
-}
-.account-explainer p {
-  font-size: 12px;
-}
 .settings-layout {
   display: grid;
   grid-template-columns: 190px 1fr;
@@ -1862,7 +1836,6 @@ input[type="checkbox"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .account-grid,
-  .account-explainer,
   .help-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -2489,7 +2462,6 @@ input[type="checkbox"] {
   }
   .library-grid,
   .account-grid,
-  .account-explainer,
   .help-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -3321,59 +3293,6 @@ textarea {
     order: -1;
   }
 }
-.offline-skin-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-.offline-skin-option {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--glass);
-  text-align: left;
-}
-.offline-skin-option:hover {
-  border-color: var(--text3);
-}
-.offline-skin-option.on {
-  border-color: var(--accent);
-  background: var(--accent-low);
-  box-shadow: inset 0 0 0 1px var(--accent-mid);
-}
-.offline-skin-option .wardrobe-sprite {
-  width: 22px;
-  height: 42px;
-  flex: none;
-}
-.offline-skin-option span {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.offline-skin-option b,
-.offline-skin-option small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.offline-skin-option b {
-  font-size: 10px;
-}
-.offline-skin-option small {
-  margin-top: 2px;
-  color: var(--text3);
-  font-size: 9px;
-}
-.offline-skin-option > svg {
-  flex: none;
-  color: var(--accent);
-}
 .microsoft-config {
   margin-top: 10px;
   padding-top: 10px;
@@ -4163,9 +4082,6 @@ textarea {
   }
 }
 @media (max-width: 800px) {
-  .offline-skin-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .news-toolbar,
   .news-toolbar .search {
     width: 100%;
@@ -4297,13 +4213,6 @@ body {
   width: 34px;
   height: 30px;
   border-radius: 50%;
-}
-.window-controls .window-refresh {
-  width: 30px;
-}
-.window-divider {
-  margin-inline: 2px;
-  opacity: 0.65;
 }
 .btn,
 .input,
@@ -4453,9 +4362,10 @@ body {
 .instance-cover {
   border-radius: 20px 20px 7px 7px;
 }
-.instance-custom-icon {
+.instance-cover > .instance-custom-icon {
   position: absolute;
   inset: 0;
+  object-fit: cover;
 }
 .detail-cover {
   overflow: hidden;

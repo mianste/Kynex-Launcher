@@ -1,1 +1,11 @@
 * -text
+
+# Language statistics measure authored programming source. Styles, markup and installer recipes are separate.
+*.css -linguist-detectable
+*.html -linguist-detectable
+installer/** -linguist-detectable
+/scripts/*.ps1 -linguist-detectable
+/sync-original.ps1 -linguist-detectable
+/dist/** linguist-generated
+/website/dist/assets/gsap.min.js linguist-vendored
+/website/dist/assets/ScrollTrigger.min.js linguist-vendored

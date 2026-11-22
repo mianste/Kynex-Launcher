@@ -1,6 +1,9 @@
 .app .resource-version-modal {
   width: min(984px, calc(100vw - 48px));
 }
+.app .resource-version-modal.without-preview {
+  width: min(720px, calc(100vw - 48px));
+}
 .resource-version-modal > header,
 .resource-version-modal > footer {
   flex-shrink: 0;
@@ -29,6 +32,12 @@
 }
 .resource-version-columns.map-version-empty {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+}
+.resource-version-columns.without-gallery {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.resource-version-columns.map-version-empty.without-gallery {
+  grid-template-columns: minmax(0, 1fr);
 }
 .resource-version-catalogue,
 .resource-version-detail {

@@ -34,6 +34,7 @@
 }
 .wardrobe-stage-top {
   height: 51px;
+  flex-shrink: 0;
   padding: 0 22px;
   display: flex;
   align-items: center;
@@ -84,7 +85,8 @@
 }
 .wardrobe-stage {
   position: relative;
-  height: 380px;
+  flex: 1;
+  min-height: clamp(320px, 48vh, 430px);
   min-width: 0;
   isolation: isolate;
   overflow: hidden;
@@ -171,13 +173,10 @@
   opacity: 0.3;
 }
 .wardrobe-front-back {
-  position: absolute;
-  bottom: 17px;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
+  justify-content: center;
   gap: 5px;
-  z-index: 3;
+  padding: 6px 12px 10px;
 }
 .wardrobe-front-back button {
   border: 1px solid #ffffff0b;
@@ -193,15 +192,6 @@
 .wardrobe-front-back button:hover {
   color: #e1f2ec;
   background: #1f343b;
-}
-.wardrobe-stage-bottom {
-  display: flex;
-  justify-content: space-between;
-  padding: 13px 20px;
-  font-size: 10px;
-  color: #6d888e;
-  border-top: 1px solid var(--studio-line);
-  margin-top: auto;
 }
 .wardrobe-stage .skin-flat-pair {
   position: absolute;
@@ -669,9 +659,6 @@
   clip: rect(0, 0, 0, 0);
 }
 @media (min-width: 1500px) {
-  .wardrobe-stage {
-    height: 430px;
-  }
   .wardrobe-studio {
     grid-template-columns: minmax(0, 1fr) 310px;
   }
@@ -686,20 +673,10 @@
   .wardrobe-inspector {
     padding: 18px;
   }
-  .wardrobe-stage {
-    height: 345px;
-  }
   .wardrobe-stage-top {
     padding: 0 15px;
   }
   .wardrobe-stage-top small {
-    display: none;
-  }
-  .wardrobe-stage-bottom {
-    font-size: 9px;
-    padding: 12px;
-  }
-  .wardrobe-stage-bottom > span:last-child {
     display: none;
   }
   .wardrobe-setting-panel {

@@ -54,7 +54,6 @@
 .app .wardrobe-camera button,
 .app .wardrobe-front-back button,
 .app .wardrobe-stage-top :is(small, [role="tab"]),
-.app .wardrobe-stage-bottom,
 .app .wardrobe-stage .skin-flat-pair figure,
 .app .wardrobe-loading { color: var(--text2); }
 .app .wardrobe-stage-top [role="tab"].on { color: var(--text); }
@@ -80,7 +79,7 @@
 }
 .app :is(.resource-row small, .project-meta, .project-original-description,
   .resource-version-row-meta, .resource-version-list-heading > span,
-  .wardrobe-setting-panel p, .wardrobe-stage-bottom, .wardrobe-model-tip,
+  .wardrobe-setting-panel p, .wardrobe-model-tip,
   .choice-hint, .choice-option-hint) { font-size: 12px; line-height: 1.5; }
 .app .home-header :is(h1, p) { color: var(--text); text-shadow: none; }
 
@@ -116,7 +115,7 @@
   .skin-card-description, .home-shortcuts small, .home-music small,
   .music-panel-head p, .music-empty > span, .news-inline-note,
   .news-feed-status, .skin-import-zone small, .wardrobe-stage-top small,
-  .wardrobe-stage-bottom, .wardrobe-setting-row small, .wardrobe-apply > p,
+  .wardrobe-setting-row small, .wardrobe-apply > p,
   .wardrobe-setting-panel > small, .wardrobe-import-result > div > small) { display: none; }
 
 /* Keep the input's native keyboard, label and form behavior. */

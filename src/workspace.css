@@ -234,7 +234,8 @@
 
 .home-popover {
   border: 1px solid var(--line);
-  background: var(--surface);
+  background: var(--glass);
+  backdrop-filter: blur(var(--ui-blur));
   box-shadow: var(--workspace-shadow);
 }
 
@@ -344,6 +345,24 @@
   transform-origin: bottom right;
 }
 
+.app .page-content .account-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+.app .account-grid .account-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  min-height: 0;
+  padding: 12px 16px;
+}
+.app .account-card .account-header { margin: 0; min-width: 0; }
+.app .account-card .account-header > div { min-width: 0; overflow-wrap: anywhere; }
+.app .account-card .account-header > svg { flex: none; }
+.app .account-card .actions { margin-left: auto; flex-wrap: wrap; }
+
 .home-account-summary {
   display: flex;
   align-items: center;
@@ -388,6 +407,60 @@
 
 .home-menu-row > svg:first-child { color: var(--workspace-focus); }
 .home-menu-row > svg:last-child { color: var(--text3); }
+
+.home-account-switcher {
+  display: grid;
+  width: 116px;
+  grid-template-rows: auto 0fr;
+  margin: 6px 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--accent-low);
+}
+
+.home-account-switcher[data-open="true"] {
+  width: 100%;
+  grid-template-rows: auto 1fr;
+}
+
+.home-account-switch-button {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 8px;
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.home-account-switch-button:is(:hover, :focus-visible) { background: var(--control-hover); }
+.home-account-switcher[data-open="true"] .home-account-switch-button > svg:last-child { rotate: 180deg; }
+
+.home-account-reveal { min-height: 0; overflow: hidden; }
+.home-account-choices {
+  max-height: 180px;
+  padding: 3px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  opacity: 0;
+}
+.home-account-switcher[data-open="true"] .home-account-choices { opacity: 1; }
+.home-account-choice { grid-template-columns: 30px minmax(0, 1fr) auto; }
+.home-account-choice .player-avatar { width: 30px; height: 30px; }
+.home-account-choice[aria-current="true"] { background: var(--control-selected); }
+.home-account-choice[aria-current="true"] > svg:last-child { color: var(--workspace-focus); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .home-account-switcher {
+    transition: width 230ms var(--motion-ease), grid-template-rows 230ms var(--motion-ease);
+  }
+  .home-account-choices { transition: opacity 100ms ease; }
+  .home-account-switcher[data-open="true"] .home-account-choices { transition-delay: 65ms; }
+  .home-account-switch-button > svg:last-child { transition: rotate 190ms var(--motion-ease); }
+}
 .app.page-home > .music-shell.compact {
   top: clamp(130px, 32vh, 245px);
   right: 0;
@@ -435,7 +508,7 @@
   border: 1px solid var(--line);
   border-radius: 17px;
   overflow: hidden;
-  background: var(--home-widget-editor);
+  background: color-mix(in srgb, var(--surface) 96%, var(--accent));
 }
 
 .native-music[data-view="playlists"] .native-playlist-grid .music-artwork--playlist {
@@ -482,6 +555,7 @@
 
 .music-edge-dock .music-quick-play {
   position: absolute;
+  z-index: 1;
   top: 50%;
   left: 8px;
   translate: 0 -50%;

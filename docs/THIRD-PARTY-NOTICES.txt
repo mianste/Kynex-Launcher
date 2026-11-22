@@ -248,11 +248,38 @@ Original bytes preserved; 64x32 PNG; SHA-256: 99611d1e8ce2b794bb0840e2ac2f4e4c57
 Minecraft character artwork belongs to its respective rights holders.
 Not covered by Kynex Launcher's MIT license. No cape texture is bundled.
 
-===== Schematic preview dependencies =====
-fastnbt 2.6.3 (MIT) — licenses/fastnbt-2.6.3-LICENSE.txt
-cesu8 1.1.0 (MIT) — licenses/cesu8-1.1.0-LICENSE.txt
-serde_bytes 0.11.19 (MIT) — licenses/serde_bytes-0.11.19-LICENSE.txt
-flate2 1.1.10 (MIT) — licenses/flate2-1.1.10-LICENSE.txt
-sevenz-rust2 0.25.0 (Apache-2.0) — licenses/sevenz-rust2-0.25.0-LICENSE.txt
-lzma-rust2 0.25.0 (Apache-2.0) — licenses/lzma-rust2-0.25.0-LICENSE.txt
-unrar-rs 0.15.3 (Apache-2.0 with the unRAR restriction) — licenses/unrar-rs-0.15.3-LICENSE.txt
+===== Minecraft Alex texture (Mojang Java Edition 1.21.11) =====
+Client: https://piston-data.mojang.com/v1/objects/ba2df812c2d12e0219c489c4cd9a5e1f0760f5bd/client.jar
+Entry: assets/minecraft/textures/entity/player/slim/alex.png
+SHA-256: 99391ed9dff9581ec88daf23b9b028adc9ac91f52889edcff1c982d0923c0cff
+Minecraft character artwork belongs to its respective rights holders.
+Not covered by Kynex Launcher's MIT license.
+
+===== Java desktop distribution =====
+Gson 2.13.2, LevelDB 0.12 and the Snappy code shipped by LevelDB use the Apache License 2.0.
+https://github.com/google/gson
+https://github.com/dain/leveldb
+https://github.com/dain/snappy
+licenses/Apache-2.0.txt
+
+Eclipse SWT 3.131.0 is distributed under the Eclipse Public License 2.0.
+https://github.com/eclipse-platform/eclipse.platform.swt
+licenses/SWT-about.html includes SWT and WebView2 attribution.
+
+JNA 5.17.0 is distributed under the Apache License 2.0 or LGPL 2.1 or later.
+https://github.com/java-native-access/jna
+licenses/JNA-LICENSE.txt
+
+Bouncy Castle Java 1.85 is distributed under the Bouncy Castle licence.
+https://www.bouncycastle.org/
+licenses/Bouncy-Castle-LICENSE.md
+
+Apache Commons Compress 1.28.0, Commons IO 2.20.0, Commons Lang 3.18.0
+and Commons Codec 1.19.0 are distributed under the Apache License 2.0.
+https://commons.apache.org/
+The original notices are included in the respective JARs under META-INF.
+
+XZ for Java 1.12 is distributed under the BSD Zero Clause License.
+https://tukaani.org/xz/java.html
+
+The bundled Eclipse Temurin Java runtime includes its legal notices in runtime/legal.

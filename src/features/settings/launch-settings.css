@@ -1,0 +1,152 @@
+.app .settings-content > .launch-settings-card {
+  padding: 20px 24px 24px;
+  margin-bottom: 12px;
+}
+
+.app .launch-settings-card .settings-card-head {
+  align-items: center;
+  padding-bottom: 16px;
+}
+
+.app .launch-settings-card .settings-card-head h3 {
+  margin: 0;
+}
+
+.launch-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 16px 24px;
+  padding-top: 16px;
+}
+
+.launch-settings-window {
+  min-width: 0;
+  padding-inline-start: 24px;
+  border-inline-start: 1px solid var(--line);
+}
+
+.launch-settings-java {
+  grid-column: 1 / -1;
+}
+
+.launch-settings-game {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: inherit;
+  gap: inherit;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.app .page-content .launch-settings-card .setting-row {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.app .launch-settings-card .setting-label b {
+  font-size: 13px;
+}
+
+.app .page-content .launch-settings-card .launch-settings-game > .setting-row:nth-child(2) {
+  padding-inline-start: 24px;
+}
+
+.launch-settings-card .memory-slider {
+  min-width: 0;
+  gap: 8px;
+}
+
+.launch-settings-card .memory-slider-head {
+  align-items: baseline;
+  flex-direction: row-reverse;
+  font-variant-numeric: tabular-nums;
+}
+
+.app .launch-settings-card .memory-slider-head span {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.app .launch-settings-card .memory-slider-head b,
+.app .launch-settings-card .memory-slider-scale {
+  font-size: 11px;
+}
+
+.launch-settings-card .memory-slider input:focus-visible,
+.launch-settings-card .window-presets button:focus-visible {
+  outline: 2px solid var(--workspace-focus);
+  outline-offset: 2px;
+}
+
+.app .launch-settings-card .window-size-inputs {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.app .launch-settings-card .window-size-inputs .input[type="number"] {
+  width: 100%;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.launch-settings-card .window-presets {
+  gap: 6px;
+}
+
+.launch-settings-card .window-presets button {
+  min-height: 36px;
+  padding-inline: 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 850px) {
+  .launch-settings-grid {
+    gap: 16px;
+  }
+
+  .launch-settings-window,
+  .app .page-content .launch-settings-card .launch-settings-game > .setting-row:nth-child(2) {
+    padding-inline-start: 16px;
+  }
+}
+
+@media (max-width: 700px) {
+  .app .settings-page[data-category="启动"] .settings-layout {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .settings-page[data-category="启动"] .settings-nav {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 540px) {
+  .app .settings-content > .launch-settings-card {
+    padding: 16px;
+  }
+
+  .launch-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .launch-settings-window {
+    padding: 16px 0 0;
+    border-inline-start: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .app .page-content .launch-settings-card .launch-settings-game > .setting-row:nth-child(2) {
+    padding-inline-start: 0;
+  }
+}

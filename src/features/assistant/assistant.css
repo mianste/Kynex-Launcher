@@ -387,19 +387,6 @@
     transition: none;
   }
 }
-/* Launch settings stay fixed; other settings categories remain scrollable. */
-.page-content:has(.settings-page[data-category="启动"]),
-.settings-page[data-category="启动"] .settings-content {
-  overflow: hidden !important;
-  scrollbar-gutter: auto;
-  scrollbar-width: none;
-}
-.page-content:has(.settings-page[data-category="启动"])::-webkit-scrollbar,
-.settings-page[data-category="启动"] .settings-content::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
 .ai-connection-result {
   display: flex;
   align-items: flex-start;

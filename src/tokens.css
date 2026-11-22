@@ -59,17 +59,6 @@
   color-scheme: dark;
 }
 
-.app {
-  --home-widget-surface: color-mix(in srgb, var(--surface) clamp(84%, var(--ui-alpha), 100%), transparent);
-  --home-widget-editor: color-mix(in srgb, var(--surface) 96%, var(--accent));
-  --home-widget-canvas: color-mix(in srgb, var(--surface) 86%, var(--elev));
-  --home-widget-control: color-mix(in srgb, var(--surface) 91%, var(--text));
-  --home-widget-grid-line: color-mix(in srgb, var(--line) 78%, var(--surface));
-  --home-widget-selection: color-mix(in srgb, var(--accent) 24%, var(--surface));
-  --home-widget-neutral: color-mix(in srgb, var(--home-widget-surface) 91%, var(--text));
-  --home-widget-accent: color-mix(in srgb, var(--home-widget-surface) 85%, var(--accent));
-}
-
 :root[data-theme="light"] {
   --bg: #eef1eb;
   --surface: #fcfdf9;

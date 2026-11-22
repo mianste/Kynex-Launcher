@@ -26,15 +26,14 @@
 .project-result-row .project-icon img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: var(--control-bg);
 }
-.pixelmap-result-row .project-icon img {
-  object-fit: cover;
+.project-result-row .project-icon:has(> img.loaded) {
   background: transparent;
+  border: 0;
 }
 .project-result-row .project-icon > span {
   position: relative;
@@ -108,19 +107,6 @@
   min-height: 116px;
   padding: 16px 8px;
 }
-.catalog-source-warning {
-  padding: 12px 0;
-  color: var(--text2);
-  font-size: 12px;
-}
-.catalog-source-warning summary {
-  cursor: pointer;
-}
-.catalog-source-warning p {
-  margin: 8px 0;
-  overflow-wrap: anywhere;
-}
-
 .project-result-row .project-title-line .badge {
   background: transparent;
   border-color: var(--line);
@@ -217,31 +203,16 @@
 .schematic-catalog-tools {
   gap: 8px;
 }
+.schematic-catalog-tools .source-tabs {
+  flex-wrap: wrap;
+  margin-bottom: 0;
+}
 .schematic-catalog-row .project-copy {
   flex-basis: min(220px, 100%);
 }
 .schematic-catalog-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-}
-.schematic-download-receipt {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px 16px;
-}
-.schematic-download-location {
-  flex: 1 1 240px;
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-  overflow-wrap: anywhere;
-}
-.schematic-download-location strong {
-  display: flex;
-  align-items: center;
   gap: 6px;
 }
 .schematic-catalog-link {
@@ -256,3 +227,11 @@
 .schematic-catalog-link:hover {
   color: var(--text);
 }
+.catalog-copyright-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.catalog-copyright-warning > svg { flex: none; color: var(--warn); }
+.catalog-copyright-warning strong { font-size: 1.125rem; }
+.catalog-copyright-warning p { margin: 8px 0 0; line-height: 1.6; }

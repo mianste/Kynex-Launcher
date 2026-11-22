@@ -1,17 +1,18 @@
 {
   "channel": "stable",
-  "version": "1.7.0",
-  "displayVersion": "v1.7.0",
-  "label": "公开构建 v1.7.0",
+  "version": "2.0.0",
+  "displayVersion": "v2.0.0",
+  "label": "正式版 v2.0.0",
   "repositoryUrl": "https://github.com/mianste/Kynex-Launcher",
   "supportUrl": "https://afdian.com/a/keke_657",
   "changes": [
-    "投影预览新增原版生物。投影里保存的牛、羊、村民等生物可以用原版模型和贴图查看。",
-    "补齐了箱子、床、潜影盒和告示牌的模型，也改进了玻璃、红石和水的显示。",
-    "修复原木和其他方块朝向错误的问题，旧版投影里的门和下界疣也能按保存的方向或生长阶段显示。"
+    "下载列表打开更快。切回看过的分类或页码时，会直接恢复原来的列表和图标。",
+    "一个下载源响应慢时，先显示准备好的资源。晚到的结果不会打乱正在浏览的列表。",
+    "改进地图下载和安装。部分以前无法读取的地图压缩包可以直接安装，有预览截图时才显示预览区。",
+    "启动器自带运行环境，更新后可以继续使用已有账号、设置、实例和存档。"
   ],
-  "productName": "Kynex Launcher Public",
-  "identifier": "com.keke.kynex.public",
-  "mainBinaryName": "Kynex Launcher Public",
-  "releaseTag": "v1.7.0"
+  "productName": "Kynex Launcher Source",
+  "identifier": "com.keke.kynex.source",
+  "mainBinaryName": "Kynex Launcher Source",
+  "releaseTag": "v2.0.0"
 }

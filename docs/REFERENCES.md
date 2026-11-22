@@ -1,11 +1,9 @@
 # 参考来源与署名
 
-## 首页组件
+## 项目语言
 
-- [M3E Canvas](https://lnkiai.github.io/m3e-canvas/)用于参考组件库、画布、属性面板和尺寸手柄。[GridStack](https://github.com/gridstack/gridstack.js/)用于参考拖动和边缘滚动。Kynex 自行实现连续坐标、首页预览和确认应用。
-
-- [Apple 桌面组件](https://support.apple.com/en-md/guide/mac-help/mchl52be5da5/mac)与 [Windows 小组件](https://support.microsoft.com/en-gb/windows/experience/personalization/stay-up-to-date-with-widgets-in-windows)用于参考组件面板、快捷操作和日历。
-- [Plasma Audio Wave Visualizer](https://github.com/Muddyblack/audio-wave-visualizer)与 [Rainmeter AudioLevel](https://docs.rainmeter.net/manual/plugins/audiolevel/)用于参考歌词、波形和频谱的布局与数据表达。Kynex 使用 Web Audio 和现有播放器独立实现。
+- [HMCL 构建说明](https://github.com/HMCL-dev/HMCL/blob/main/docs/Contributing.md)用于参考由 Java 承担启动器主体、构建工具负责生成可执行文件的组织方式。
+- [PCL 公开仓库](https://github.com/Meloong-Git/PCL)用于参考将主要逻辑集中在同一语言的组织方式。KXL 的迁移继续使用自己的代码和数据格式。
 
 ## PCL
 
@@ -14,6 +12,7 @@
 - 源文件：https://github.com/Meloong-Git/PCL/blob/main/Plain%20Craft%20Launcher%202/Modules/Minecraft/ModLaunch.vb
 - 阅读范围：`ModLaunch.vb` 的启动阶段，以及 `ModDownload.vb`、`ModDownloadLib.vb`、`ResourceSearcher.vb` 的源优先级、错峰回退、并发文件任务、双站资源搜索与筛选组织。KXL 仅采用这些架构思路，以 Rust 独立实现，未复制 PCL 的代码、控件或品牌资产。
 - 署名：龙腾猫跃及 PCL 贡献者。PCL 仓库包含自定义《PCL 分发有限许可》及合理使用指南，不能视作 MIT 项目。本工程独立实现，不是 PCL 分支，不使用其源代码或品牌资产；关于页已署名和提供仓库链接。
+- 资源页参考 PCL 的搜索加载和项目图标呈现流程。KXL 并行查询所选来源，并在当前页的图标准备完成后一次显示本页结果。
 - 许可原文：https://github.com/Meloong-Git/PCL/blob/main/LICENCE
 - 下载完成提示参考 [PCL 帮助中的左下角提示条](https://github.com/Meloong-Git/PCL/wiki/%E8%87%AA%E5%AE%9A%E4%B9%89%E4%BA%8B%E4%BB%B6#%E5%BC%B9%E5%87%BA%E6%8F%90%E7%A4%BA)，KXL 使用自身主题、控件和任务结果。
 - 头像流程参考：[PCL 旧版 UUID 默认皮肤规则](https://github.com/Meloong-Git/PCL/blob/93ede5d9e638c99fcec853a9ba1eecd91ceee7f5/Plain%20Craft%20Launcher%202/Modules/Minecraft/ModMinecraft.vb#L1395-L1417)及[皮肤头像预览行为](https://github.com/Meloong-Git/PCL/blob/8c8b1066bff6476a14437a14bc16a281e25145bd/Plain%20Craft%20Launcher%202/Pages/PageLaunch/MySkin.xaml.vb#L74-L128)。KXL 独立使用 Java UUID 哈希的奇偶位选择 Steve 或 Alex，并将游戏皮肤正脸与外层合成。仅用于启动器内显示，纹理来源见 `src/assets/skins/SOURCES.json`。
@@ -23,7 +22,7 @@
 - Tauri 官方 splashscreen 例子：https://github.com/tauri-apps/tauri/tree/dev/examples/splashscreen
 - SVG 描边动画思路：https://github.com/moarwick/react-mt-svg-lines
 
-仅参考窗口启动生命周期与 stroke-dashoffset 的通用方法；不引入这些项目的运行库，不复制其图形。棱晶 K 图形由用户提供；按用户要求以图像编辑生成透明背景版本，保留于 `src/assets/kxl-icon.png`。切面轮廓、裁切和时间编排在 `src/app/Splash.tsx` 与 `src/styles.css` 中独立编写。
+仅参考窗口启动生命周期与 stroke-dashoffset 的通用方法；不引入这些项目的运行库，不复制其图形。棱晶 K 图形由用户提供；按用户要求以图像编辑生成透明背景版本，保留于 `src/assets/kxl-icon.png`。切面轮廓、裁切和时间编排在 `src/app/Splash.jsx` 与 `src/styles.css` 中独立编写。
 
 ## 真实接口与文档
 
@@ -35,6 +34,7 @@
 - NeoForge 官方 Maven：https://maven.neoforged.net/releases/
 - Forge 兼容版本列表使用 BMCLAPI 元数据：https://bmclapi2.bangbang93.com/
 - Modrinth API：https://docs.modrinth.com/api/
+- 像素茶艺地图站开放平台：https://goto.pixelmap.cc/maps/pixelmap_official_openplatform 。投影目录通过公开搜索和作品详情识别作者提供的投影文件，并保留原帖及作者信息。
 - Microsoft 设备授权：https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code
 - authlib-injector：https://github.com/yushijinhun/authlib-injector
 
@@ -148,5 +148,21 @@ Windows 凭据只保存必要的登录字段，使用系统凭据库的字节存
 - 投影预览按 [Litematica 方块容器](https://github.com/maruohon/litematica/tree/pre-rewrite/fabric/1.21.1-masa/src/main/java/fi/dy/masa/litematica/schematic/container) 和 [Sponge 投影规范](https://github.com/SpongePowered/Schematic-Specification) 核对数据布局，独立读取投影的方块坐标与状态。
 - 方块外观按 [Fabric 方块模型文档](https://docs.fabricmc.net/develop/blocks/block-models) 解释 JSON 模型、状态和纹理。优先读取已安装的 Minecraft Java 客户端，缺少可读取的客户端时从 [Mojang 版本清单](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json) 记录的地址缓存并校验 1.21.11 客户端。Minecraft 模型和纹理用于本机预览，安装包只包含读取和绘制逻辑。
 - 缺失的方块属性查 [Misode mcmeta 的 Java 原版方块注册表](https://github.com/misode/mcmeta#summary)（各 `<版本>-summary` 标签下的 `blocks/data.min.json`），例如省略轴向的原木沿 Y 轴。使用 `scripts/package-minecraft-preview-defaults.py` 把已核验的注册表精简为版本间的默认值变化。投影明确保存的属性始终优先，玩家的投影文件保持原样。
+- 箱子、床、潜影盒和告示牌的方块实体预览参考 [AZO234 的 mc_schem_viewer](https://github.com/AZO234/mc_schem_viewer/blob/main/src/textures.js) 了解实体贴图的布局与双箱的拼接方向，结合 [Fabric 方块实体渲染文档](https://docs.fabricmc.net/develop/blocks/block-entity-renderer) 核对普通方块模型和实体外观的区别。KXL 独立实现静态几何，纹理仍取自 Minecraft Java 客户端。
 - 实体坐标参考 [LitematicWebViewer 的区域解析](https://github.com/Gudu-Z/LitematicWebViewer/blob/main/src/litematica.js) 与 [Sponge v3 规范](https://github.com/SpongePowered/Schematic-Specification/blob/master/versions/schematic-3.md)。模型首次使用时从 [InventivetalentDev 的 Java 实体模型导出](https://github.com/InventivetalentDev/minecraft-entity-models) 下载固定修订并校验 SHA-1，原版贴图来自本机 Minecraft 客户端。启动器独立构建 Three.js 网格，安装包不附送游戏模型或纹理，投影内容在本机解析。
 - 投影下载内置 [DuskScorpio 的 CC0 黑曜石农场](https://github.com/DuskScorpio/Scorpio-File-Downloads/tree/c3956162182bbef0413c601ef1c26691f7783a36) 的原始文件，以及 [Block Library 的三份 CC0 原创建筑](https://blocklibrary.net/guides/original-builds.html#source-and-reuse) 的重新封装文件。这三份文件按作者公开的 [小屋](https://blocklibrary.net/guides/plans/cabin.json)、[凉亭](https://blocklibrary.net/guides/plans/pavilion.json) 和 [石桥](https://blocklibrary.net/guides/plans/bridge.json) 方块坐标及状态生成，保留作品署名。将三份公开 JSON 放进同一目录后，可以运行 `python scripts/package-block-library-schematics.py <目录>` 重新生成。清单记录内置文件的 SHA-256，供预览和保存前校验。
+
+## Java 下载与加载器
+
+- 参考 HMCL 处理新版 Forge 安装器、旧版内置依赖和 OptiFine 补丁的流程。KXL 用自己的安装代码读取发行文件并调用其中声明的客户端处理器。 [HMCL 加载器实现](https://github.com/HMCL-dev/HMCL/tree/main/HMCLCore/src/main/java/org/jackhuang/hmcl/download)
+- Forge 和 NeoForge 使用官方 Maven 目录和安装器校验文件，OptiFine 从发布页取得版本和 Forge 兼容信息。 [Forge Maven](https://maven.minecraftforge.net/)、[NeoForge Maven](https://maven.neoforged.net/releases/)、[OptiFine 下载](https://optifine.net/downloads)
+- 资源搜索和文件版本按平台提供的分页及兼容性字段读取。用户填写的 CurseForge API 密钥只用于官方接口。 [Modrinth 接口](https://docs.modrinth.com/api/operations/searchprojects/)、[CurseForge 接口](https://docs.curseforge.com/rest-api/)
+
+## 整合包拖拽
+
+- 参考 PCL 对嵌套整合包的识别流程，以及 HMCL 拖入文件后打开安装向导的交互。KXL 使用 Java 读取归档目录及版本清单。 [PCL 2.8.10 更新日志](https://github.com/Meloong-Git/PCL/discussions/5071) · [HMCL 稳定版更新日志](https://docs.hmcl.net/changelog/stable.html)
+
+## 资源目录加载
+
+- PCL 保存已经获取的搜索结果和来源偏移量，已有足够结果时直接取对应页。HMCL 在列表首次打开时发起搜索，用请求编号丢弃过时的响应，并按 URL 缓存和合并图标请求。 [PCL 资源搜索](https://github.com/Meloong-Git/PCL/blob/main/Plain%20Craft%20Launcher%202/Modules/Resource/ResourceSearcher.vb) · [HMCL 资源列表](https://github.com/HMCL-dev/HMCL/blob/main/HMCL/src/main/java/org/jackhuang/hmcl/ui/instances/DownloadListPage.java) · [HMCL 图片加载](https://github.com/HMCL-dev/HMCL/blob/main/HMCL/src/main/java/org/jackhuang/hmcl/util/RemoteImageLoader.java)
+- KXL 独立实现按筛选和页码缓存列表，图标与列表一起显示。慢来源后续返回时缓存该来源结果，当前列表保持稳定。

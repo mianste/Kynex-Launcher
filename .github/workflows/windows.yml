@@ -35,14 +35,22 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-java@v4
         with:
-          workspaces: src-tauri -> target
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: src-java/pom.xml
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
-      - run: cargo test --locked --no-default-features --manifest-path src-tauri/Cargo.toml
+      - run: mvn -B -f src-java/pom.xml test dependency:copy-dependencies "-DoutputDirectory=${{ runner.temp }}/kynex-deps"
       - name: Compile Windows desktop application
-        run: pnpm tauri build --no-bundle
+        shell: pwsh
+        run: |
+          $deps = '${{ runner.temp }}/kynex-deps'
+          python scripts/build_java_desktop.py --jdk "$env:JAVA_HOME" --gson-jar "$deps/gson-2.13.2.jar" --swt-jar "$deps/org.eclipse.swt.win32.win32.x86_64-3.131.0.jar" --jna-jar "$deps/jna-5.17.0.jar" --leveldb-jar "$deps/leveldb-0.12-uber.jar" --bouncy-jar "$deps/bcprov-jdk18on-1.85.jar" --output '${{ runner.temp }}/kynex-image'

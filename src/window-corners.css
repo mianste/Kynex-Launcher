@@ -1,73 +1,26 @@
-/* One antialiased alpha mask for the whole composited window, including video.
-   Rounded overflow plus a second rounded clip would multiply edge coverage. */
+/* Clip the composited window once, including wallpaper, video, and footer. */
 .app {
-  --corner-aa: 1.25px;
-  border-radius: 0;
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  margin: 0;
   border: 0;
+  border-radius: 0;
   outline: 0;
   box-shadow: none;
-  clip-path: none;
-  --corner-mask:
-    linear-gradient(#000 0 0) center / calc(100% - 2 * var(--window-radius))
-      100% no-repeat,
-    linear-gradient(#000 0 0) center / 100%
-      calc(100% - 2 * var(--window-radius)) no-repeat,
-    radial-gradient(
-        circle at 100% 100%,
-        #000 calc(var(--window-radius) - var(--corner-aa) / 2),
-        transparent calc(var(--window-radius) + var(--corner-aa) / 2)
-      )
-      top left / var(--window-radius) var(--window-radius) no-repeat,
-    radial-gradient(
-        circle at 0 100%,
-        #000 calc(var(--window-radius) - var(--corner-aa) / 2),
-        transparent calc(var(--window-radius) + var(--corner-aa) / 2)
-      )
-      top right / var(--window-radius) var(--window-radius) no-repeat,
-    radial-gradient(
-        circle at 100% 0,
-        #000 calc(var(--window-radius) - var(--corner-aa) / 2),
-        transparent calc(var(--window-radius) + var(--corner-aa) / 2)
-      )
-      bottom left / var(--window-radius) var(--window-radius) no-repeat,
-    radial-gradient(
-        circle at 0 0,
-        #000 calc(var(--window-radius) - var(--corner-aa) / 2),
-        transparent calc(var(--window-radius) + var(--corner-aa) / 2)
-      )
-      bottom right / var(--window-radius) var(--window-radius) no-repeat;
-  -webkit-mask: var(--corner-mask);
-  mask: var(--corner-mask);
+  -webkit-mask: none;
+  mask: none;
+  clip-path: inset(-1px round calc(var(--window-radius) + 1px));
 }
 html,
 body,
 #root {
   background: transparent;
 }
-
-/* The outer mask alone shapes the window; the footer must not clip it a second time. */
 .app > .taskbar {
+  inset: auto 0 0;
   border-radius: 0;
-}
-/* Align the entire painted frame to device pixels, with a transparent safety
-   gutter so no child border or shadow can protrude beyond any straight edge. */
-.app {
-  --window-edge-inset: 2px;
-  position: absolute;
-  inset: var(--window-edge-inset);
-  width: auto;
-  height: auto;
-  margin: 0;
-}
-/* In browser previews the window surface fills the viewport. The native
-   compositor uses the transparent safety gutter above. */
-.app:not([data-native-window]) {
-  inset: 0;
-}
-.app > .taskbar {
-  left: 0;
-  right: 0;
-  bottom: 0;
   border-left: 0;
   border-right: 0;
   border-bottom: 0;

@@ -1,6 +1,14 @@
 # Kynex Launcher
-Tauri 2 + React 18 + TypeScript + Vite + Tailwind + Zustand. 中文文案，lucide-react 图标。
+业务核心和 Windows 桌面使用 Java，界面使用 JavaScript + React 18 + Vite + Tailwind + Zustand，构建辅助使用 Python。中文文案，lucide-react 图标。
 配色集中于 src/tokens.css，原型只读位于 prototype/。
-运行 pnpm typecheck、pnpm test、pnpm build；Rust 核心 cargo test --no-default-features --manifest-path src-tauri/Cargo.toml。
+运行 pnpm typecheck、pnpm test、pnpm build，并用 mvn -f src-java/pom.xml test 检查 Java 桌面和业务核心。
 真实桌面操作走 bridge，网页模式只提供明确标识的预览，不能假报安装或登录成功。
 不可复制 PCL 源代码；docs/REFERENCES.md 记录少量流程参考和署名。
+最终启动器源码和交付目标只使用 Java、JavaScript 和 Python。替换旧桌面模块时验证既有功能和数据格式。
+
+## 本地验收与发布
+
+1. 涉及启动器代码的改动，先完成修改并运行上面的检查，再生成本地 Windows 覆盖更新包。沿用已安装版本的应用标识和安装目录，只替换本次更新需要的程序文件，保留用户设置、实例和存档。默认用 `installer/local-update.nsi` 做只针对已有安装的补丁，检测不到匹配版本时提示并退出。用户明确要求时才做可独立安装的测试包。把更新包放到 `本地测试版/`，把文件路径发给用户验收。未经用户验收并明确要求发布，先停在本地测试阶段。
+2. 每次成功生成并验证新的本地更新包后，清理此前生成的旧本地测试包及其专用运行环境。先核对要删除的路径确实属于旧测试产物，保留本次更新包、现有启动器安装目录、正式发布产物以及用户的设置、存档和游戏文件。
+3. 用户验收通过并明确要求发布后，先按变更范围主动递增版本号。用户指定了版本号时，使用指定版本号。同步项目中用于构建和更新的版本号，再用正式版本号重新打包。
+4. 发布前更新 `CHANGELOG.md` 和这次的发布说明。用大白话只写玩家看得见的变化，例如新增了哪些功能、改进了什么、修复了几个问题。修复数量按实际变更统计，省略内部实现和打包过程。
