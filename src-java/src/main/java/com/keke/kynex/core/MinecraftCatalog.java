@@ -15,14 +15,28 @@ import static com.keke.kynex.core.LaunchManifest.object;
 
 final class MinecraftCatalog {
     private static final String MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+    private static volatile JsonObject bundledManifest;
     private final GameDownloads downloads;
 
     MinecraftCatalog(GameDownloads downloads) { this.downloads = downloads; }
 
     JsonArray versions(Path root, boolean mirror, boolean refresh, BooleanSupplier stopped) throws IOException {
+        return versions(root, mirror, refresh, false, stopped);
+    }
+
+    private JsonArray versions(Path root, boolean mirror, boolean refresh, boolean live,
+                               BooleanSupplier stopped) throws IOException {
         Path cached = GameFiles.target(root, "cache/version-manifest.json");
         JsonElement saved = readCached(cached);
         if (!refresh && valid(saved)) return saved.getAsJsonObject().getAsJsonArray("versions");
+        if (!refresh && !live) {
+            JsonObject bundled = bundled();
+            if (bundled != null) {
+                try { JsonFiles.atomicWrite(cached, bundled.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)); }
+                catch (IOException ignored) { /* The bundled manifest is enough. */ }
+                return bundled.getAsJsonArray("versions").deepCopy();
+            }
+        }
         try {
             var response = downloads.document(MANIFEST, mirror, "", MinecraftCatalog::valid, stopped);
             JsonFiles.atomicWrite(cached, response.bytes());
@@ -36,8 +50,8 @@ final class MinecraftCatalog {
 
     JsonObject version(Path root, String id, boolean mirror, BooleanSupplier stopped) throws IOException {
         LaunchManifest.safeName(id);
-        JsonObject entry = find(versions(root, mirror, false, stopped), id);
-        if (entry == null) entry = find(versions(root, mirror, true, stopped), id);
+        JsonObject entry = find(versions(root, mirror, false, true, stopped), id);
+        if (entry == null) entry = find(versions(root, mirror, true, true, stopped), id);
         if (entry == null) throw new IOException("版本清单中找不到此版本，请刷新后重试");
         String sha = text(entry, "sha1", "");
         Path cached = GameFiles.target(root, "cache/version-metadata/" + id + ".json");
@@ -54,6 +68,25 @@ final class MinecraftCatalog {
             value -> versionValid(value, id), stopped);
         JsonFiles.atomicWrite(cached, response.bytes());
         return response.value().getAsJsonObject();
+    }
+
+    private static JsonObject bundled() {
+        JsonObject value = bundledManifest;
+        if (value != null) return value;
+        try (var stream = MinecraftCatalog.class.getResourceAsStream("/version-manifest.json")) {
+            if (stream != null) {
+                JsonElement parsed = JsonFiles.JSON.fromJson(
+                    new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8), JsonElement.class);
+                if (valid(parsed)) {
+                    value = parsed.getAsJsonObject();
+                    bundledManifest = value;
+                    return value;
+                }
+            }
+        } catch (IOException | RuntimeException ignored) {
+            // Fall back to the live Mojang manifest.
+        }
+        return null;
     }
 
     private static JsonObject find(JsonArray versions, String id) {

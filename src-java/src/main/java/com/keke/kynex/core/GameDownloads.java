@@ -37,6 +37,7 @@ final class GameDownloads {
         "maven.fabricmc.net", "maven.quiltmc.org", "maven.minecraftforge.net", "files.minecraftforge.net",
         "maven.neoforged.net", "repo.maven.apache.org", "repo1.maven.org", "optifine.net",
         "cdn.modrinth.com", "media.forgecdn.net", "edge.forgecdn.net", "mediafilez.forgecdn.net", "oss.pixelmap.cc",
+        "thingy.top",
         "authlib-injector.yushi.moe", "www.minecraft.net", "launchercontent.mojang.com", MIRROR);
     private static final Set<String> RUNTIME_HOSTS = Set.of(
         "api.adoptium.net", "github.com", "raw.githubusercontent.com", "codeload.github.com",

@@ -31,6 +31,8 @@ final class ForgeInstall {
     private static final Pattern MAVEN_VERSION = Pattern.compile("<version>([0-9A-Za-z.+_-]+)</version>");
     private static final Pattern VARIABLE = Pattern.compile("\\{([^{}]+)\\}");
     private static final String SHA1 = "[a-fA-F0-9]{40}";
+    private static volatile String bundledForge;
+    private static volatile String bundledNeo;
     private final GameDownloads downloads;
 
     ForgeInstall(GameDownloads downloads) { this.downloads = downloads; }
@@ -41,8 +43,18 @@ final class ForgeInstall {
         Path cache = GameFiles.target(root, "cache/loader-catalogs/" + loader + "-maven.xml");
         String metadata = Files.isRegularFile(cache) && Files.size(cache) < GameDownloads.DOCUMENT_LIMIT
             ? Files.readString(cache) : "";
-        if (refresh || metadata.isEmpty()
-            || Files.getLastModifiedTime(cache).toInstant().plus(Duration.ofHours(1)).isBefore(Instant.now())) {
+        boolean fresh = !metadata.isEmpty()
+            && Files.getLastModifiedTime(cache).toInstant().plus(Duration.ofHours(1)).isAfter(Instant.now());
+        if (!refresh && !fresh) {
+            String built = bundled(loader);
+            if (!built.isEmpty()) {
+                metadata = built;
+                try { JsonFiles.atomicWrite(cache, metadata.getBytes(StandardCharsets.UTF_8)); }
+                catch (IOException ignored) { /* Parsing the bundled index is enough. */ }
+                fresh = true;
+            }
+        }
+        if (!fresh) {
             try {
                 String fetched = downloads.textFile(source + "maven-metadata.xml", GameDownloads.DOCUMENT_LIMIT);
                 if (!MAVEN_VERSION.matcher(fetched).find()) throw new IOException("加载器安装目录无效");
@@ -59,6 +71,19 @@ final class ForgeInstall {
             if (loader.equals("neoforge") && neoMatches(game, entry)) result.add(entry);
         }
         return result;
+    }
+
+    private static String bundled(String loader) {
+        String value = loader.equals("forge") ? bundledForge : bundledNeo;
+        if (value != null) return value;
+        try (var stream = ForgeInstall.class.getResourceAsStream("/" + loader + "-maven.xml")) {
+            value = stream == null ? "" : new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException | RuntimeException ignored) {
+            value = "";
+        }
+        if (loader.equals("forge")) bundledForge = value;
+        else bundledNeo = value;
+        return value;
     }
 
     private static boolean neoMatches(String game, String version) {

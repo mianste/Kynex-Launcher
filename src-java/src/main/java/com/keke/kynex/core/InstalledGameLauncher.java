@@ -108,9 +108,18 @@ final class InstalledGameLauncher {
         } catch (IOException ignored) {
             // A read-only options file does not prevent the game from starting.
         }
+        var effectiveSettings = settings.deepCopy();
+        if (text(effectiveSettings, "jvmArgs", "").isBlank()) {
+            String globalJvmArgs = text(global, "jvmArgs", "");
+            if (!globalJvmArgs.isBlank()) effectiveSettings.addProperty("jvmArgs", globalJvmArgs);
+        }
+        if (text(effectiveSettings, "gameArgs", "").isBlank()) {
+            String globalGameArgs = text(global, "gameArgs", "");
+            if (!globalGameArgs.isBlank()) effectiveSettings.addProperty("gameArgs", globalGameArgs);
+        }
         var request = new JsonObject();
         request.add("version", version);
-        request.add("settings", settings);
+        request.add("settings", effectiveSettings);
         request.addProperty("loader", text(config, "loader", "vanilla"));
         if (authAgent != null) request.addProperty("authAgent", authAgent);
         request.add("variables", variables(root, gameDir, natives, game, classpath, version, global, account, session));

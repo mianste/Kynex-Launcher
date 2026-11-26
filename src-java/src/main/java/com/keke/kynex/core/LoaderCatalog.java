@@ -17,6 +17,7 @@ import static com.keke.kynex.core.LaunchManifest.object;
 
 final class LoaderCatalog {
     private static final Duration CACHE_AGE = Duration.ofHours(1);
+    private static final java.util.Map<String, JsonArray> BUNDLED = new java.util.concurrent.ConcurrentHashMap<>();
     private final GameDownloads downloads;
     private final ForgeInstall forge;
 
@@ -56,12 +57,19 @@ final class LoaderCatalog {
             }
             return result;
         }
-        JsonArray games = list(root, loader, "game", mirror, refresh);
+        boolean builtIn = bundledGame(loader, game);
+        JsonArray games = list(root, loader, "game", mirror, refresh, builtIn);
         if (games.asList().stream().noneMatch(row -> game.equals(text(object(row), "version", "")))) return result;
-        for (JsonElement release : list(root, loader, "loader", mirror, refresh)) {
+        for (JsonElement release : list(root, loader, "loader", mirror, refresh, builtIn)) {
             result.add(required(release.getAsJsonObject(), "version"));
         }
         return result;
+    }
+
+    private static boolean bundledGame(String loader, String game) {
+        JsonArray games = bundled(loader, "game");
+        if (games == null) return false;
+        return games.asList().stream().anyMatch(row -> game.equals(text(object(row), "version", "")));
     }
 
     JsonObject profile(JsonObject base, String game, String loader, String version, boolean mirror,
@@ -80,6 +88,11 @@ final class LoaderCatalog {
     }
 
     private JsonArray list(Path root, String loader, String type, boolean mirror, boolean refresh) throws IOException {
+        return list(root, loader, type, mirror, refresh, true);
+    }
+
+    private JsonArray list(Path root, String loader, String type, boolean mirror, boolean refresh,
+                           boolean allowBundled) throws IOException {
         String url = api(loader) + "/versions/" + type;
         Path cache = GameFiles.target(root, "cache/loader-catalogs/" + loader + "-" + type + ".json");
         if (!refresh) {
@@ -92,6 +105,14 @@ final class LoaderCatalog {
             } catch (IOException | JsonParseException ignored) {
                 // The source can replace an unavailable cache.
             }
+            if (allowBundled) {
+                JsonArray built = bundled(loader, type);
+                if (built != null) {
+                    try { JsonFiles.atomicWrite(cache, built.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)); }
+                    catch (IOException ignored) { /* The bundled catalogue is enough. */ }
+                    return built.deepCopy();
+                }
+            }
         }
         var response = downloads.document(url, mirror, "", LoaderCatalog::valid, () -> false);
         try {
@@ -100,6 +121,26 @@ final class LoaderCatalog {
             // A cache write failure does not invalidate the downloaded catalogue.
         }
         return response.value().getAsJsonArray();
+    }
+
+    private static JsonArray bundled(String loader, String type) {
+        String key = loader + "-" + type;
+        JsonArray value = BUNDLED.get(key);
+        if (value != null) return value;
+        try (var stream = LoaderCatalog.class.getResourceAsStream("/" + key + ".json")) {
+            if (stream != null) {
+                JsonElement parsed = JsonFiles.JSON.fromJson(
+                    new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8), JsonElement.class);
+                if (valid(parsed)) {
+                    value = parsed.getAsJsonArray();
+                    BUNDLED.put(key, value);
+                    return value;
+                }
+            }
+        } catch (IOException | RuntimeException ignored) {
+            // A missing bundled catalogue simply falls back to the network.
+        }
+        return null;
     }
 
     private static boolean valid(JsonElement value) {

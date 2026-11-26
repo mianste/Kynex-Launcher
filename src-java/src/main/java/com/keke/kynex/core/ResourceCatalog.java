@@ -33,7 +33,7 @@ final class ResourceCatalog {
     private static final String MODRINTH = "https://api.modrinth.com/v2";
     private static final String PIXELMAP = "https://goto.pixelmap.cc/api/open/v1/maps";
     private static final List<String> CURSEFORGE = List.of("https://api.curseforge.com/v1",
-        "https://mod.mcimirror.top/curseforge/v1", "https://api.curse.tools/v1");
+        "https://mod.mcimirror.top/curseforge/v1");
     private static final Map<String, String> CLASSES = Map.of("mod", "6", "modpack", "4471", "resourcepack", "12",
         "shader", "6552", "datapack", "6945", "world", "17");
     private static final Map<String, String> LOADERS = Map.of("forge", "1", "fabric", "4", "quilt", "5", "neoforge", "6");
@@ -90,27 +90,39 @@ final class ResourceCatalog {
         if ("all".equals(source)) {
             var pool = Executors.newVirtualThreadPerTaskExecutor();
             try {
-                var a = pool.submit(() -> searchSource(query, kind, kind.equals("world") ? "pixelmap" : "modrinth", page));
-                var b = pool.submit(() -> searchSource(query, kind, "curseforge", page));
+                var completion = new ExecutorCompletionService<JsonObject>(pool);
+                completion.submit(() -> searchSource(query, kind, kind.equals("world") ? "pixelmap" : "modrinth", page));
+                completion.submit(() -> searchSource(query, kind, "curseforge", page));
                 var warnings = new ArrayList<String>();
                 var hits = new JsonArray();
                 long total = 0;
-                for (var next : List.of(a, b)) {
+                long deadline = System.nanoTime() + Duration.ofMillis(2500).toNanos();
+                int received = 0;
+                for (int i = 0; i < 2; i++) {
+                    long remaining = deadline - System.nanoTime();
+                    var completed = remaining <= 0 ? null : completion.poll(remaining, java.util.concurrent.TimeUnit.NANOSECONDS);
+                    if (completed == null) {
+                        warnings.add("部分来源响应较慢，已先显示可用结果");
+                        break;
+                    }
+                    received++;
                     try {
-                        var result = next.get();
+                        var result = completed.get();
                         hits.addAll(array(result.get("hits")));
                         total += result.get("total").getAsLong();
                     } catch (ExecutionException error) {
                         warnings.add(error.getCause() instanceof IOException failure
                             ? NetworkFailure.describe(failure) : "来源连接失败");
                     }
+                    // A fast empty source should not hide a slower source with results.
+                    if (hits.isEmpty()) deadline = Math.max(deadline, System.nanoTime() + Duration.ofMillis(4000).toNanos());
                 }
-                if (warnings.size() == 2) throw new IOException("两个资源源都不可用：" + String.join("；", warnings));
+                if (received == 0 && !warnings.isEmpty()) throw new IOException("资源源暂无响应：" + String.join("；", warnings));
                 var ranked = new JsonArray();
                 hits.asList().stream().sorted(java.util.Comparator.comparingLong(
                     (JsonElement hit) -> number(object(hit), "downloads", 0)).reversed()).limit(30).forEach(ranked::add);
                 reply = result(ranked, total, page, 30);
-                if (!warnings.isEmpty()) reply.addProperty("warning", warnings.getFirst());
+                if (!warnings.isEmpty() && ranked.isEmpty()) reply.addProperty("warning", warnings.getFirst());
             } finally {
                 pool.shutdownNow();
             }
@@ -251,12 +263,12 @@ final class ResourceCatalog {
         boolean interactive = body == null && path.equals("/mods/search") && LaunchManifest.is(request.get("interactive"), true);
         boolean retry = LaunchManifest.is(request.get("force"), true);
         String key = text(request, "curseforgeKey", "").strip();
-        if (key.isEmpty()) key = System.getenv().getOrDefault("KYNEX_CURSEFORGE_KEY", "");
+        if (key.isEmpty()) key = System.getenv().getOrDefault("KYNEX_CURSEFORGE_KEY", "").strip();
         final String officialKey = key;
         var attempts = new ArrayList<Callable<JsonElement>>();
         if (!officialKey.isEmpty()) attempts.add(() -> body == null ? readSearch(CatalogNetwork.url(CURSEFORGE.get(0) + path, params), officialKey, interactive, retry)
             : network.post(CURSEFORGE.get(0) + path, officialKey, body));
-        for (String source : CURSEFORGE.subList(1, 3)) {
+        for (String source : CURSEFORGE.subList(1, CURSEFORGE.size())) {
             int delay = attempts.size() * (interactive ? 120 : 350);
             attempts.add(() -> {
                 Thread.sleep(delay);
@@ -268,11 +280,11 @@ final class ResourceCatalog {
         var reasons = new LinkedHashSet<String>();
         try {
             attempts.forEach(results::submit);
-            long deadline = System.nanoTime() + Duration.ofMillis(retry ? 8500 : 5400).toNanos();
+            boolean secondary = "all".equals(text(request, "source", "all"));
+            long deadline = System.nanoTime() + Duration.ofMillis(retry ? 22000 : secondary ? 6500 : 15000).toNanos();
             for (int i = 0; i < attempts.size(); i++) {
                 try {
-                    var completed = interactive ? results.poll(Math.max(0, deadline - System.nanoTime()), java.util.concurrent.TimeUnit.NANOSECONDS)
-                        : results.take();
+                    var completed = results.poll(Math.max(0, deadline - System.nanoTime()), java.util.concurrent.TimeUnit.NANOSECONDS);
                     if (completed == null) {
                         reasons.add("等待镜像响应超时");
                         break;

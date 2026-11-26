@@ -181,6 +181,9 @@ final class LaunchManifest {
             args.add("-cp");
             args.add(values.get("classpath"));
         }
+        for (String token : parseCustomArguments(text(settings, "jvmArgs", ""))) {
+            args.add(substitute(token, values));
+        }
         args.add(required(version, "mainClass"));
         if (Set.of("forge", "neoforge").contains(text(request, "loader", ""))) {
             args.replaceAll(arg -> arg.startsWith("-DignoreList=") && !List.of(arg.split(",", -1)).contains("client.jar")
@@ -194,9 +197,53 @@ final class LaunchManifest {
         }
         args.addAll(List.of("--width", Long.toString(bounded(settings, "width", 1280, 640, 7680)),
             "--height", Long.toString(bounded(settings, "height", 720, 360, 4320))));
+        for (String token : parseCustomArguments(text(settings, "gameArgs", ""))) {
+            args.add(substitute(token, values));
+        }
         var rows = new JsonArray();
         args.forEach(rows::add);
         return rows;
+    }
+
+    /**
+     * Splits user-entered JVM or game arguments on whitespace while keeping Windows
+     * backslashes intact and honoring single or double quotes.
+     */
+    static List<String> parseCustomArguments(String raw) {
+        if (raw == null || raw.isBlank()) return List.of();
+        var tokens = new ArrayList<String>();
+        var word = new StringBuilder();
+        boolean started = false;
+        char quote = 0;
+        for (int index = 0; index < raw.length(); index++) {
+            char character = raw.charAt(index);
+            if (character == '\0') throw new IllegalArgumentException("自定义启动参数包含无效字符");
+            if (quote != 0) {
+                if (quote == '"' && character == '\\' && index + 1 < raw.length() && raw.charAt(index + 1) == '"') {
+                    word.append('"');
+                    index++;
+                } else if (character == quote) {
+                    quote = 0;
+                } else {
+                    word.append(character);
+                }
+            } else if (character == '"' || character == '\'') {
+                started = true;
+                quote = character;
+            } else if (Character.isWhitespace(character)) {
+                if (started) {
+                    tokens.add(word.toString());
+                    word.setLength(0);
+                    started = false;
+                }
+            } else {
+                word.append(character);
+                started = true;
+            }
+        }
+        if (quote != 0) throw new IllegalArgumentException("自定义启动参数中存在未闭合的引号");
+        if (started) tokens.add(word.toString());
+        return tokens;
     }
 
     static List<String> legacyWords(String template) {

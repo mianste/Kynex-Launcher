@@ -19,7 +19,7 @@ final class CatalogNetwork {
     static final int SEARCH_RETRY_TIMEOUT = 7500;
     private static final int REQUEST_TIMEOUT = 8000;
     private static final Set<String> API_HOSTS = Set.of(
-        "api.modrinth.com", "api.curseforge.com", "mod.mcimirror.top", "api.curse.tools", "goto.pixelmap.cc");
+        "api.modrinth.com", "api.curseforge.com", "mod.mcimirror.top", "goto.pixelmap.cc");
     private static final Set<String> IMAGE_HOSTS = Set.of(
         "cdn.modrinth.com", "media.forgecdn.net", "mediafilez.forgecdn.net", "edge.forgecdn.net",
         "oss.pixelmap.cc", "images.weserv.nl", "wsrv.nl", "mod.mcimirror.top");

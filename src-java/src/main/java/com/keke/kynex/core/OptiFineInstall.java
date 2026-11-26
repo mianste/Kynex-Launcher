@@ -26,6 +26,7 @@ import static com.keke.kynex.core.LaunchManifest.object;
 final class OptiFineInstall {
     private static final String OFFICIAL = "https://optifine.net/";
     private static final String MIRROR = "https://bmclapi2.bangbang93.com/optifine/";
+    private static volatile JsonObject bundledIndex;
     private static final Pattern ROW = Pattern.compile("(?is)<tr\\b[^>]*>(.*?)</tr>");
     private static final Pattern RELEASE = Pattern.compile(
         "colMirror['\"][^>]*>.*?adloadx\\?f=((?:preview_)?OptiFine_([0-9.]+)_([A-Za-z0-9_]+)\\.jar)", Pattern.DOTALL);
@@ -47,6 +48,11 @@ final class OptiFineInstall {
             }
         }
         JsonArray result;
+        JsonArray builtIn = refresh ? null : bundled(game);
+        if (builtIn != null) {
+            try { JsonFiles.write(cache, builtIn); } catch (IOException ignored) { /* The bundled list is enough. */ }
+            return builtIn;
+        }
         try {
             String page = downloads.textFile(OFFICIAL + "downloads", GameDownloads.DOCUMENT_LIMIT);
             if (!page.contains("downloadTable")) throw new IOException("OptiFine 下载列表格式无效");
@@ -70,6 +76,21 @@ final class OptiFineInstall {
         }
         JsonFiles.write(cache, result);
         return result;
+    }
+
+    private static JsonArray bundled(String game) {
+        JsonObject index = bundledIndex;
+        if (index == null) {
+            try (var stream = OptiFineInstall.class.getResourceAsStream("/optifine-versions.json")) {
+                index = stream == null ? new JsonObject()
+                    : JsonFiles.JSON.fromJson(new String(stream.readAllBytes(), StandardCharsets.UTF_8), JsonObject.class);
+            } catch (IOException | RuntimeException ignored) {
+                index = new JsonObject();
+            }
+            bundledIndex = index;
+        }
+        if (index != null && index.get(game) instanceof JsonArray list) return list.deepCopy();
+        return null;
     }
 
     static JsonArray parse(String page, String game) {

@@ -33,7 +33,7 @@ import static com.keke.kynex.core.LaunchManifest.object;
 
 final class SchematicCatalog {
     private static final String CATALOG = "/schematic-catalog/";
-    private static final Set<String> DOWNLOAD_HOSTS = Set.of("oss.pixelmap.cc", "github.com", "raw.githubusercontent.com");
+    private static final Set<String> DOWNLOAD_HOSTS = Set.of("oss.pixelmap.cc", "thingy.top", "github.com", "raw.githubusercontent.com");
     private final GameDownloads downloads;
     private final ResourceCatalog resources;
     private final ResourceVersions versions;
@@ -95,20 +95,20 @@ final class SchematicCatalog {
         JsonObject saved = new JsonObject();
         try {
             if (Files.size(cache) <= GameDownloads.DOCUMENT_LIMIT) saved = object(JsonFiles.read(cache));
-            if (saved.get("hits") instanceof JsonArray && !is(query.get("force"), true)
+            if (saved.get("hits") instanceof JsonArray savedHits && !savedHits.isEmpty() && !is(query.get("force"), true)
                 && Files.getLastModifiedTime(cache).toInstant().plus(Duration.ofMinutes(10)).isAfter(Instant.now())) return saved;
         } catch (IOException | JsonParseException ignored) { /* Query live sources when the cache is unavailable. */ }
         try {
             JsonObject result = collect(root, query);
-            if (!is(result.get("partial"), true)) {
+            if (!is(result.get("partial"), true) && !result.getAsJsonArray("hits").isEmpty()) {
                 try { JsonFiles.write(cache, result); } catch (IOException ignored) { /* The current page can still be displayed. */ }
-            } else if (saved.get("hits") instanceof JsonArray) {
+            } else if (saved.get("hits") instanceof JsonArray savedHits && !savedHits.isEmpty()) {
                 saved.addProperty("partial", true);
                 return saved;
             }
             return result;
         } catch (IOException network) {
-            if (!(saved.get("hits") instanceof JsonArray)) throw network;
+            if (!(saved.get("hits") instanceof JsonArray savedHits) || savedHits.isEmpty()) throw network;
             saved.addProperty("partial", true);
             return saved;
         }
