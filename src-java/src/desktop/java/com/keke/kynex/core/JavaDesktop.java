@@ -259,11 +259,10 @@ public final class JavaDesktop {
                             if (!display.isDisposed()) display.asyncExec(() -> send(browser, frontend, result));
                         });
                     } else if ("dispatch".equals(command) && "install_update".equals(action)) {
-                        boolean silent = Boolean.parseBoolean(text(object(payload.get("payload")), "silent", "false"));
                         serviceRequests.execute(() -> {
                             var close = new java.util.concurrent.atomic.AtomicBoolean();
                             String result = response(request, () -> {
-                                JsonElement installed = updates.install(silent, () -> !tasks.isEmpty(), event -> display.asyncExec(() -> {
+                                JsonElement installed = updates.install(() -> !tasks.isEmpty(), event -> display.asyncExec(() -> {
                                     if (!browser.isDisposed() && frontend.owns(browser.getUrl()))
                                         browser.execute("window.kynexDesktopEvent('kynex-update-progress'," + IPC.toJson(event) + ")");
                                 }));

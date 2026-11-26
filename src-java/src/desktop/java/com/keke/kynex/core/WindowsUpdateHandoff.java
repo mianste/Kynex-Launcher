@@ -11,7 +11,7 @@ final class WindowsUpdateHandoff {
 
     private WindowsUpdateHandoff() {}
 
-    static void start(Path installer, String version) throws IOException {
+    static void start(Path installer, String version, Path failure) throws IOException {
         String command = ProcessHandle.current().info().command().orElse("");
         if (command.isBlank()) throw new IOException("无法确认启动器安装位置");
         Path launcher = Path.of(command).toRealPath();
@@ -21,11 +21,11 @@ final class WindowsUpdateHandoff {
         var shell = Path.of(System.getenv().getOrDefault("SystemRoot", "C:/Windows"),
             "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
         if (!Files.isRegularFile(shell)) throw new IOException("缺少 Windows 自动更新组件");
-        var handoff = process(shell, installer, launcher, version, INSTALL_KEY);
+        var handoff = process(shell, installer, launcher, version, INSTALL_KEY, failure);
         handoff.start();
     }
 
-    static ProcessBuilder process(Path shell, Path installer, Path launcher, String version, String installKey) {
+    static ProcessBuilder process(Path shell, Path installer, Path launcher, String version, String installKey, Path failure) {
         String encoded = java.util.Base64.getEncoder().encodeToString(SCRIPT.getBytes(java.nio.charset.StandardCharsets.UTF_16LE));
         var handoff = new ProcessBuilder(shell.toString(), "-NoLogo", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded);
         handoff.directory(installer.getParent().toFile());
@@ -36,6 +36,7 @@ final class WindowsUpdateHandoff {
         env.put("KYNEX_UPDATE_LAUNCHER", launcher.toString());
         env.put("KYNEX_UPDATE_VERSION", version.replaceFirst("^v", ""));
         env.put("KYNEX_UPDATE_REGISTRY", installKey);
+        env.put("KYNEX_UPDATE_FAILURE", failure.toString());
         env.put("KYNEX_UPDATE_PID", Long.toString(ProcessHandle.current().pid()));
         return handoff;
     }
@@ -47,7 +48,7 @@ final class WindowsUpdateHandoff {
         $registry = $env:KYNEX_UPDATE_REGISTRY
         $directory = Split-Path -LiteralPath $launcher
         $stage = Split-Path -LiteralPath $installer
-        $failure = Join-Path (Split-Path -LiteralPath $stage) 'last-install-failure.txt'
+        $failure = $env:KYNEX_UPDATE_FAILURE
         $safeToRestart = $false
         $result = 'failed'
         try {

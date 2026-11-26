@@ -13,9 +13,9 @@ import java.util.function.BiConsumer;
 import javax.net.ssl.HttpsURLConnection;
 
 final class ReleaseDownload {
-    private static final String ACCELERATOR = "https://gh-proxy.com/";
+    private static final List<String> ACCELERATORS = List.of("https://ghfast.top/", "https://gh-proxy.com/");
     private static final Set<String> GITHUB = Set.of("github.com", "raw.githubusercontent.com");
-    private static final Set<String> HOSTS = Set.of("github.com", "raw.githubusercontent.com", "gh-proxy.com",
+    private static final Set<String> HOSTS = Set.of("github.com", "raw.githubusercontent.com", "ghfast.top", "gh-proxy.com",
         "release-assets.githubusercontent.com", "objects.githubusercontent.com", "github-releases.githubusercontent.com");
     private ReleaseDownload() {}
 
@@ -26,7 +26,11 @@ final class ReleaseDownload {
     }
 
     static List<URI> locations(URI original) {
-        return GITHUB.contains(original.getHost()) ? List.of(URI.create(ACCELERATOR + original), original) : List.of(original);
+        if (!GITHUB.contains(original.getHost())) return List.of(original);
+        var urls = new java.util.ArrayList<URI>();
+        for (String accelerator : ACCELERATORS) urls.add(URI.create(accelerator + original));
+        urls.add(original);
+        return List.copyOf(urls);
     }
 
     static JsonObject manifest(URI url) throws IOException {

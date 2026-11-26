@@ -84,7 +84,7 @@ final class DesktopUpdates {
         throw new IOException("更新源暂不可用，请稍后重试");
     }
 
-    JsonElement install(boolean silent, BooleanSupplier busy, Consumer<JsonObject> notify) throws IOException, InterruptedException {
+    JsonElement install(BooleanSupplier busy, Consumer<JsonObject> notify) throws IOException, InterruptedException {
         Candidate candidate;
         synchronized (this) {
             if (pending == null) throw new IOException("请先检查新版本");
@@ -108,7 +108,7 @@ final class DesktopUpdates {
                     notify.accept(fields("stage", "verifying", "downloaded", 0, "total", 0));
                     try (var stream = Files.newInputStream(installer)) {
                         String comment = signature.verify(stream, candidate.signature());
-                        if (silent && !signedVersionMatches(comment, candidate.version())) {
+                        if (!signedVersionMatches(comment, candidate.version())) {
                             throw new IOException("更新包签名中的版本与更新清单不一致");
                         }
                     }
@@ -121,13 +121,13 @@ final class DesktopUpdates {
             }
             if (!verified) throw new IOException("更新下载或签名校验失败，未安装任何文件：" + lastError.getMessage(), lastError);
             long length = Files.size(installer);
-            if (silent && busy.getAsBoolean()) {
+            if (busy.getAsBoolean()) {
                 notify.accept(fields("stage", "waiting", "downloaded", length, "total", length));
                 while (busy.getAsBoolean()) Thread.sleep(500);
             }
             notify.accept(fields("stage", "installing", "downloaded", length, "total", length));
-            if (silent) WindowsUpdateHandoff.start(installer, candidate.version());
-            else new ProcessBuilder(installer.toString()).directory(stage.toFile()).start();
+            WindowsUpdateHandoff.start(installer, candidate.version(),
+                root.resolve("launcher-updates").resolve(WindowsUpdateHandoff.FAILURE));
             handedOff = true;
             pending = null;
             return new JsonPrimitive(true);
