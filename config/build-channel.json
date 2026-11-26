@@ -1,16 +1,15 @@
 {
   "channel": "stable",
-  "version": "2.0.1",
-  "displayVersion": "v2.0.1",
-  "label": "正式版 v2.0.1",
+  "version": "2.1.2",
+  "displayVersion": "v2.1.2",
+  "label": "正式版 v2.1.2",
   "repositoryUrl": "https://github.com/mianste/Kynex-Launcher",
   "supportUrl": "https://afdian.com/a/keke_657",
   "changes": [
-    "修复 Windows 任务栏预览左上角不显示启动器图标的问题。",
-    "选中「自动下载安装」后，启动器会自动检查新版、下载并安装，完成后重新打开，不用再点「下一步」。手动更新方式保留。"
+    "新增自定义启动参数"
   ],
   "productName": "Kynex Launcher Source",
   "identifier": "com.keke.kynex.source",
   "mainBinaryName": "Kynex Launcher Source",
-  "releaseTag": "v2.0.1"
+  "releaseTag": "v2.1.2"
 }
