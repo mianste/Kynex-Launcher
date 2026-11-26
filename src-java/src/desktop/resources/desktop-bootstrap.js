@@ -91,8 +91,9 @@
   window.isTauri = true;
 
   document.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0 || !event.target.closest("[data-tauri-drag-region]")) return;
-    const target = event.target;
+    if (event.button !== 0 || !(event.target instanceof Element)) return;
+    const target = event.target.closest("[data-tauri-drag-region]");
+    if (!target || event.target.closest("button, a, input, select, textarea, [contenteditable]")) return;
     let x = event.screenX;
     let y = event.screenY;
     target.setPointerCapture(event.pointerId);
