@@ -313,7 +313,7 @@ export function Toast() {
           onClick={() => useStore.setState({ message: "" })}
         >
           <Check size={16} />
-          {msg}
+          <span className="toast-message">{msg}</span>
         </div>
       ) : null}
     </MotionPresence>

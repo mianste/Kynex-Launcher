@@ -107,6 +107,14 @@
  *   threads: number,
  *   downloadSource: "official" | "bmclapi",
  *   gameLanguage: "zh_cn" | "en_us" | "none",
+ *   jvmArgs: string,
+ *   gameArgs: string,
+ *   holidayThemeEnabled: boolean,
+ *   holidayRegion: "global" | "zh" | "western",
+ *   holidayWindowDays: number,
+ *   holidayEffects: boolean,
+ *   holidayWallpaper: boolean,
+ *   holidayDismissed: Record<string, boolean>,
  * }} Settings
  */
 

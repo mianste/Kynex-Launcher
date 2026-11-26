@@ -4,9 +4,16 @@ import { defaultInstanceSettings } from "../lib/types";
 import { api, desktop, setGameDirectoryContext } from "../lib/bridge";
 import { previewInstances } from "../lib/mock";
 import { normalizeHexColor } from "../lib/appearance";
+import {
+  DEFAULT_HOLIDAY_SETTINGS,
+  normalizeHolidayDismissed,
+  normalizeHolidayRegion,
+  normalizeHolidayWindowDays,
+} from "../lib/holidays";
 import { useModUpdateState } from "../lib/modUpdateState";
 export const initialSettings = {
   ...defaultInstanceSettings,
+  ...DEFAULT_HOLIDAY_SETTINGS,
   updateMode: "manual",
   checkUpdatesOnStartup: true,
   accent: "#3D7C88",
@@ -19,6 +26,8 @@ export const initialSettings = {
   threads: 8,
   downloadSource: "bmclapi",
   gameLanguage: "zh_cn",
+  jvmArgs: "",
+  gameArgs: "",
 };
 const allowed = [
   "home",
@@ -179,7 +188,7 @@ export const useStore = create()(
     }),
     {
       name: "kynex-v092",
-      version: 7,
+      version: 9,
       migrate: (persisted, fromVersion) => {
         const old = persisted;
         if (old.settings) delete old.settings.jvm;
@@ -194,6 +203,14 @@ export const useStore = create()(
           settings: {
             ...initialSettings,
             ...old.settings,
+            jvmArgs:
+              typeof old.settings?.jvmArgs === "string"
+                ? old.settings.jvmArgs
+                : initialSettings.jvmArgs,
+            gameArgs:
+              typeof old.settings?.gameArgs === "string"
+                ? old.settings.gameArgs
+                : initialSettings.gameArgs,
             theme:
               old.settings?.theme === "dark" ||
               old.settings?.theme === "system" ||
@@ -214,6 +231,25 @@ export const useStore = create()(
                 ? (old.settings?.downloadSource ??
                   initialSettings.downloadSource)
                 : "bmclapi",
+            holidayThemeEnabled:
+              typeof old.settings?.holidayThemeEnabled === "boolean"
+                ? old.settings.holidayThemeEnabled
+                : initialSettings.holidayThemeEnabled,
+            holidayRegion: normalizeHolidayRegion(old.settings?.holidayRegion),
+            holidayWindowDays: normalizeHolidayWindowDays(
+              old.settings?.holidayWindowDays,
+            ),
+            holidayEffects:
+              typeof old.settings?.holidayEffects === "boolean"
+                ? old.settings.holidayEffects
+                : initialSettings.holidayEffects,
+            holidayWallpaper:
+              typeof old.settings?.holidayWallpaper === "boolean"
+                ? old.settings.holidayWallpaper
+                : initialSettings.holidayWallpaper,
+            holidayDismissed: normalizeHolidayDismissed(
+              old.settings?.holidayDismissed,
+            ),
           },
         };
       },

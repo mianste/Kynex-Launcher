@@ -38,6 +38,87 @@
   border-top: 1px solid var(--line);
 }
 
+.launch-settings-args {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 14px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.launch-arg-field {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.launch-arg-field .setting-control {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.launch-arg-field .setting-control > .btn {
+  flex: none;
+  white-space: nowrap;
+}
+
+.app .launch-settings-card .launch-arg-input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.launch-arg-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.launch-arg-presets button {
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--control-bg);
+  color: var(--text2);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.launch-arg-presets button:hover {
+  background: var(--control-hover);
+  color: var(--text);
+}
+
+.launch-arg-presets button.on {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text);
+}
+
+.launch-arg-presets button:focus-visible {
+  outline: 2px solid var(--workspace-focus);
+  outline-offset: 2px;
+}
+
+.launch-arg-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text3);
+}
+
+.launch-arg-error {
+  font-size: 11px;
+  color: var(--bad, #d64545);
+}
+
 .app .page-content .launch-settings-card .setting-row {
   grid-template-columns: minmax(0, 1fr);
   align-content: start;

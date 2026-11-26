@@ -82,13 +82,25 @@ export function Download() {
   const [, NamesReady] = useState(0);
   useEffect(() => {
     let live = true;
-    void loadModNames()
-      .then(() => {
-        if (live) NamesReady((n) => n + 1);
-      })
-      .catch(() => {});
+    let idleId;
+    const run = () => {
+      void loadModNames()
+        .then(() => {
+          if (live) NamesReady((n) => n + 1);
+        })
+        .catch(() => {});
+    };
+    const timer = window.setTimeout(() => {
+      if (window.requestIdleCallback) {
+        idleId = window.requestIdleCallback(run, { timeout: 600 });
+      } else {
+        run();
+      }
+    }, 260);
     return () => {
       live = false;
+      window.clearTimeout(timer);
+      if (idleId !== undefined) window.cancelIdleCallback(idleId);
     };
   }, []);
   const [kind, K] = useState("游戏本体");
@@ -731,7 +743,7 @@ export function Download() {
                   aria-label={`${kind}资源列表`}
                   aria-busy={searchBusy}
                 >
-                  {projects.map((p) => {
+                  {projects.map((p, n) => {
                     const localized = localizeProject(p);
                     return (
                       <article
@@ -744,9 +756,10 @@ export function Download() {
                         }
                       >
                         <ProjectIcon
-                          url={p.displayIcon}
-                          prepared
+                          url={p.displayIcon || p.icon_url}
+                          prepared={Boolean(p.displayIcon)}
                           name={localized.name}
+                          priority={n < 6}
                         />
                         <div className="project-copy">
                           <div className="project-title-line">

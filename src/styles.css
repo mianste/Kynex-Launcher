@@ -4367,6 +4367,61 @@ body {
   inset: 0;
   object-fit: cover;
 }
+.instance-cover-art {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: linear-gradient(135deg, #1b222b, #10141a);
+}
+.instance-cover-art.cover-forge {
+  background:
+    radial-gradient(circle at 72% 12%, rgb(243 162 59 / 42%), transparent 58%),
+    linear-gradient(135deg, #2b2117, #171a1f);
+}
+.instance-cover-art.cover-vanilla {
+  background:
+    radial-gradient(circle at 60% 12%, rgb(123 195 94 / 40%), transparent 58%),
+    linear-gradient(135deg, #1d301c, #10160f);
+}
+.instance-cover-art.cover-neoforge {
+  background:
+    radial-gradient(circle at 70% 10%, rgb(244 142 60 / 45%), transparent 58%),
+    linear-gradient(135deg, #2d2015, #16181c);
+}
+.instance-cover-art.cover-fabric {
+  background:
+    radial-gradient(circle at 65% 15%, rgb(219 196 150 / 38%), transparent 58%),
+    linear-gradient(135deg, #29241b, #15171a);
+}
+.instance-cover-art.cover-quilt {
+  background:
+    radial-gradient(circle at 65% 12%, rgb(190 150 230 / 42%), transparent 58%),
+    linear-gradient(135deg, #241d2d, #14151a);
+}
+.instance-cover-art.cover-optifine {
+  background:
+    radial-gradient(circle at 65% 12%, rgb(110 180 230 / 42%), transparent 58%),
+    linear-gradient(135deg, #172634, #10151b);
+}
+.instance-cover-art .instance-cover-backdrop {
+  position: absolute;
+  inset: -12%;
+  width: 124%;
+  height: 124%;
+  object-fit: cover;
+  opacity: 0.38;
+  filter: blur(24px) saturate(125%);
+  transform: scale(1.04);
+}
+.instance-cover-art .instance-cover-logo {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 20px rgb(0 0 0 / 45%));
+}
 .detail-cover {
   overflow: hidden;
   border-color: var(--glass-edge);
@@ -5176,9 +5231,32 @@ body {
 .release-changes { margin:0; padding-left:20px; display:grid; gap:14px; line-height:1.6; }
 .release-changes li::marker { color:var(--accent); }
 .release-remote-notes { white-space:pre-wrap; max-height:220px; overflow:auto; line-height:1.7; color:var(--text2); }
-.release-download { display:grid; gap:12px; margin-top:20px; font-size:12px; color:var(--text2); }
+.release-download { display:grid; gap:8px; padding:0 14px 13px; font-size:12px; color:color-mix(in srgb, var(--text) 82%, transparent); }
+.release-update-panel, .release-update-chip {
+  position:absolute; right:22px; bottom:108px; z-index:25;
+  border:1px solid var(--line); border-radius:14px;
+  /* Follows the UI opacity, with a small tint floor and blur so text stays readable. */
+  background:color-mix(in srgb, var(--surface) max(30%, var(--ui-alpha)), transparent);
+  box-shadow:0 10px 30px #0003; color:var(--text);
+}
+.release-update-panel { width:min(300px, calc(100% - 44px)); }
+.release-update-header { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 8px 7px 14px; font-size:13px; cursor:move; user-select:none; touch-action:none; }
+.release-update-header strong { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; pointer-events:none; }
+.release-update-hide { flex:none; display:grid; place-items:center; width:28px; height:28px; border-radius:7px; cursor:pointer; color:var(--text); opacity:.62; }
+.release-update-hide:hover { opacity:1; }
+.release-update-hide:hover, .release-update-chip:hover { background:var(--glass); color:var(--text); }
+.release-update-chip { display:flex; align-items:center; gap:7px; padding:8px 12px; font-size:12px; cursor:pointer; white-space:nowrap; }
+.release-update-chip-action { color:color-mix(in srgb, var(--text) 72%, transparent); font-size:11px; }
+/* The page disables backdrop blur globally for performance; this small
+   status card brings it back so page text behind reads as frosted glass. */
+.app .release-update-panel,
+.app .release-update-chip,
+.app .release-checking {
+  backdrop-filter:blur(24px) saturate(135%) !important;
+  -webkit-backdrop-filter:blur(24px) saturate(135%) !important;
+}
 .release-error { color:var(--red); font-size:12px; margin-top:16px; }
-.release-checking { position:fixed; bottom:44px; right:24px; display:flex; align-items:center; gap:8px; z-index:20; padding:10px 16px; border-radius:20px; background:var(--glass-medium); color:var(--text2); font-size:12px; }
+.release-checking { position:fixed; bottom:108px; right:24px; display:flex; align-items:center; gap:8px; z-index:20; padding:10px 16px; border-radius:20px; background:color-mix(in srgb, var(--surface) max(30%, var(--ui-alpha)), transparent); color:var(--text2); font-size:12px; }
 .about-links { display:flex; gap:12px; margin-top:24px; }
 
 .download-tasks{position:relative}.download-tasks>div{position:absolute;bottom:28px;left:0;min-width:320px;background: var(--glass);border:1px solid var(--border);border-radius:14px;padding:14px;box-shadow:0 12px 36px #0003}.download-tasks section{display:flex;justify-content:space-between;gap:18px;padding:8px}
@@ -5265,10 +5343,10 @@ body {
 }
 
 
-/* 壁纸明暗切换不要过渡，避免切页瞬间透出整张背景。 */
+/* 壁纸保持不透明且只做平滑缩放过渡，避免切页瞬间透出底层窗口。 */
 .wallpaper,
 .wallpaper-video {
-  transition: none !important;
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 

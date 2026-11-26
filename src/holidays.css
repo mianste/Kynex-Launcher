@@ -1,0 +1,889 @@
+/* Global holiday themes: per-holiday palettes (dark + light), component styling,
+   full 0%-100% --ui-alpha opacity compatibility, without altering Dynamic Island
+   nav geometry or adding heavy backdrop-filter blurs that slow down tab switches. */
+
+/* ---------- 1. Holiday Palette Tokens (Dark + Light) ---------- */
+
+:root[data-holiday] {
+  --holiday-glow: color-mix(in srgb, var(--accent) 30%, transparent);
+  --holiday-secondary: var(--cyan);
+  --holiday-gold: #f2ca74;
+  --holiday-ribbon: linear-gradient(
+    90deg,
+    transparent 2%,
+    color-mix(in srgb, var(--accent) 68%, transparent) 28%,
+    color-mix(in srgb, var(--holiday-gold) 78%, transparent) 50%,
+    color-mix(in srgb, var(--holiday-secondary) 68%, transparent) 72%,
+    transparent 98%
+  );
+}
+
+/* Christmas */
+:root[data-holiday="christmas"] {
+  --bg: #0c1715;
+  --surface: #12211e;
+  --elev: #192d29;
+  --line: #2d4c45;
+  --text: #f5f7f4;
+  --text2: #c6d6cf;
+  --text3: #9eb7ad;
+  --accent: #e05a54;
+  --cyan: #57b887;
+  --holiday-secondary: #57b887;
+  --holiday-gold: #f5cf7b;
+  --brand-green: #7ce6b3;
+  --brand-blue: #ff9892;
+  --launch-sheen: #fff4d6;
+}
+:root[data-theme="light"][data-holiday="christmas"] {
+  --bg: #eff4f1;
+  --surface: #fbfdfa;
+  --elev: #ebf2ee;
+  --line: #c7d9cf;
+  --text: #162a23;
+  --text2: #415c52;
+  --text3: #516f64;
+  --accent: #c23b3b;
+  --cyan: #2a7b57;
+  --holiday-secondary: #2a7b57;
+  --holiday-gold: #c99228;
+}
+
+/* New Year */
+:root[data-holiday="newyear"] {
+  --bg: #0b1120;
+  --surface: #121a2e;
+  --elev: #1a2540;
+  --line: #314266;
+  --text: #f4f6fb;
+  --text2: #c4cde0;
+  --text3: #9aa7c4;
+  --accent: #e8be66;
+  --cyan: #63b7e6;
+  --holiday-secondary: #63b7e6;
+  --holiday-gold: #ffe08a;
+  --brand-green: #ffe08a;
+  --brand-blue: #70c8ff;
+  --launch-sheen: #fff5d6;
+}
+:root[data-theme="light"][data-holiday="newyear"] {
+  --bg: #eef2f8;
+  --surface: #fafcff;
+  --elev: #e9eff8;
+  --line: #c9d5e8;
+  --text: #162238;
+  --text2: #445573;
+  --text3: #56688a;
+  --accent: #b58424;
+  --cyan: #2c6f9c;
+  --holiday-secondary: #2c6f9c;
+  --holiday-gold: #c99322;
+}
+
+/* Spring Festival */
+:root[data-holiday="springfestival"] {
+  --bg: #1c0c0d;
+  --surface: #291314;
+  --elev: #361a1c;
+  --line: #5b2c2e;
+  --text: #fbf4ef;
+  --text2: #dfcbc4;
+  --text3: #bfa39a;
+  --accent: #e85348;
+  --cyan: #f2c15a;
+  --holiday-secondary: #f2c15a;
+  --holiday-gold: #ffd670;
+  --brand-green: #ffd670;
+  --brand-blue: #ff7c70;
+  --launch-sheen: #fff0c2;
+}
+:root[data-theme="light"][data-holiday="springfestival"] {
+  --bg: #f8f0eb;
+  --surface: #fffaf7;
+  --elev: #f6eae3;
+  --line: #e4c6ba;
+  --text: #331715;
+  --text2: #6b413c;
+  --text3: #7d514b;
+  --accent: #c82d2d;
+  --cyan: #b87a14;
+  --holiday-secondary: #b87a14;
+  --holiday-gold: #c98612;
+}
+
+/* Valentine's Day */
+:root[data-holiday="valentines"] {
+  --bg: #1a0f16;
+  --surface: #261620;
+  --elev: #331e2b;
+  --line: #523146;
+  --text: #fcf3f7;
+  --text2: #dfc6d4;
+  --text3: #ba9cb0;
+  --accent: #eb7aa4;
+  --cyan: #f5a6c2;
+  --holiday-secondary: #f5a6c2;
+  --holiday-gold: #ffd1e1;
+  --brand-green: #ffb5d0;
+  --brand-blue: #f588b3;
+  --launch-sheen: #ffeaf2;
+}
+:root[data-theme="light"][data-holiday="valentines"] {
+  --bg: #f9eff4;
+  --surface: #fffafc;
+  --elev: #f6e7ef;
+  --line: #e4c6d5;
+  --text: #331826;
+  --text2: #6c4358;
+  --text3: #7f536a;
+  --accent: #c74276;
+  --cyan: #df6896;
+  --holiday-secondary: #df6896;
+  --holiday-gold: #d45d8e;
+}
+
+/* Easter */
+:root[data-holiday="easter"] {
+  --bg: #101917;
+  --surface: #182623;
+  --elev: #213430;
+  --line: #37544d;
+  --text: #f3f9f5;
+  --text2: #c5dad0;
+  --text3: #9eb9ad;
+  --accent: #7ad18a;
+  --cyan: #b692eb;
+  --holiday-secondary: #b692eb;
+  --holiday-gold: #f5d77a;
+  --brand-green: #8ee8a0;
+  --brand-blue: #c8a8ff;
+  --launch-sheen: #f3ffe8;
+}
+:root[data-theme="light"][data-holiday="easter"] {
+  --bg: #eff7f1;
+  --surface: #fbfefb;
+  --elev: #e8f3ec;
+  --line: #c7dfd0;
+  --text: #183024;
+  --text2: #466656;
+  --text3: #577867;
+  --accent: #368a52;
+  --cyan: #7a53b8;
+  --holiday-secondary: #7a53b8;
+  --holiday-gold: #c99c28;
+}
+
+/* Minecraft Anniversary */
+:root[data-holiday="mc-anniversary"] {
+  --bg: #0f1810;
+  --surface: #172418;
+  --elev: #203121;
+  --line: #365237;
+  --text: #f3f8f1;
+  --text2: #c6d8c3;
+  --text3: #9eb79a;
+  --accent: #73c954;
+  --cyan: #c99254;
+  --holiday-secondary: #c99254;
+  --holiday-gold: #d8ff66;
+  --brand-green: #8ef26b;
+  --brand-blue: #e0aa69;
+  --launch-sheen: #ecffd4;
+}
+:root[data-theme="light"][data-holiday="mc-anniversary"] {
+  --bg: #eef5ea;
+  --surface: #fafdf8;
+  --elev: #e7f1e2;
+  --line: #c5d9bd;
+  --text: #192d17;
+  --text2: #466143;
+  --text3: #567352;
+  --accent: #3c8c2a;
+  --cyan: #8b5e34;
+  --holiday-secondary: #8b5e34;
+  --holiday-gold: #78a818;
+}
+
+/* Dragon Boat Festival */
+:root[data-holiday="dragonboat"] {
+  --bg: #0c1817;
+  --surface: #132524;
+  --elev: #1b3332;
+  --line: #2f5452;
+  --text: #f1f9f7;
+  --text2: #c0dbd5;
+  --text3: #95b8b1;
+  --accent: #57c29e;
+  --cyan: #88d47b;
+  --holiday-secondary: #88d47b;
+  --holiday-gold: #b7ebd1;
+  --brand-green: #79e6be;
+  --brand-blue: #9ce68c;
+  --launch-sheen: #e3fff4;
+}
+:root[data-theme="light"][data-holiday="dragonboat"] {
+  --bg: #ebf5f2;
+  --surface: #f9fdfb;
+  --elev: #e3f1ec;
+  --line: #bedbd1;
+  --text: #142e29;
+  --text2: #3d635b;
+  --text3: #4e756d;
+  --accent: #1e7f63;
+  --cyan: #4a8f3e;
+  --holiday-secondary: #4a8f3e;
+  --holiday-gold: #369977;
+}
+
+/* Mid-Autumn Festival */
+:root[data-holiday="midautumn"] {
+  --bg: #0d1324;
+  --surface: #151e36;
+  --elev: #1e2a4a;
+  --line: #364873;
+  --text: #f6f5ef;
+  --text2: #c8cde0;
+  --text3: #9da6c2;
+  --accent: #f0c36d;
+  --cyan: #779ce0;
+  --holiday-secondary: #779ce0;
+  --holiday-gold: #ffe59e;
+  --brand-green: #ffe59e;
+  --brand-blue: #8cb2f5;
+  --launch-sheen: #fff6d9;
+}
+:root[data-theme="light"][data-holiday="midautumn"] {
+  --bg: #f1f2f7;
+  --surface: #fcfcfe;
+  --elev: #eaecf5;
+  --line: #cbd1e3;
+  --text: #192238;
+  --text2: #4a5570;
+  --text3: #5c6885;
+  --accent: #b57d1d;
+  --cyan: #3b5f9e;
+  --holiday-secondary: #3b5f9e;
+  --holiday-gold: #c98d1e;
+}
+
+/* Halloween */
+:root[data-holiday="halloween"] {
+  --bg: #140e1c;
+  --surface: #1e1529;
+  --elev: #291d38;
+  --line: #493461;
+  --text: #f8f3fc;
+  --text2: #d2c3df;
+  --text3: #ac99bd;
+  --accent: #f28c38;
+  --cyan: #a876e8;
+  --holiday-secondary: #a876e8;
+  --holiday-gold: #ffba66;
+  --brand-green: #ff9c47;
+  --brand-blue: #bd8cff;
+  --launch-sheen: #ffe7c4;
+}
+:root[data-theme="light"][data-holiday="halloween"] {
+  --bg: #f5eff9;
+  --surface: #fdfaff;
+  --elev: #efe6f6;
+  --line: #d6c3e6;
+  --text: #271836;
+  --text2: #5c4573;
+  --text3: #6e5587;
+  --accent: #c85b12;
+  --cyan: #6f42b5;
+  --holiday-secondary: #6f42b5;
+  --holiday-gold: #d9771c;
+}
+
+/* Thanksgiving */
+:root[data-holiday="thanksgiving"] {
+  --bg: #1a110b;
+  --surface: #261910;
+  --elev: #332216;
+  --line: #573b27;
+  --text: #faf4ed;
+  --text2: #dbc9b8;
+  --text3: #b8a08a;
+  --accent: #e29046;
+  --cyan: #cf6244;
+  --holiday-secondary: #cf6244;
+  --holiday-gold: #f5c26b;
+  --brand-green: #f5c26b;
+  --brand-blue: #e87a5a;
+  --launch-sheen: #ffedd1;
+}
+:root[data-theme="light"][data-holiday="thanksgiving"] {
+  --bg: #f8f1e8;
+  --surface: #fffbf6;
+  --elev: #f4e8db;
+  --line: #e0cab3;
+  --text: #301d11;
+  --text2: #694935;
+  --text3: #7d5b45;
+  --accent: #b55d1b;
+  --cyan: #993d27;
+  --holiday-secondary: #993d27;
+  --holiday-gold: #c98622;
+}
+
+/* ---------- 2. Full 0%-100% --ui-alpha Opacity Compatibility (No Extra Blur Lag) ---------- */
+
+:root[data-holiday] {
+  --glass: color-mix(in srgb, var(--surface) var(--ui-alpha), transparent);
+  --glass-thin: color-mix(
+    in srgb,
+    var(--surface) calc(var(--ui-alpha) * 0.72),
+    transparent
+  );
+  --glass-medium: color-mix(in srgb, var(--surface) var(--ui-alpha), transparent);
+  --glass-thick: color-mix(
+    in srgb,
+    var(--elev) clamp(0%, calc(var(--ui-alpha) * 1.15), 100%),
+    transparent
+  );
+  --glass-edge: color-mix(in srgb, var(--accent) 26%, var(--line));
+  --glass-highlight: color-mix(in srgb, var(--holiday-gold) 14%, transparent);
+}
+
+/* Replace dark theme's hardcoded opaque rgb panels with --glass so the opacity
+   slider works from 0% to 100%, WITHOUT forcing heavy backdrop-filter onto cards. */
+:root[data-holiday] .app :is(
+  .nav,
+  .window-controls,
+  .taskbar,
+  .card,
+  .instance-card,
+  .project-card,
+  .resource-row,
+  .selected-account,
+  .server-library-card,
+  .news-feature,
+  .news-card,
+  .other-game,
+  .skin-upload-area,
+  .skin-saved-entry,
+  .launch-card,
+  .home-popover,
+  .home-account-trigger,
+  .home-launch-options,
+  .settings-sidebar,
+  .modal,
+  .music-panel,
+  .assistant-panel,
+  .assistant-orb
+) {
+  background: var(--glass);
+}
+
+/* Match original acrylic.css: the wallpaper itself is ALWAYS 100% opaque on
+   every page so lowering --ui-alpha reveals the launcher wallpaper, NEVER the
+   Windows desktop behind the window. */
+:root[data-holiday] .app > .wallpaper {
+  opacity: 1;
+  filter: none;
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+:root[data-holiday] .app:not(.page-home) > .wallpaper {
+  transform: scale(1.045);
+}
+:root[data-holiday] .app.page-home > .wallpaper {
+  transform: scale(1);
+}
+
+/* Smooth GPU-composited scrim curtain: dissolves gracefully when returning to
+   Home instead of snapping away abruptly. */
+:root[data-holiday] .app > .scrim {
+  background: color-mix(
+    in srgb,
+    var(--bg) calc(var(--ui-alpha) * 0.64),
+    transparent
+  );
+  opacity: 1;
+  transition: opacity 460ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity;
+}
+:root[data-holiday] .app.page-home > .scrim {
+  opacity: 0;
+}
+
+/* Live holiday wallpaper canvas: visible & animating across ALL pages,
+   with subtle depth zoom ease when switching to/from Home. */
+.app > .holiday-live-wallpaper {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  display: block;
+  opacity: 1;
+  transform: scale(1.045);
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+.app.page-home > .holiday-live-wallpaper {
+  transform: scale(1);
+}
+:root[data-holiday-effects="false"] .app > .holiday-live-wallpaper {
+  display: none;
+}
+
+/* ---------- 3. Festive Component Accents (Keeping Original Dynamic Island Intact) ---------- */
+
+.holiday-fx-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 92;
+  pointer-events: none;
+}
+
+/* Speed up dense Download version list: only paint visible rows and skip
+   redundant per-row backdrop blurs across 150+ buttons and badges. */
+.app .timeline .version-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 56px;
+}
+.app .timeline .version-row :is(.btn, .badge) {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Keep .nav's exact original position, size, and centered Dynamic Island shape;
+   only tint its active pill, subtle edge highlight, and perched holiday charms. */
+:root[data-holiday] .app .navigation-notch {
+  border: 1px solid color-mix(in srgb, var(--holiday-gold) 36%, var(--line));
+  border-top: 0;
+  color: color-mix(in srgb, var(--holiday-gold) 72%, var(--text2));
+}
+:root[data-holiday] .app .nav {
+  box-shadow:
+    0 10px 28px color-mix(in srgb, var(--accent) 18%, rgb(0 0 0 / 26%)),
+    inset 0 1px 0 color-mix(in srgb, var(--holiday-gold) 44%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--accent) 32%, var(--line));
+}
+:root[data-holiday] .app .nav > button.on {
+  background: color-mix(
+    in srgb,
+    var(--accent) calc(var(--ui-alpha) * 0.22 + 8%),
+    var(--glass)
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 52%, transparent);
+}
+
+/* Dynamic Island Holiday Decorations (zero layout/width impact) */
+.holiday-island-decor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  overflow: visible;
+}
+.holiday-island-decor .hid-top-trim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -10px;
+  width: 100%;
+  height: 14px;
+  overflow: visible;
+}
+.holiday-island-decor .hid-trim-tall {
+  top: -22px;
+  height: 30px;
+}
+.holiday-island-decor .hid-charm {
+  position: absolute;
+  overflow: visible;
+  filter: drop-shadow(0 2px 5px rgb(0 0 0 / 32%));
+}
+.holiday-island-decor .hid-corner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  overflow: visible;
+  filter: drop-shadow(0 1px 3px rgb(0 0 0 / 28%));
+}
+.holiday-island-decor .hid-bl {
+  left: -6px;
+  bottom: -6px;
+}
+.holiday-island-decor .hid-br {
+  right: -6px;
+  bottom: -6px;
+}
+/* Perched top-left / top-right charms sit above the pill edge without covering text */
+.holiday-island-decor .hid-left {
+  left: -10px;
+  top: -23px;
+  width: 42px;
+  height: 32px;
+}
+.holiday-island-decor .hid-right {
+  right: -10px;
+  top: -23px;
+  width: 42px;
+  height: 34px;
+}
+.holiday-island-decor .hid-santa-hat {
+  left: -11px;
+  top: -22px;
+  width: 42px;
+  height: 32px;
+  transform: rotate(-10deg);
+}
+.holiday-island-decor .hid-christmas-holly {
+  right: -12px;
+  top: -16px;
+  width: 46px;
+  height: 38px;
+}
+.holiday-island-decor .hid-sf-knot {
+  top: -18px;
+  width: 30px;
+  height: 26px;
+}
+.holiday-island-decor .hid-tg-leaves {
+  left: -12px;
+  top: -23px;
+  width: 48px;
+  height: 36px;
+}
+.holiday-island-decor .hid-tg-harvest {
+  right: -12px;
+  top: -23px;
+  width: 50px;
+  height: 36px;
+}
+.holiday-island-decor .hid-easter-ears {
+  left: -4px;
+  top: -21px;
+  width: 42px;
+  height: 34px;
+}
+.holiday-island-decor .hid-easter-egg {
+  right: -8px;
+  top: -23px;
+  width: 44px;
+  height: 36px;
+}
+.holiday-island-decor .hid-mc-cake {
+  left: -7px;
+  top: -22px;
+  width: 36px;
+  height: 32px;
+}
+.holiday-island-decor .hid-mc-gem {
+  right: -8px;
+  top: -22px;
+  width: 38px;
+  height: 34px;
+}
+.holiday-island-decor .hid-hal-hat {
+  left: -6px;
+  top: -22px;
+  width: 34px;
+  height: 28px;
+  transform: rotate(-8deg);
+}
+.holiday-island-decor .hid-hal-pumpkin {
+  right: -10px;
+  top: -23px;
+  width: 44px;
+  height: 36px;
+}
+.holiday-island-decor .hid-ma-moon {
+  left: -10px;
+  top: -23px;
+  width: 46px;
+  height: 34px;
+}
+.holiday-island-decor .hid-ma-osmanthus {
+  right: -10px;
+  top: -22px;
+  width: 46px;
+  height: 34px;
+}
+.holiday-island-decor .hid-db-zongzi {
+  right: -10px;
+  top: -22px;
+  width: 44px;
+  height: 34px;
+}
+/* Outer side hanging charms (lanterns, zongzi, acorn, bauble, spiderweb) */
+.holiday-island-decor .hid-left-hang {
+  left: -19px;
+  top: 9px;
+  width: 26px;
+  height: 42px;
+  transform-origin: 50% 0%;
+}
+.holiday-island-decor .hid-hal-web {
+  left: -18px;
+  top: 9px;
+  width: 32px;
+  height: 42px;
+}
+.holiday-island-decor .hid-right-hang {
+  right: -19px;
+  top: 9px;
+  width: 28px;
+  height: 44px;
+  transform-origin: 50% 0%;
+}
+
+/* Gentle decorative animations (only when holidayEffects is enabled) */
+.holiday-island-decor[data-animated="true"] .hid-sway-left {
+  animation: kxl-hid-sway 3.6s ease-in-out infinite;
+}
+.holiday-island-decor[data-animated="true"] .hid-sway-right {
+  animation: kxl-hid-sway 3.9s ease-in-out -1.6s infinite;
+}
+.holiday-island-decor[data-animated="true"] .hid-sway-gentle {
+  animation: kxl-hid-sway-soft 3.2s ease-in-out infinite;
+}
+.holiday-island-decor[data-animated="true"] .hid-twinkle {
+  animation: kxl-hid-twinkle 2.4s ease-in-out infinite;
+}
+.holiday-island-decor[data-animated="true"] .hid-d2 {
+  animation-delay: -0.8s;
+}
+.holiday-island-decor[data-animated="true"] .hid-d3 {
+  animation-delay: -1.6s;
+}
+.holiday-island-decor[data-animated="true"] .hid-pulse-soft {
+  animation: kxl-hid-pulse 2.8s ease-in-out infinite;
+}
+
+@keyframes kxl-hid-sway {
+  0%, 100% { transform: rotate(-4.5deg); }
+  50% { transform: rotate(4.5deg); }
+}
+@keyframes kxl-hid-sway-soft {
+  0%, 100% { transform: rotate(-3.5deg); }
+  50% { transform: rotate(3.5deg); }
+}
+@keyframes kxl-hid-twinkle {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+@keyframes kxl-hid-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.92; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+
+/* Home Launch Button & Account Avatar */
+:root[data-holiday] .app .home-launch-button {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) clamp(38%, var(--ui-alpha), 100%), transparent),
+    color-mix(in srgb, var(--holiday-secondary) clamp(34%, var(--ui-alpha), 100%), transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--holiday-gold) 44%, transparent);
+  border-right: 0;
+  border-radius: 16px 0 0 16px;
+  box-shadow:
+    0 8px 22px color-mix(in srgb, var(--accent) 28%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 28%, transparent);
+}
+:root[data-holiday] .app .home-launch-button::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--holiday-ribbon);
+  pointer-events: none;
+}
+:root[data-holiday="christmas"] .app .home-launch-button::before {
+  height: 7px;
+  background: radial-gradient(
+      18px 8px at 12% 0%,
+      rgb(255 255 255 / 94%) 58%,
+      transparent 74%
+    ),
+    radial-gradient(
+      24px 9px at 38% 0%,
+      rgb(255 255 255 / 92%) 58%,
+      transparent 74%
+    ),
+    radial-gradient(
+      20px 8px at 66% 0%,
+      rgb(255 255 255 / 94%) 58%,
+      transparent 74%
+    ),
+    radial-gradient(
+      18px 7px at 90% 0%,
+      rgb(255 255 255 / 90%) 58%,
+      transparent 74%
+    );
+}
+:root[data-holiday] .app .home-launch-options {
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line));
+  border-left: 0;
+  border-radius: 0 16px 16px 0;
+}
+:root[data-holiday] .app .home-account-trigger {
+  border: 1.5px solid color-mix(in srgb, var(--holiday-gold) 48%, var(--accent));
+}
+:root[data-holiday] .app .home-popover {
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
+}
+
+/* Cards, Buttons, Inputs, Switches, Chips, Tabs, Badges, Progress, Toast */
+:root[data-holiday] .app :is(.card, .instance-card, .project-card, .news-card, .news-feature, .modal) {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
+}
+:root[data-holiday] .app .btn {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
+}
+:root[data-holiday] .app .btn:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--accent) 56%, var(--line));
+}
+:root[data-holiday] .app .btn.primary {
+  background: color-mix(
+    in srgb,
+    var(--accent) clamp(35%, var(--ui-alpha), 100%),
+    transparent
+  );
+  border-color: color-mix(in srgb, var(--holiday-gold) 36%, transparent);
+}
+:root[data-holiday] .app :is(.input, .search, .instance-select-trigger) {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+}
+:root[data-holiday] .app :is(.input, .search):focus-within {
+  border-color: var(--accent);
+}
+:root[data-holiday] .app .switch.on {
+  border-color: color-mix(in srgb, var(--accent) 62%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--accent) calc(var(--ui-alpha) * 0.34 + 14%),
+    var(--glass)
+  );
+}
+:root[data-holiday] .app .chip.on,
+:root[data-holiday] .app .tabs button.on {
+  border-color: color-mix(in srgb, var(--accent) 54%, transparent);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+:root[data-holiday] .app .badge {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--line));
+}
+:root[data-holiday] .app .toast {
+  border: 1px solid color-mix(in srgb, var(--holiday-gold) 44%, var(--accent));
+}
+:root[data-holiday] .app progress::-webkit-progress-value {
+  background: linear-gradient(90deg, var(--accent), var(--holiday-gold));
+}
+
+/* Taskbar holiday badge */
+:root[data-holiday] .app > .taskbar {
+  border-top-color: color-mix(in srgb, var(--accent) 32%, var(--line));
+}
+.taskbar .holiday-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text);
+  background: color-mix(
+    in srgb,
+    var(--accent) calc(var(--ui-alpha) * 0.2 + 10%),
+    transparent
+  );
+  border: 1px solid color-mix(in srgb, var(--holiday-gold) 40%, var(--accent));
+}
+.taskbar .holiday-pill svg {
+  color: var(--holiday-gold, var(--accent));
+}
+
+/* ---------- 4. Global Nav Icon Hover Wiggle & Lightweight Per-Holiday Feedback ---------- */
+
+.app .nav > button:not(.brand):hover svg {
+  animation: kxl-nav-icon-wiggle 380ms ease-in-out;
+}
+:root[data-holiday="valentines"][data-holiday-effects="true"] .app .home-launch-button:not(:disabled):hover {
+  animation: kxl-heartbeat 650ms ease-in-out;
+}
+:root[data-holiday="easter"][data-holiday-effects="true"] .app :is(.btn, .chip, .nav > button):not(:disabled):active {
+  transform: scale(0.95) translateY(1px);
+}
+:root[data-holiday="newyear"][data-holiday-effects="true"] .app .nav > button.on svg {
+  animation: kxl-spark-pop 340ms var(--motion-spring);
+}
+
+@keyframes kxl-nav-icon-wiggle {
+  0% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(-9deg) scale(1.08); }
+  55% { transform: rotate(8deg) scale(1.08); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+@keyframes kxl-spark-pop {
+  0% { transform: scale(0.78) rotate(-12deg); }
+  60% { transform: scale(1.1) rotate(4deg); }
+  100% { transform: none; }
+}
+@keyframes kxl-heartbeat {
+  0%, 100% { transform: translateY(-1px) scale(1); }
+  30% { transform: translateY(-1px) scale(1.028); }
+  55% { transform: translateY(-1px) scale(0.992); }
+  78% { transform: translateY(-1px) scale(1.018); }
+}
+
+/* ---------- 5. Settings Holiday Panel Styles ---------- */
+
+.holiday-status-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 13px 15px;
+  margin-bottom: 12px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: color-mix(
+    in srgb,
+    var(--accent) calc(var(--ui-alpha) * 0.14 + 6%),
+    var(--glass)
+  );
+}
+.holiday-status-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.holiday-status-info strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+.holiday-status-info span {
+  font-size: 12px;
+  color: var(--text2);
+}
+.holiday-status-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .holiday-fx-canvas {
+    display: none;
+  }
+  .holiday-island-decor * {
+    animation: none !important;
+  }
+}

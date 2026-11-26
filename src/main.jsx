@@ -11,6 +11,8 @@ import "./appearance.css";
 import "./interaction-motion.css";
 import "./window-corners.css";
 import "./workspace.css";
+import "./motion-ui.css";
+import "./holidays.css";
 class ErrorBoundary extends React.Component {
   state = { error: "" };
   static getDerivedStateFromError(error) {

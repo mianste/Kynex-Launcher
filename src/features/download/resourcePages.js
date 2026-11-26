@@ -1,6 +1,5 @@
 import { CatalogCache, appendCatalog, catalogCache } from "./catalogCache";
 import { resolveResourceQuery } from "./modLocalization";
-import { prepareCatalogIcons } from "./ProjectIcon";
 
 const sourceNames = {
   modrinth: "Modrinth",
@@ -61,26 +60,18 @@ export const resourcePages = new CatalogCache(
       source: selectedSource,
       interactive: true,
     }));
-    let chosen = false;
     const requests = payloads.map(async (payload) => {
       const value = await fetchSource(payload, force === true);
-      const hits = value.hits ?? [];
       return {
         ...value,
-        hits,
-        icons: chosen
-          ? undefined
-          : prepareCatalogIcons(hits, 1800).catch(() => hits),
+        hits: value.hits ?? [],
       };
     });
     const results = await collectCatalogSources(requests, force === true);
-    chosen = true;
-    const prepared = await Promise.all(
-      results.map(async (result) => {
-        if (result.value) return { ...result, hits: await result.value.icons };
-        return result;
-      }),
-    );
+    const prepared = results.map(({ index, value, reason }) => {
+      if (!value) return { index, reason };
+      return { index, value, reason, hits: value.hits ?? [] };
+    });
     let projects = [];
     let total = 0;
     let pages = 1;

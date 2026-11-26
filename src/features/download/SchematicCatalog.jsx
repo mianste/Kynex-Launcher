@@ -221,7 +221,13 @@ export function SchematicCatalog({ active = true, instanceId, query, pixelmapSlu
                       </div>
                     </article>
                   ))}
-                {!results.hits.length && <Empty title="没有可下载的投影" />}
+                {!results.hits.length && (
+                  <Empty title="没有可下载的投影">
+                    <Button onClick={() => setRetry((n) => n + 1)}>
+                      重新加载
+                    </Button>
+                  </Empty>
+                )}
               </div>
               {project && !query.trim() ? (
                 <Button onClick={() => setProject(undefined)}>

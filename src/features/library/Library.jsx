@@ -281,6 +281,10 @@ export function InstanceDetail() {
   const s = useStore();
   const i = s.instances.find((i) => i.id === s.selected);
   const [tab, T] = useState("概览");
+  const vanilla = i?.loader === "vanilla";
+  useEffect(() => {
+    if (vanilla && ["Mod", "光影", "投影"].includes(tab)) T("概览");
+  }, [vanilla, i?.id, tab]);
   useEffect(() => {
     if (i) warmInstanceResources(i.id, s.directoryId, s.settings.curseforgeKey);
   }, [i?.id, s.directoryId, s.settings.curseforgeKey]);
@@ -1002,12 +1006,12 @@ export function InstanceDetail() {
       <Tabs
         items={[
           "概览",
-          "Mod",
+          ...(vanilla ? [] : ["Mod"]),
           "资源包",
           "存档",
-          "光影",
+          ...(vanilla ? [] : ["光影"]),
           "数据包",
-          "投影",
+          ...(vanilla ? [] : ["投影"]),
           "设置",
         ]}
         value={tab}

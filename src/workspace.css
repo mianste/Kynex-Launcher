@@ -179,8 +179,12 @@
 }
 
 /* Wallpaper, launch split button and edge controls */
+:root[data-theme] .app[data-default-wallpaper] > .scrim {
+  opacity: 1;
+  transition: opacity 460ms cubic-bezier(0.22, 1, 0.36, 1);
+}
 :root[data-theme] .app.page-home[data-default-wallpaper] > .scrim {
-  background: transparent;
+  opacity: 0;
 }
 
 .app.page-home .page-content.home {
@@ -200,15 +204,19 @@
 }
 
 .home-dock {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(232px, 322px) minmax(0, 1fr);
-  align-items: end;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   gap: 12px;
+  width: 100%;
 }
 
 .home-account-area {
-  justify-self: end;
-  align-self: center;
+  flex: none;
+}
+.home-launch-area {
+  flex: 0 1 322px;
+  width: min(322px, calc(100% - 70px));
 }
 .home-account-area,
 .home-launch-area { position: relative; min-width: 0; }
@@ -737,9 +745,11 @@
 
 @media (max-width: 480px) {
   .home-dock {
-    grid-template-columns: 46px minmax(0, 1fr);
     gap: 8px;
-    padding-right: 46px;
+  }
+  .home-launch-area {
+    flex: 1 1 auto;
+    width: auto;
   }
   .home-account-trigger { width: 46px; height: 46px; }
   .home-account-trigger .player-avatar { width: 35px; height: 35px; }

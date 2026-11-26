@@ -2,6 +2,12 @@ import { ColorPalette } from "./ColorPalette";
 import { SettingsAction } from "./SettingsAction";
 import { RELEASE } from "../../lib/release";
 import { normalizeUiOpacity } from "../../lib/appearance";
+import {
+  findNextHoliday,
+  formatChineseMonthDay,
+  formatHolidayRange,
+  resolveActiveHoliday,
+} from "../../lib/holidays";
 import { useEffect, useRef, useState } from "react";
 import {
   Coffee,
@@ -15,6 +21,7 @@ import {
   RotateCcw,
   Settings2,
   SlidersHorizontal,
+  Sparkles,
   Sun,
   Upload,
 } from "lucide-react";
@@ -68,10 +75,22 @@ export function Settings() {
         focusModel();
       }
     };
+    const openHoliday = () => {
+      Q("");
+      C("界面");
+      requestAnimationFrame(() => {
+        document
+          .querySelector(".holiday-settings-card")
+          ?.scrollIntoView({ block: "start", behavior: "smooth" });
+      });
+    };
     if (category === "高级") focusModel();
     window.addEventListener("kynex-open-ai-settings", openModel);
-    return () =>
+    window.addEventListener("kynex-open-holiday-settings", openHoliday);
+    return () => {
       window.removeEventListener("kynex-open-ai-settings", openModel);
+      window.removeEventListener("kynex-open-holiday-settings", openHoliday);
+    };
   }, []);
   useSelectionMotion(nav);
   useEffect(() => {
@@ -148,6 +167,10 @@ export function Settings() {
   const [we, setWe] = useState(null);
   const [weBusy, setWeBusy] = useState(false);
   const dynamicWallpaper = s.settings.wallpaper.startsWith("video:");
+  const nowDate = new Date();
+  const activeHoliday = resolveActiveHoliday(s.settings, nowDate);
+  const nextHoliday = findNextHoliday(s.settings, nowDate);
+  const dismissedCount = Object.keys(s.settings.holidayDismissed || {}).length;
   async function scanWallpaperEngine() {
     setWeBusy(true);
     try {
@@ -173,6 +196,63 @@ export function Settings() {
       URL.revokeObjectURL(url);
     }
   }
+  const hasUnclosedQuote = (text) => {
+    let quote = "";
+    for (let i = 0; i < text.length; i += 1) {
+      const ch = text[i];
+      if (quote === '"' && ch === "\\" && i + 1 < text.length) {
+        i += 1;
+        continue;
+      }
+      if (quote) {
+        if (ch === quote) quote = "";
+      } else if (ch === '"' || ch === "'") {
+        quote = ch;
+      }
+    }
+    return !!quote;
+  };
+  const toggleArgPreset = (field, snippet) => {
+    const current = (s.settings[field] ?? "").trim();
+    const parts = snippet.trim().split(/\s+/);
+    const hasAll = parts.every((token) =>
+      current.split(/\s+/).includes(token),
+    );
+    if (hasAll) {
+      const removeSet = new Set(parts);
+      const next = current
+        .split(/\s+/)
+        .filter((token) => token && !removeSet.has(token))
+        .join(" ");
+      update({ [field]: next });
+    } else {
+      const existing = new Set(current ? current.split(/\s+/) : []);
+      const additions = parts.filter((token) => !existing.has(token));
+      update({
+        [field]: current ? `${current} ${additions.join(" ")}` : additions.join(" "),
+      });
+    }
+  };
+  const jvmArgsValue = s.settings.jvmArgs ?? "";
+  const gameArgsValue = s.settings.gameArgs ?? "";
+  const jvmQuoteError = hasUnclosedQuote(jvmArgsValue);
+  const gameQuoteError = hasUnclosedQuote(gameArgsValue);
+  const jvmPresets = [
+    {
+      label: "G1GC 优化",
+      value: "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200",
+    },
+    {
+      label: "忽略 Forge 证书",
+      value:
+        "-Dfml.ignoreInvalidMinecraftCertificates=true -Dfml.ignorePatchDiscrepancies=true",
+    },
+    {
+      label: "UTF-8 编码",
+      value: "-Dfile.encoding=UTF-8",
+    },
+  ];
+  const gamePresets = [{ label: "全屏启动", value: "--fullscreen" }];
   return (
     <section
       className="settings-page"
@@ -213,7 +293,10 @@ export function Settings() {
           aria-label="设置内容"
         >
           {show("启动") &&
-            (!q || "启动 内存 窗口 Java JVM 隔离 语言".includes(q)) && (
+            (!q ||
+              "启动 内存 窗口 Java JVM 隔离 语言 自定义 启动参数 参数".includes(
+                q,
+              )) && (
               <Card className="launch-settings-card">
                 <div className="settings-card-head">
                   <span className="settings-card-icon">
@@ -333,6 +416,120 @@ export function Settings() {
                         ]}
                       />
                     </Row>
+                  </div>
+                  <div className="launch-settings-args">
+                    <Row title="自定义 JVM 参数">
+                      <div className="launch-arg-field">
+                        <div className="setting-control">
+                          <Input
+                            aria-label="自定义 JVM 参数"
+                            className="launch-arg-input"
+                            placeholder="例如：-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions"
+                            value={jvmArgsValue}
+                            onChange={(e) =>
+                              update({ jvmArgs: e.target.value })
+                            }
+                          />
+                          <Button
+                            disabled={!jvmArgsValue.trim()}
+                            onClick={() => update({ jvmArgs: "" })}
+                          >
+                            <RotateCcw size={13} />
+                            清空
+                          </Button>
+                        </div>
+                        <div
+                          className="launch-arg-presets"
+                          role="group"
+                          aria-label="常用 JVM 参数快捷添加"
+                        >
+                          {jvmPresets.map((preset) => {
+                            const active = preset.value
+                              .split(/\s+/)
+                              .every((token) =>
+                                jvmArgsValue.trim().split(/\s+/).includes(token),
+                              );
+                            return (
+                              <button
+                                key={preset.label}
+                                type="button"
+                                className={active ? "on" : ""}
+                                aria-pressed={active}
+                                onClick={() =>
+                                  toggleArgPreset("jvmArgs", preset.value)
+                                }
+                              >
+                                {preset.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {jvmQuoteError && (
+                          <small className="launch-arg-error">
+                            存在未闭合的引号，启动前请补全
+                          </small>
+                        )}
+                      </div>
+                    </Row>
+                    <Row title="自定义游戏参数">
+                      <div className="launch-arg-field">
+                        <div className="setting-control">
+                          <Input
+                            aria-label="自定义游戏参数"
+                            className="launch-arg-input"
+                            placeholder="例如：--fullscreen"
+                            value={gameArgsValue}
+                            onChange={(e) =>
+                              update({ gameArgs: e.target.value })
+                            }
+                          />
+                          <Button
+                            disabled={!gameArgsValue.trim()}
+                            onClick={() => update({ gameArgs: "" })}
+                          >
+                            <RotateCcw size={13} />
+                            清空
+                          </Button>
+                        </div>
+                        <div
+                          className="launch-arg-presets"
+                          role="group"
+                          aria-label="常用游戏参数快捷添加"
+                        >
+                          {gamePresets.map((preset) => {
+                            const active = preset.value
+                              .split(/\s+/)
+                              .every((token) =>
+                                gameArgsValue
+                                  .trim()
+                                  .split(/\s+/)
+                                  .includes(token),
+                              );
+                            return (
+                              <button
+                                key={preset.label}
+                                type="button"
+                                className={active ? "on" : ""}
+                                aria-pressed={active}
+                                onClick={() =>
+                                  toggleArgPreset("gameArgs", preset.value)
+                                }
+                              >
+                                {preset.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {gameQuoteError && (
+                          <small className="launch-arg-error">
+                            存在未闭合的引号，启动前请补全
+                          </small>
+                        )}
+                      </div>
+                    </Row>
+                    <p className="launch-arg-note">
+                      对所有实例生效：JVM 参数会附加在 Java 虚拟机命令中，游戏参数会附加在 Minecraft 启动参数末尾。多个参数用空格分隔，含空格路径请用引号包裹，留空则使用默认参数。
+                    </p>
                   </div>
                 </div>
               </Card>
@@ -486,7 +683,12 @@ export function Settings() {
               </p>
             </Card>
           )}
-          {show("界面") && (!q || "界面 主题 颜色 壁纸".includes(q)) && (
+          {show("界面") &&
+            (!q ||
+              "界面 主题 颜色 壁纸 节日 圣诞 春节 万圣 动效 拖尾".includes(
+                q,
+              )) && (
+            <>
             <Card>
               <h3>外观</h3>
               <Row
@@ -606,6 +808,13 @@ export function Settings() {
                   {normalizeUiOpacity(s.settings.uiOpacity)}%
                 </b>
               </Row>
+              <Row title="鼠标拖尾与点击动效">
+                <Switch
+                  label="鼠标拖尾与点击动效"
+                  on={s.settings.holidayEffects !== false}
+                  change={(holidayEffects) => update({ holidayEffects })}
+                />
+              </Row>
               <h4>动态壁纸</h4>
               <Row
                 title="Wallpaper Engine"
@@ -690,6 +899,90 @@ export function Settings() {
                 </div>
               )}
             </Card>
+            <Card className="holiday-settings-card">
+              <div className="settings-card-head">
+                <span className="settings-card-icon">
+                  <Sparkles size={17} />
+                </span>
+                <h3>节日主题</h3>
+              </div>
+              <div className="holiday-status-banner">
+                <div className="holiday-status-info">
+                  {activeHoliday ? (
+                    <>
+                      <strong>
+                        {`现在是${activeHoliday.holiday.name}主题`}
+                        <Badge tone="ok">
+                          {`还剩 ${activeHoliday.daysLeft} 天`}
+                        </Badge>
+                      </strong>
+                      <span>
+                        {formatHolidayRange(
+                          activeHoliday.windowStart,
+                          activeHoliday.windowEnd,
+                        )}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <strong>现在是平时主题</strong>
+                      <span>
+                        {s.settings.holidayThemeEnabled === false
+                          ? "已关闭自动切换。"
+                          : nextHoliday
+                            ? `下次自动切换：${nextHoliday.holiday.name}（${formatChineseMonthDay(nextHoliday.windowStart)}，还有 ${nextHoliday.daysUntilStart} 天）`
+                            : "到节日会自动切换。"}
+                      </span>
+                    </>
+                  )}
+                </div>
+                <div className="holiday-status-actions">
+                  {activeHoliday ? (
+                    <Button
+                      onClick={() => {
+                        update({
+                          holidayDismissed: {
+                            ...(s.settings.holidayDismissed || {}),
+                            [activeHoliday.occurrenceKey]: true,
+                          },
+                        });
+                        s.notify(`这次${activeHoliday.holiday.name}先不用节日主题`);
+                      }}
+                    >
+                      这次先不用
+                    </Button>
+                  ) : null}
+                  {dismissedCount > 0 && (
+                    <Button
+                      onClick={() => {
+                        update({ holidayDismissed: {} });
+                        s.notify("已恢复跳过的节日");
+                      }}
+                    >
+                      恢复跳过的节日
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <Row title="自动切换节日主题">
+                <Switch
+                  label="自动切换节日主题"
+                  on={s.settings.holidayThemeEnabled !== false}
+                  change={(holidayThemeEnabled) =>
+                    update({ holidayThemeEnabled })
+                  }
+                />
+              </Row>
+              <Row title="节日壁纸">
+                <Badge>视频壁纸不会换</Badge>
+                <Switch
+                  label="节日壁纸"
+                  on={s.settings.holidayWallpaper !== false}
+                  change={(holidayWallpaper) => update({ holidayWallpaper })}
+                />
+              </Row>
+            </Card>
+            </>
           )}
           {show("更新") &&
             (!q || "更新 自动 手动 检测 新版 启动器".includes(q)) && (
@@ -710,14 +1003,14 @@ export function Settings() {
                 </Row>
                 <Row
                   title="更新方式"
-                  hint="自动模式会下载并校验更新，空闲时静默安装后重新打开启动器。"
+                  hint="手动模式先询问，自动模式直接下载。两种方式都在后台下载，安装完成后重新打开启动器。"
                 >
                   <OptionSelect
                     label="启动器更新方式"
                     value={s.settings.updateMode || "manual"}
                     onChange={(value) => update({ updateMode: value })}
                     options={[
-                      { value: "manual", label: "手动安装更新" },
+                      { value: "manual", label: "确认后下载安装" },
                       { value: "automatic", label: "自动下载安装" },
                     ]}
                   />

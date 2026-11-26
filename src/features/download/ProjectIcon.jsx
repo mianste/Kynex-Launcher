@@ -204,6 +204,21 @@ function ProjectIconImage({
       mounted.current = false;
     };
   }, []);
+  useEffect(() => {
+    if (prepared || !desktop || !/^https:\/\//i.test(link)) return;
+    let live = true;
+    void api("icon", { url: link, cacheOnly: true })
+      .then(({ data }) => {
+        if (live && data) {
+          Src(data);
+          Loaded(true);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [link, prepared]);
   function fallback() {
     Loaded(false);
     if (prepared || !/^https?:\/\//i.test(link)) {

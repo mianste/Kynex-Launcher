@@ -37,11 +37,13 @@ export function LoaderIcon({ loader }) {
   );
 }
 export function InstanceIcon({ instance, className = "", cover = false }) {
+  const key = instance.loader.toLowerCase();
+  const fallback = icons[key] || minecraft;
   const sources = [
     instance.icon,
     instance.packIcon,
     instance.packLogo,
-    icons[instance.loader.toLowerCase()] || minecraft,
+    fallback,
   ].filter(Boolean);
   const [failed, F] = useState(0);
   useEffect(
@@ -49,11 +51,29 @@ export function InstanceIcon({ instance, className = "", cover = false }) {
     [instance.icon, instance.packIcon, instance.packLogo, instance.loader],
   );
   const index = Math.min(failed, sources.length - 1);
-  const coverClass = cover
-    ? index < sources.length - 1
-      ? "instance-custom-icon"
-      : "instance-default-icon"
-    : "";
+  if (cover && index === sources.length - 1) {
+    return (
+      <span
+        className={`instance-cover-art cover-${key}`}
+        role="img"
+        aria-label={`${instance.name} 图标`}
+      >
+        <img
+          className="instance-cover-backdrop"
+          src={fallback}
+          alt=""
+          draggable={false}
+        />
+        <img
+          className="instance-cover-logo"
+          src={fallback}
+          alt=""
+          draggable={false}
+        />
+      </span>
+    );
+  }
+  const coverClass = cover ? "instance-custom-icon" : "";
   return (
     <img
       className={`instance-version-icon ${className} ${coverClass}`}

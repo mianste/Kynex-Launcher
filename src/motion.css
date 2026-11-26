@@ -1,11 +1,18 @@
-/* Independent fade/slide/ease-out implementation informed by PCL. */
+/* Natural motion system: transform-led entrances, spring feedback, soft easing. */
 :root {
-  --motion-fast: 100ms;
+  --motion-instant: 90ms;
+  --motion-fast: 140ms;
   --motion-normal: 200ms;
-  --motion-dialog: 240ms;
+  --motion-content: 220ms;
+  --motion-slow: 280ms;
+  --motion-page: 320ms;
+  --motion-dialog: 250ms;
   --motion-exit: 120ms;
-  --motion-fluent: cubic-bezier(0.22, 1, 0.36, 1);
-  --motion-back: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --motion-fluent: var(--motion-emphasized);
+  --motion-back: var(--motion-spring);
 }
 button {
   transition:
@@ -13,16 +20,16 @@ button {
     color var(--motion-fast),
     border-color var(--motion-fast),
     box-shadow var(--motion-normal),
-    transform 300ms var(--motion-fluent),
+    transform 180ms var(--motion-spring),
     filter var(--motion-fast);
 }
 button:not(:disabled):hover {
-  filter: brightness(1.07);
+  filter: brightness(1.05);
 }
 button:not(:disabled):active {
   translate: none;
-  transform: scale(0.96);
-  transition-duration: 80ms;
+  transform: scale(0.975);
+  transition-duration: 70ms;
 }
 .input,
 .search {
@@ -31,7 +38,7 @@ button:not(:disabled):active {
     box-shadow var(--motion-normal);
 }
 .switch i {
-  transition: transform var(--motion-normal) var(--motion-back);
+  transition: transform var(--motion-normal) var(--motion-spring);
 }
 .switch {
   transition: background-color var(--motion-normal);
@@ -40,34 +47,72 @@ button:not(:disabled):active {
   animation: none;
 }
 .page-content.page-entering {
-  animation: fluent-page-in var(--motion-normal) var(--motion-fluent) both;
+  animation: kxl-page-enter var(--motion-page) var(--motion-emphasized) backwards;
 }
-.page-content.page-leaving {
-  animation: fluent-page-out 100ms ease-in both;
+/* Smooth Home return transition: works in both holiday and everyday themes. */
+.app > .wallpaper,
+.app > .wallpaper-video {
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.app:not(.page-home) > .wallpaper,
+.app:not(.page-home) > .wallpaper-video {
+  transform: scale(1.045);
+}
+.app.page-home > .wallpaper,
+.app.page-home > .wallpaper-video {
+  transform: scale(1);
+}
+.app > .scrim {
+  transition: opacity 460ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity;
+}
+:root[data-theme] .app[data-default-wallpaper] > .scrim {
+  background: color-mix(in srgb, var(--bg) calc(var(--ui-alpha) * 0.98), transparent);
+  opacity: 1;
+}
+:root[data-theme] .app.page-home[data-default-wallpaper] > .scrim {
+  opacity: 0;
+}
+.app.page-home .page-content.home.page-entering {
+  animation: kxl-home-page-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.app.page-home .page-content.home.page-entering .home-dock {
+  animation: kxl-home-dock-enter 460ms cubic-bezier(0.16, 1, 0.3, 1) 65ms both;
+}
+.app .page-content.page-leaving {
   pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+  animation: kxl-page-leave-to-home 260ms cubic-bezier(0.32, 0, 0.67, 0) forwards;
+}
+.app .page-content.home.page-leaving {
+  animation: kxl-home-leave 200ms cubic-bezier(0.32, 0, 0.67, 0) forwards;
+}
+.app .page-content.page-leaving :is(.card, .resource-row, .version-card, .account-card, .instance-card, .skin-saved-entry) {
+  animation: none;
 }
 .page-content .card,
-.resource-row,
-.version-card,
-.account-card,
-.instance-card,
-.skin-saved-entry {
-  animation: fluent-row-in var(--motion-normal) var(--motion-fluent) both;
+.page-content .resource-row,
+.page-content .version-card,
+.page-content .account-card,
+.page-content .instance-card,
+.page-content .skin-saved-entry {
+  animation: kxl-card-enter var(--motion-slow) var(--motion-emphasized) backwards;
 }
 .card:nth-child(2),
 .resource-row:nth-child(2),
 .skin-saved-entry:nth-child(2) {
-  animation-delay: 25ms;
+  animation-delay: 22ms;
 }
 .card:nth-child(3),
 .resource-row:nth-child(3),
 .skin-saved-entry:nth-child(3) {
-  animation-delay: 50ms;
+  animation-delay: 44ms;
 }
 .card:nth-child(n + 4),
 .resource-row:nth-child(n + 4),
 .skin-saved-entry:nth-child(n + 4) {
-  animation-delay: 75ms;
+  animation-delay: 66ms;
 }
 .motion-presence {
   position: absolute;
@@ -184,6 +229,62 @@ button:not(:disabled):active {
 .skin-flat-pair canvas {
   image-rendering: pixelated;
 }
+@keyframes kxl-page-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.994);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes kxl-home-page-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes kxl-home-dock-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 26px, 0) scale(0.955);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+@keyframes kxl-page-leave-to-home {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0) scale(0.984);
+  }
+}
+@keyframes kxl-home-leave {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0) scale(0.97);
+  }
+}
+@keyframes kxl-card-enter {
+  from {
+    transform: translate3d(0, 5px, 0) scale(0.997);
+  }
+  to {
+    transform: none;
+  }
+}
 @keyframes fluent-page-in {
   from {
     opacity: 0;
@@ -257,18 +358,4 @@ button:not(:disabled):active {
     transition: none !important;
     scroll-behavior: auto !important;
   }
-}
-
-
-/* 切换页面时不再做整页/卡片淡入，避免低不透明度下出现一瞬间的透明闪屏。 */
-.page-content,
-.page-content.page-entering,
-.page-content.page-leaving,
-.page-content .card,
-.page-content .resource-row,
-.page-content .version-card,
-.page-content .account-card,
-.page-content .instance-card,
-.page-content .skin-saved-entry {
-  animation: none !important;
 }

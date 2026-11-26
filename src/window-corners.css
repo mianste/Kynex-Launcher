@@ -1,4 +1,6 @@
-/* Clip the composited window once, including wallpaper, video, and footer. */
+/* Natural anti-aliased rounded corners without clip-path cropping seams.
+   All background layers inherit the exact same corner radius so edges flow
+   seamlessly into all four rounded corners, including video and canvas layers. */
 .app {
   position: absolute;
   inset: 0;
@@ -6,21 +8,44 @@
   height: auto;
   margin: 0;
   border: 0;
-  border-radius: 0;
+  border-radius: var(--window-radius);
   outline: 0;
   box-shadow: none;
+  overflow: hidden;
+  isolation: isolate;
   -webkit-mask: none;
   mask: none;
-  clip-path: inset(-1px round calc(var(--window-radius) + 1px));
+  clip-path: none;
 }
 html,
 body,
 #root {
   background: transparent;
 }
+.app > .wallpaper,
+.app > .holiday-live-wallpaper,
+.app > .wallpaper-video,
+.app > .scrim,
+.app > .holiday-fx-canvas,
+.app > .overlay,
+.app > .splash {
+  border-radius: inherit;
+}
+.app::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 95;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line) 42%, transparent);
+}
+.app.splash-active::after {
+  display: none;
+}
 .app > .taskbar {
   inset: auto 0 0;
-  border-radius: 0;
+  border-radius: 0 0 var(--window-radius) var(--window-radius);
   border-left: 0;
   border-right: 0;
   border-bottom: 0;

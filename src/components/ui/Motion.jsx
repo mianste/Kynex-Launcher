@@ -33,13 +33,66 @@ export function MotionPresence({ children, toast = false }) {
   ) : null;
 }
 export function MotionPage({ id, children }) {
+  const [entries, setEntries] = useState(() => [
+    { id, children, leaving: false },
+  ]);
+  const exitTimer = useRef(0);
+
+  useLayoutEffect(() => {
+    const reduced =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+    setEntries((prev) => {
+      const active = prev.find((e) => !e.leaving);
+      if (active && active.id === id) {
+        return prev.map((e) =>
+          e.id === id ? { ...e, children, leaving: false } : e,
+        );
+      }
+
+      if (exitTimer.current) {
+        window.clearTimeout(exitTimer.current);
+        exitTimer.current = 0;
+      }
+
+      const involvesHome = active && (active.id === "home" || id === "home");
+      if (!active || reduced || !involvesHome) {
+        return [{ id, children, leaving: false }];
+      }
+
+      const leavingEntry = { ...active, leaving: true };
+      const nextEntry = { id, children, leaving: false };
+      const duration = id === "home" ? 260 : 200;
+      exitTimer.current = window.setTimeout(() => {
+        exitTimer.current = 0;
+        setEntries((curr) => curr.filter((e) => !e.leaving));
+      }, duration);
+      return [leavingEntry, nextEntry];
+    });
+  }, [id, children]);
+
+  useEffect(
+    () => () => {
+      if (exitTimer.current) window.clearTimeout(exitTimer.current);
+    },
+    [],
+  );
+
   return (
-    <section
-      key={id}
-      className={`page-content ${id === "home" ? "home" : ""} page-entering`}
-    >
-      {children}
-    </section>
+    <>
+      {entries.map((entry) => (
+        <section
+          key={entry.id}
+          aria-hidden={entry.leaving ? "true" : undefined}
+          className={`page-content ${entry.id === "home" ? "home" : ""} ${
+            entry.leaving ? "page-leaving" : "page-entering"
+          }`}
+        >
+          {entry.children}
+        </section>
+      ))}
+    </>
   );
 }
 export function Disclosure({

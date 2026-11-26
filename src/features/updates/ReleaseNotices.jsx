@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowDownToLine, Check, FileText, RefreshCw } from "lucide-react";
+import { ArrowDownToLine, Check, FileText, RefreshCw, X } from "lucide-react";
 import { Button, Modal, ProgressBar } from "../../components/ui";
 import { api, desktop } from "../../lib/bridge";
 import {
@@ -17,6 +17,7 @@ export function ReleaseNotices({ ready }) {
   const [update, setUpdate] = useState(null);
   const [checking, setChecking] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [progressHidden, setProgressHidden] = useState(false);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState({
     stage: "downloading",
@@ -27,19 +28,24 @@ export function ReleaseNotices({ ready }) {
   const inFlight = useRef(false);
   const installInFlight = useRef(false);
   const autoStarted = useRef("");
+  const panel = useRef(null);
+  const panelDrag = useRef(null);
+  const [panelAt, setPanelAt] = useState(null);
   const promptKey = `kynex-update-prompted-${RELEASE.channel}`;
   const modal = useStore((state) => state.modal);
   const automatic = useStore((state) => state.settings.updateMode === "automatic");
   const startupCheck = useStore((state) => state.settings.checkUpdatesOnStartup !== false);
-  const busy = useStore((state) => state.busy || state.directoryBusy ||
-    Object.values(state.tasks).some((task) => !task.finished && !task.error));
   const check = useCallback(
     async (manual = false) => {
       if (!desktop) {
         if (manual) useStore.getState().notify("请在桌面版检查更新");
         return;
       }
-      if (inFlight.current || installInFlight.current) return;
+      if (installInFlight.current) {
+        if (manual) setProgressHidden(false);
+        return;
+      }
+      if (inFlight.current) return;
       inFlight.current = true;
       setChecking(true);
       try {
@@ -54,7 +60,7 @@ export function ReleaseNotices({ ready }) {
           if (auto || manual || !seen.includes(result.update.version)) {
             autoStarted.current = auto && result.previousFailure ? result.update.version : "";
             setUpdate(result.update);
-            setError(auto && result.previousFailure ? "上次静默安装未完成，请重试或切换为手动安装。" : "");
+            setError(result.previousFailure ? "上次安装未完成。可以重试，或从发布页下载完整安装器。" : "");
           }
         } else {
           setUpdate(null);
@@ -129,29 +135,30 @@ export function ReleaseNotices({ ready }) {
     // The tour takes priority even while an update check is pending.
     if (localStorage.getItem(GUIDE_KEY) !== "done") setGuide(true);
   };
-  const install = useCallback(async (silent) => {
+  const install = useCallback(async () => {
     if (installInFlight.current || inFlight.current) return;
     installInFlight.current = true;
     setInstalling(true);
+    setProgressHidden(false);
     setProgress({ stage: "downloading", downloaded: 0, total: 0 });
     setError("");
     try {
-      await api("install_update", { silent });
+      await api("install_update", { silent: true });
     } catch (reason) {
-      const message = String(reason).replace(/^Error: /, "");
-      setError(message || "更新未完成，请稍后重试");
-      if (silent) useStore.getState().notify(message || "自动更新失败，请稍后重试");
+      const detail = String(reason ?? "").replace(/^Error: /, "").trim();
+      const message = detail ? `更新未完成：${detail}` : "更新未完成，请稍后重试";
+      setError(message);
+      useStore.getState().notify(message);
       installInFlight.current = false;
       setInstalling(false);
     }
   }, []);
   useEffect(() => {
-    if (ready && automatic && update && !busy && !checking && !installing &&
-        autoStarted.current !== update.version) {
-      autoStarted.current = update.version;
-      void install(true);
-    }
-  }, [ready, automatic, update, busy, checking, installing, install]);
+    if (!ready || !automatic || !update || checking || installing || modal || log || guide) return;
+    if (autoStarted.current === update.version) return;
+    autoStarted.current = update.version;
+    void install();
+  }, [ready, automatic, update, checking, installing, modal, log, guide, install]);
   useEffect(() => {
     if (!update || automatic || log || guide || modal || localStorage.getItem(GUIDE_KEY) !== "done") return;
     let seen = [];
@@ -167,11 +174,88 @@ export function ReleaseNotices({ ready }) {
     if (localStorage.getItem(RELEASE_SEEN_KEY) !== RELEASE.version) return;
     if (localStorage.getItem(GUIDE_KEY) !== "done") setGuide(true);
   }, [ready, log, update, checking, modal]);
-  const showUpdate = update && (automatic ? installing || !!error : !modal && !log && !guide);
-  if (modal && !showUpdate) return null;
+  const showUpdate = update && !installing && !modal && !log && !guide && (!automatic || !!error);
+  const percent = progress.total > 0
+    ? Math.min(100, Math.round(100 * progress.downloaded / progress.total))
+    : 0;
+  const statusText = progress.stage === "installing"
+    ? "正在安装，完成后会重新打开启动器"
+    : progress.stage === "waiting"
+      ? "下载完成，等待当前任务结束"
+      : progress.stage === "verifying"
+        ? "正在校验更新包"
+        : progress.total > 0
+          ? `正在下载 ${percent}%`
+          : progress.downloaded > 0
+            ? `已下载 ${(progress.downloaded / 1048576).toFixed(1)} MB`
+            : "正在连接下载源";
+  const startPanelDrag = (event) => {
+    if (event.button !== 0 || event.target.closest("button") || !panel.current) return;
+    const box = panel.current.getBoundingClientRect();
+    panelDrag.current = { x: event.clientX - box.left, y: event.clientY - box.top };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const movePanel = (event) => {
+    const drag = panelDrag.current;
+    const node = panel.current;
+    if (!drag || !node) return;
+    const maxX = Math.max(8, window.innerWidth - node.offsetWidth - 8);
+    const maxY = Math.max(8, window.innerHeight - node.offsetHeight - 8);
+    setPanelAt({
+      x: Math.min(Math.max(8, event.clientX - drag.x), maxX),
+      y: Math.min(Math.max(8, event.clientY - drag.y), maxY),
+    });
+  };
+  const endPanelDrag = (event) => {
+    if (!panelDrag.current) return;
+    panelDrag.current = null;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
   return (
     <>
-      {!showUpdate && guide && !log && (
+      {installing && update && (progressHidden ? (
+        <button className="release-update-chip" type="button" data-fixed-ink onClick={() => setProgressHidden(false)}>
+          <ArrowDownToLine size={15} aria-hidden="true" />
+          更新中{percent > 0 ? ` ${percent}%` : ""}
+          <span className="release-update-chip-action">查看进度</span>
+        </button>
+      ) : (
+        <aside
+          ref={panel}
+          className="release-update-panel"
+          data-fixed-ink
+          style={panelAt ? { left: panelAt.x, top: panelAt.y, right: "auto", bottom: "auto" } : undefined}
+          aria-label="启动器更新进度"
+        >
+          <header
+            className="release-update-header"
+            onPointerDown={startPanelDrag}
+            onPointerMove={movePanel}
+            onPointerUp={endPanelDrag}
+            onPointerCancel={endPanelDrag}
+          >
+            <strong title={`正在更新至 ${releaseVersionLabel(update.version)}`}>
+              正在更新至 {releaseVersionLabel(update.version)}
+            </strong>
+            <button
+              className="release-update-hide"
+              type="button"
+              title="隐藏进度窗口，更新会在后台继续"
+              aria-label="隐藏更新进度"
+              onClick={() => setProgressHidden(true)}
+            >
+              <X size={17} aria-hidden="true" />
+            </button>
+          </header>
+          <div className="release-download">
+            <ProgressBar done={progress.downloaded} total={progress.total} />
+            <span role="status">{statusText}</span>
+          </div>
+        </aside>
+      ))}
+      {!showUpdate && !modal && guide && !log && (
         <Onboarding
           initialPage={guidePage}
           initialSection={guideSection}
@@ -179,12 +263,12 @@ export function ReleaseNotices({ ready }) {
         />
       )}
       {checking && (
-        <span className="release-checking" role="status">
+        <span className="release-checking" role="status" data-fixed-ink>
           <RefreshCw size={13} className="spin" />
           正在检查更新
         </span>
       )}
-      {!showUpdate && log && (
+      {!showUpdate && !modal && log && (
         <Modal
           title="更新日志"
           className="changelog-modal"
@@ -217,22 +301,13 @@ export function ReleaseNotices({ ready }) {
       {showUpdate && (
         <Modal
           title={automatic ? "启动器自动更新" : "发现新版本"}
-          onClose={() => {
-            if (!installing) setUpdate(null);
-          }}
+          onClose={() => setUpdate(null)}
           footer={
             <>
-              <Button disabled={installing} onClick={() => setUpdate(null)}>
-                取消
-              </Button>
-              <Button
-                primary
-                busy={installing}
-                disabled={installing}
-                onClick={() => void install(automatic)}
-              >
+              <Button onClick={() => setUpdate(null)}>取消</Button>
+              <Button primary disabled={checking} onClick={() => void install()}>
                 <ArrowDownToLine size={15} />
-                {installing ? "正在更新" : automatic ? "重试" : "立即更新"}
+                {error ? "重试" : "立即更新"}
               </Button>
             </>
           }
@@ -250,22 +325,6 @@ export function ReleaseNotices({ ready }) {
           <div className="release-remote-notes">
             {update.notes || "本次更新包含功能优化和问题修复。"}
           </div>
-          {installing && (
-            <div className="release-download" role="status">
-              <ProgressBar done={progress.downloaded} total={progress.total} />
-              <span>
-                {progress.stage === "installing"
-                  ? "校验完成，正在安装更新…"
-                  : progress.stage === "waiting"
-                    ? "更新已校验，等待当前任务完成…"
-                    : progress.stage === "verifying"
-                      ? "正在校验更新包…"
-                      : progress.total
-                      ? `正在下载 ${Math.min(100, Math.round((progress.downloaded / progress.total) * 100))}%`
-                      : "正在连接下载源…"}
-              </span>
-            </div>
-          )}
           {error && (
             <p className="release-error" role="alert">
               {error}

@@ -1,0 +1,254 @@
+/* Natural interaction layer: short distances, spring release, no layout jank. */
+
+/* Page and content entrances are transform-only so transparent themes never flash. */
+.app .page-content.page-entering {
+  animation: kxl-page-enter var(--motion-page) var(--motion-emphasized) backwards;
+}
+.app .page-content
+  :is(.card, .resource-row, .version-card, .account-card, .instance-card, .skin-saved-entry) {
+  animation: kxl-card-enter var(--motion-slow) var(--motion-emphasized) backwards;
+}
+.app .page-content
+  :is(.card, .resource-row, .version-card, .account-card, .instance-card, .skin-saved-entry):nth-child(2) {
+  animation-delay: 22ms;
+}
+.app .page-content
+  :is(.card, .resource-row, .version-card, .account-card, .instance-card, .skin-saved-entry):nth-child(3) {
+  animation-delay: 44ms;
+}
+.app .page-content
+  :is(.card, .resource-row, .version-card, .account-card, .instance-card, .skin-saved-entry):nth-child(n + 4) {
+  animation-delay: 66ms;
+}
+
+.app button {
+  transition:
+    transform 180ms var(--motion-spring),
+    background-color var(--motion-fast) var(--motion-standard),
+    color var(--motion-fast) var(--motion-standard),
+    border-color var(--motion-fast) var(--motion-standard),
+    box-shadow var(--motion-content) var(--motion-standard),
+    filter var(--motion-fast) var(--motion-standard);
+}
+.app button:not(:disabled):active {
+  transform: scale(0.975);
+  transition-duration: 70ms;
+}
+
+/* Navigation: the active icon settles with a soft spring, hover lifts a hair. */
+.app .nav > button {
+  transition:
+    transform 200ms var(--motion-spring),
+    background-color 150ms var(--motion-standard),
+    color 150ms var(--motion-standard),
+    box-shadow 220ms var(--motion-standard);
+}
+.app .nav > button:hover {
+  transform: translateY(-1px);
+}
+.app .nav > button:active {
+  transform: translateY(0) scale(0.96);
+}
+.app .nav > button svg {
+  transition: transform 220ms var(--motion-spring);
+}
+.app .nav > button:hover svg {
+  transform: translateY(-1px);
+}
+.app .nav > button.on svg {
+  animation: kxl-nav-icon 300ms var(--motion-spring);
+}
+@keyframes kxl-nav-icon {
+  0% { transform: scale(0.82); }
+  55% { transform: scale(1.07); }
+  100% { transform: none; }
+}
+
+/* Cards and rows: lift toward the pointer only where it is actionable. */
+@media (hover: hover) and (pointer: fine) {
+  .app :is(.instance-card, .news-card, .news-feature) {
+    transition:
+      transform 220ms var(--motion-spring),
+      border-color 160ms var(--motion-standard),
+      box-shadow 240ms var(--motion-standard),
+      background-color 160ms var(--motion-standard);
+  }
+  .app .instance-card:hover {
+    transform: translateY(-4px);
+  }
+  .app :is(.news-card, .news-feature):hover {
+    transform: translateY(-3px);
+  }
+  .app :is(.resource-row, .native-song, .version-row) {
+    transition:
+      transform 170ms var(--motion-spring),
+      background-color 140ms var(--motion-standard),
+      border-color 140ms var(--motion-standard);
+  }
+  .app :is(.resource-row, .native-song):hover {
+    transform: translateX(2px);
+  }
+  .app :is(.home-shortcuts > button, .other-game) {
+    transition:
+      transform 200ms var(--motion-spring),
+      background-color 160ms var(--motion-standard),
+      border-color 160ms var(--motion-standard);
+  }
+  .app :is(.home-shortcuts > button, .other-game):hover {
+    transform: translateY(-2px);
+  }
+  .app .home-launch-button {
+    transition:
+      transform 200ms var(--motion-spring),
+      filter 160ms var(--motion-standard);
+  }
+  .app .home-launch-button:not(:disabled):hover {
+    transform: translateY(-1px);
+  }
+}
+
+/* Dialogs enter as a single calm sheet. */
+.app .overlay > .modal {
+  animation: kxl-sheet-in var(--motion-dialog) var(--motion-spring) backwards;
+  transform-origin: 50% 48%;
+}
+.app .overlay.is-exiting > .modal,
+.app .is-exiting .overlay > .modal {
+  animation: kxl-sheet-out var(--motion-exit) var(--motion-standard) both;
+}
+@keyframes kxl-sheet-in {
+  from { transform: translateY(12px) scale(0.965); }
+  to { transform: none; }
+}
+@keyframes kxl-sheet-out {
+  to { transform: translateY(6px) scale(0.985); opacity: 0; }
+}
+
+.app .toast {
+  animation: kxl-toast-spring var(--motion-normal) var(--motion-spring) backwards;
+}
+.app .is-exiting .toast,
+.app .toast-presence.is-exiting .toast {
+  animation: kxl-toast-out var(--motion-exit) var(--motion-standard) both;
+}
+@keyframes kxl-toast-spring {
+  from { transform: translateY(10px) scale(0.96); }
+  to { transform: none; }
+}
+@keyframes kxl-toast-out {
+  to { transform: translateY(6px) scale(0.97); opacity: 0; }
+}
+
+/* Update status floats in instead of popping. */
+.release-update-panel {
+  animation: kxl-float-in 260ms var(--motion-spring) backwards;
+}
+.release-update-chip {
+  animation: kxl-chip-in 200ms var(--motion-spring) backwards;
+}
+@keyframes kxl-float-in {
+  from { transform: translateY(10px) scale(0.97); }
+  to { transform: none; }
+}
+@keyframes kxl-chip-in {
+  from { transform: translateY(6px) scale(0.94); }
+  to { transform: none; }
+}
+
+/* Keep the existing glass look, but frost what is behind it so page text
+   never shows through the message. */
+.app .toast,
+.app .download-completion-island,
+.app .release-checking {
+  backdrop-filter: blur(24px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(130%) !important;
+}
+.app .toast {
+  width: max-content;
+  max-width: min(700px, calc(100% - 32px));
+}
+.app .toast-message {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.app .download-completion-island {
+  min-width: 0;
+  max-width: min(360px, 100%);
+}
+.app .download-completion-island strong {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app .download-completion-island .download-completion-name {
+  flex: 1;
+}
+@media (max-width: 560px) {
+  .app .toast {
+    bottom: 112px;
+  }
+}
+
+/* The assistant orb breathes slowly and answers the pointer. */
+.app .assistant-orb {
+  transition:
+    transform 220ms var(--motion-spring),
+    box-shadow 260ms var(--motion-standard),
+    background-color 160ms var(--motion-standard);
+}
+.app .assistant-orb:hover {
+  transform: scale(1.05) translateY(-1px);
+}
+.app .assistant-orb:active {
+  transform: scale(0.96);
+}
+.app .assistant-orb::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  opacity: 0.38;
+  pointer-events: none;
+  animation: kxl-orb-breathe 5.6s var(--motion-standard) infinite;
+}
+@keyframes kxl-orb-breathe {
+  0%, 100% { transform: scale(0.98); opacity: 0.38; }
+  50% { transform: scale(1.12); opacity: 0.06; }
+}
+
+/* Footer actions keep the same quiet feedback as the rest of the chrome. */
+.app .taskbar button {
+  transition:
+    transform 160ms var(--motion-spring),
+    color 140ms var(--motion-standard),
+    background-color 140ms var(--motion-standard);
+}
+.app .taskbar button:hover {
+  transform: translateY(-1px);
+}
+
+.app .settings-nav button {
+  transition:
+    transform 180ms var(--motion-spring),
+    background-color 140ms var(--motion-standard),
+    color 140ms var(--motion-standard);
+}
+.app .settings-nav button:hover {
+  transform: translateX(2px);
+}
+
+progress::-webkit-progress-value {
+  transition: width 240ms var(--motion-standard);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app *,
+  .app *::before,
+  .app *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
