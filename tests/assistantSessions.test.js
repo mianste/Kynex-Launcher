@@ -10,6 +10,7 @@ import {
   clearSessions,
   autoTitle,
   exportMarkdown,
+  MAX_SCREENSHOT_PREVIEW,
 } from "../src/features/assistant/sessionStore";
 function memory() {
   const values = new Map();
@@ -24,6 +25,66 @@ function memory() {
   };
 }
 describe("assistant session history", () => {
+  it("keeps bounded screenshot previews across reloads without storing originals", () => {
+    const store = memory();
+    const session = createSession(store, 1);
+    const preview = "data:image/webp;base64,UklGRg==";
+    saveSession(
+      {
+        ...session,
+        messages: [
+          {
+            role: "user",
+            content: "看一下截图",
+            imageCount: 3,
+            images: [{ data: "ORIGINAL_IMAGE_MUST_NOT_PERSIST" }],
+            screenshots: [
+              preview,
+              "https://example.com/private.png",
+              "data:image/svg+xml;base64,AA==",
+            ],
+          },
+        ],
+      },
+      store,
+    );
+    const saved = loadSession(session.id, store).messages[0];
+    expect(saved.imageCount).toBe(3);
+    expect(saved.screenshots).toEqual([preview]);
+    expect(store.getItem(SESSION_KEY)).not.toContain(
+      "ORIGINAL_IMAGE_MUST_NOT_PERSIST",
+    );
+    expect(exportMarkdown(loadSession(session.id, store))).toContain(
+      "附 3 张截图",
+    );
+    expect(exportMarkdown(loadSession(session.id, store))).not.toContain(
+      "data:image",
+    );
+  });
+  it("evicts old image previews within budget while keeping message text and image counts", () => {
+    const store = memory();
+    const session = createSession(store, 1);
+    const preview =
+      "data:image/webp;base64," + "A".repeat(MAX_SCREENSHOT_PREVIEW - 24);
+    saveSession(
+      {
+        ...session,
+        messages: Array.from({ length: 40 }, (_, n) => ({
+          role: "user",
+          content: `截图 ${n}`,
+          imageCount: 3,
+          screenshots: [preview, preview, preview],
+        })),
+      },
+      store,
+    );
+    const messages = loadSession(session.id, store).messages;
+    expect(messages).toHaveLength(40);
+    expect(messages.at(-1).screenshots).toHaveLength(3);
+    expect(messages[0].screenshots).toEqual([]);
+    expect(messages[0].imageCount).toBe(3);
+    expect(store.getItem(SESSION_KEY).length).toBeLessThan(1600 * 1024);
+  });
   it("creates, loads, switches and automatically names sessions", () => {
     const store = memory();
     const a = createSession(store, 1);

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic, ImagePlus, X } from "lucide-react";
 import { api, desktop } from "../../lib/bridge";
-import { Button } from "../../components/ui";
+import { Button, Modal } from "../../components/ui";
+import { MAX_SCREENSHOT_PREVIEW } from "./sessionStore";
 export const MAX_MEDIA = 10 * 1024 * 1024;
 export function validateScreenshot(file) {
   if (!["image/png", "image/jpeg", "image/webp"].includes(file.type))
@@ -9,8 +10,8 @@ export function validateScreenshot(file) {
   if (!file.size || file.size > MAX_MEDIA)
     throw Error("单张截图不能为空或超过 10 MB。");
 }
-export function fittedSize(width, height) {
-  const scale = Math.min(1, 2048 / Math.max(width, height));
+export function fittedSize(width, height, limit = 2048) {
+  const scale = Math.min(1, limit / Math.max(width, height));
   return {
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale)),
@@ -28,10 +29,54 @@ export async function prepareScreenshot(file) {
     const data = canvas.toDataURL("image/png");
     if (data.length > (MAX_MEDIA * 4) / 3 + 40)
       throw Error("截图转换后超过 10 MB，请裁剪后重试。");
-    return { id: crypto.randomUUID(), name: "截图", data };
+    let preview;
+    for (const limit of [512, 384, 256, 128]) {
+      Object.assign(canvas, fittedSize(bitmap.width, bitmap.height, limit));
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      preview = canvas.toDataURL("image/webp", 0.72);
+      if (preview.length <= MAX_SCREENSHOT_PREVIEW) break;
+    }
+    if (preview.length > MAX_SCREENSHOT_PREVIEW)
+      throw Error("无法生成截图预览，请裁剪后重试。");
+    return { id: crypto.randomUUID(), name: "截图", data, preview };
   } finally {
     bitmap.close();
   }
+}
+export function SentScreenshots({ message }) {
+  const [viewing, Viewing] = useState(null);
+  if (!message.imageCount) return null;
+  return (
+    <>
+      <div className="assistant-sent-images" aria-label="已发送的截图">
+        {(message.screenshots || []).map((preview, index) => (
+          <button
+            key={index}
+            type="button"
+            aria-label={`查看已发送的第 ${index + 1} 张截图`}
+            onClick={() => Viewing(message.images?.[index]?.data || preview)}
+          >
+            <img src={preview} alt={`已发送的第 ${index + 1} 张截图`} />
+          </button>
+        ))}
+        {!message.screenshots?.length && (
+          <span className="muted">
+            已发送 {message.imageCount} 张截图（预览已清理）
+          </span>
+        )}
+      </div>
+      {viewing && (
+        <Modal
+          title="已发送的截图"
+          wide
+          className="assistant-image-viewer"
+          onClose={() => Viewing(null)}
+        >
+          <img src={viewing} alt="已发送的截图大图" />
+        </Modal>
+      )}
+    </>
+  );
 }
 export function ScreenshotPreviews({ images, remove }) {
   return (

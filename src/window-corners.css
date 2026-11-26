@@ -1,21 +1,22 @@
-/* Natural anti-aliased rounded corners without clip-path cropping seams.
-   All background layers inherit the exact same corner radius so edges flow
-   seamlessly into all four rounded corners, including video and canvas layers. */
+/* The border is one continuous rounded box, entirely inside the WebView.
+   Only its contents are contained; the border itself is never masked or cut. */
 .app {
   position: absolute;
-  inset: 0;
+  inset: var(--window-inset);
   width: auto;
   height: auto;
   margin: 0;
-  border: 0;
+  border: var(--window-border-width) solid var(--window-edge);
   border-radius: var(--window-radius);
   outline: 0;
   box-shadow: none;
-  overflow: hidden;
+  /* Focus must not scroll the entire window surface. */
+  overflow: clip;
   isolation: isolate;
   -webkit-mask: none;
   mask: none;
   clip-path: none;
+  background-clip: padding-box;
 }
 html,
 body,
@@ -29,23 +30,16 @@ body,
 .app > .holiday-fx-canvas,
 .app > .overlay,
 .app > .splash {
-  border-radius: inherit;
+  /* A single parent owns edge antialiasing. Repeating the radius on every
+     composited background darkens its partially transparent edge pixels. */
+  border-radius: 0;
 }
 .app::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: 95;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line) 42%, transparent);
-}
-.app.splash-active::after {
-  display: none;
+  content: none;
 }
 .app > .taskbar {
   inset: auto 0 0;
-  border-radius: 0 0 var(--window-radius) var(--window-radius);
+  border-radius: 0;
   border-left: 0;
   border-right: 0;
   border-bottom: 0;

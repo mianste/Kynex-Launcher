@@ -42,6 +42,10 @@
   --motion-spring: 420ms cubic-bezier(0.2, 0.85, 0.22, 1);
   --motion-fast: 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
   --window-radius: 28px;
+  --window-inset: 1px;
+  --window-border-width: 1px;
+  --window-edge: color-mix(in srgb, var(--line) 60%, transparent);
+  --image-outline: rgb(255 255 255 / 10%);
   --r-lg: 18px;
   --r-md: 13px;
   --r-sm: 9px;
@@ -60,6 +64,7 @@
 }
 
 :root[data-theme="light"] {
+  --image-outline: rgb(0 0 0 / 10%);
   --bg: #eef1eb;
   --surface: #fcfdf9;
   --elev: #edf2ea;

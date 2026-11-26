@@ -49,6 +49,7 @@ import { isBuildRequest } from "./agentStore";
 import {
   prepareScreenshot,
   ScreenshotPreviews,
+  SentScreenshots,
   ScreenshotButton,
   VoiceInput,
 } from "./AssistantMedia";
@@ -284,7 +285,16 @@ export function Assistant({ ready }) {
   function regenerate(index) {
     const before = messages.slice(0, index);
     const user = before.map((m) => m.role).lastIndexOf("user");
-    if (user >= 0) void send(before[user].content, before.slice(0, user));
+    if (user < 0) return;
+    if (before[user].imageCount && !before[user].images?.length) {
+      E("重新分析截图需要再次添加原图。");
+      return;
+    }
+    void send(
+      before[user].content,
+      before.slice(0, user),
+      before[user].images || [],
+    );
   }
   async function addLog() {
     if (busy || logBusy) return;
@@ -385,17 +395,19 @@ export function Assistant({ ready }) {
     E("");
     P(null);
   }, [s.directoryId, s.selected]);
-  async function send(value = text, base = messages) {
+  async function send(value = text, base = messages, attached = images) {
     if (
-      !value.trim() ||
+      (!value.trim() && !attached.length) ||
+      !desktop ||
       busy ||
       logBusy ||
       activeRequest.current ||
       checkingImages.current
     )
       return;
-    const content = value.trim();
-    if (images.length) {
+    const content =
+      value.trim() || "请分析这些截图，帮我检查 Minecraft 或启动器相关的问题。";
+    if (attached.length) {
       const epoch = mediaEpoch.current;
       checkingImages.current = true;
       try {
@@ -414,18 +426,36 @@ export function Assistant({ ready }) {
         checkingImages.current = false;
       }
     }
-    if (!images.length && isBuildRequest(content)) {
+    if (!attached.length && isBuildRequest(content)) {
       V("");
       void startWorkshop(content);
       return;
     }
     const requestId = crypto.randomUUID();
     const purpose =
-      !images.length &&
+      !attached.length &&
       /整合包|模组搭配|推荐.*模组|科技.*包|冒险.*包/.test(content)
         ? "modpack"
         : "general";
-    const next = [...base, { role: "user", content, createdAt: Date.now() }];
+    const next = [
+      ...base.map((message) => {
+        if (!message.images) return message;
+        const { images: originals, ...history } = message;
+        return history;
+      }),
+      {
+        role: "user",
+        content,
+        createdAt: Date.now(),
+        ...(attached.length
+          ? {
+              imageCount: attached.length,
+              screenshots: attached.map((image) => image.preview),
+              images: attached,
+            }
+          : {}),
+      },
+    ];
     activeRequest.current = requestId;
     M([
       ...next,
@@ -445,7 +475,7 @@ export function Assistant({ ready }) {
     const payload = {
       requestId,
       purpose,
-      images: images.map((image) => image.data),
+      images: attached.map((image) => image.data),
       messages: next
         .slice(-16)
         .filter((m) => m.content)
@@ -609,7 +639,10 @@ export function Assistant({ ready }) {
             {m.role === "assistant" ? (
               <FormattedAnswer text={m.content} />
             ) : (
-              <div>{m.content}</div>
+              <>
+                <SentScreenshots message={m} />
+                <div>{m.content}</div>
+              </>
             )}
             {m.status === "streaming" && (
               <span className="assistant-stream-cursor" aria-label="正在生成">
@@ -927,7 +960,11 @@ export function Assistant({ ready }) {
               data-guide="assistant-chat"
               aria-label="发给 AI 助手的消息"
               maxLength={12000}
-              placeholder="描述问题、粘贴报错，或说说你想制作的整合包…"
+              placeholder={
+                images.length
+                  ? "可直接发送截图，也可以补充想问的问题…"
+                  : "描述问题、粘贴报错，或说说你想制作的整合包…"
+              }
               value={text}
               onChange={(e) => V(e.target.value)}
               onPaste={(e) => {
@@ -966,7 +1003,12 @@ export function Assistant({ ready }) {
                 <Button
                   primary
                   type="submit"
-                  disabled={busy || logBusy || !text.trim() || !desktop}
+                  disabled={
+                    busy ||
+                    logBusy ||
+                    (!text.trim() && !images.length) ||
+                    !desktop
+                  }
                 >
                   <Send size={15} />
                   发送

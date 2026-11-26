@@ -134,7 +134,7 @@ export const useStore = create()(
           set({
             directories: dirs.items,
             directoryId,
-            ...(get().directoryId !== directoryId
+            ...(get().directoryId && get().directoryId !== directoryId
               ? { instances: [], selected: "" }
               : {}),
           });
@@ -144,17 +144,22 @@ export const useStore = create()(
         const accounts = await api("list_accounts");
         if (generation !== refreshGeneration) return;
         const remembered = get().directorySelections[directoryId];
+        const selected = instances.some((x) => x.id === get().selected)
+          ? get().selected
+          : (instances.find((i) => i.id === remembered)?.id ??
+            instances[0]?.id ??
+            "");
         set({
           ...(Array.isArray(dirs?.items)
             ? { directories: dirs.items, directoryId }
             : {}),
           instances,
           accounts,
-          selected: instances.some((x) => x.id === get().selected)
-            ? get().selected
-            : (instances.find((i) => i.id === remembered)?.id ??
-              instances[0]?.id ??
-              ""),
+          selected,
+          directorySelections: {
+            ...get().directorySelections,
+            [directoryId]: selected,
+          },
           accountId: accounts.some((x) => x.id === get().accountId)
             ? get().accountId
             : (accounts[0]?.id ?? ""),
@@ -194,6 +199,7 @@ export const useStore = create()(
         if (old.settings) delete old.settings.jvm;
         return {
           servers: old.servers ?? [],
+          directoryId: old.directoryId ?? "",
           selected: old.selected ?? "",
           directorySelections: old.directorySelections ?? {},
           accountId: old.accountId ?? "",
@@ -257,11 +263,15 @@ export const useStore = create()(
         servers: s.servers,
         settings: s.settings,
         selected: s.selected,
+        directoryId: s.directoryId,
         accountId: s.accountId,
         skin: s.skin,
         skinAccountId: s.skinAccountId,
         skinModel: s.skinModel,
-        directorySelections: s.directorySelections,
+        directorySelections: {
+          ...s.directorySelections,
+          ...(s.directoryId ? { [s.directoryId]: s.selected } : {}),
+        },
       }),
     },
   ),

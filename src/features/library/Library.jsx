@@ -73,6 +73,7 @@ function ResourceMark({ name, fallback }) {
   );
 }
 async function chooseInstanceIcon(id) {
+  const directoryId = useStore.getState().directoryId;
   const file = await pickImageFile("wallpaper");
   if (!file) return false;
   if (file.size > 2 * 1024 * 1024) throw new Error("实例图标不能大于 2 MB");
@@ -80,11 +81,21 @@ async function chooseInstanceIcon(id) {
   let binary = "";
   for (let offset = 0; offset < bytes.length; offset += 8192)
     binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
-  await api("save_instance_icon", {
+  const updated = await api("save_instance_icon", {
+    directoryId,
     id,
     mime: file.type,
     base64: btoa(binary),
   });
+  useStore.setState((state) =>
+    state.directoryId === directoryId
+      ? {
+          instances: state.instances.map((instance) =>
+            instance.id === id ? { ...instance, icon: updated.icon } : instance,
+          ),
+        }
+      : {},
+  );
   return true;
 }
 export function Library() {
@@ -102,11 +113,21 @@ export function Library() {
   };
   useGuideSection("library", T);
   const [worlds, W] = useState([]);
+  const worldSources = JSON.stringify(
+    s.instances.map(({ id, name, version }) => ({ id, name, version })),
+  );
   useEffect(() => {
     if (!desktop) return;
+    let active = true;
     Promise.all(
-      s.instances.map(async (i) =>
-        (await api("resources", { id: i.id, kind: "saves" }))
+      JSON.parse(worldSources).map(async (i) =>
+        (
+          await api("resources", {
+            directoryId: s.directoryId,
+            id: i.id,
+            kind: "saves",
+          })
+        )
           .filter((w) => w.dir !== false)
           .map((w) => ({
             name: w.name,
@@ -116,9 +137,16 @@ export function Library() {
           })),
       ),
     )
-      .then((v) => W(v.flat()))
-      .catch((e) => s.notify(String(e)));
-  }, [s.instances]);
+      .then((v) => {
+        if (active) W(v.flat());
+      })
+      .catch((e) => {
+        if (active) s.notify(String(e));
+      });
+    return () => {
+      active = false;
+    };
+  }, [worldSources, s.directoryId]);
   const shown = s.instances.filter(
     (i) =>
       i.name.toLowerCase().includes(q.toLowerCase()) &&
@@ -126,7 +154,6 @@ export function Library() {
   );
   async function uploadIcon(id) {
     if (!(await chooseInstanceIcon(id))) return;
-    await s.refresh();
     s.notify("实例图标已更新");
   }
   return (
@@ -978,7 +1005,6 @@ export function InstanceDetail() {
           onClick={() =>
             guarded(async () => {
               if (!(await chooseInstanceIcon(i.id))) return;
-              await s.refresh();
               s.notify("实例图标已更新");
             })
           }

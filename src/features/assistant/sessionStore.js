@@ -1,4 +1,6 @@
 export const SESSION_KEY = "kynex-assistant-sessions-v1";
+export const MAX_SCREENSHOT_PREVIEW = 64 * 1024;
+const PREVIEW_BUDGET = 1536 * 1024;
 const storage = () => globalThis.localStorage;
 export function privateText(text) {
   return text
@@ -42,20 +44,37 @@ function cleanMessage(raw) {
       : privateText(raw.content).slice(0, 60000),
     createdAt: Number.isFinite(raw.createdAt) ? raw.createdAt : Date.now(),
   };
+  if (
+    raw.role === "user" &&
+    Number.isInteger(raw.imageCount) &&
+    raw.imageCount > 0
+  ) {
+    message.imageCount = Math.min(3, raw.imageCount);
+    message.screenshots = (
+      Array.isArray(raw.screenshots) ? raw.screenshots : []
+    )
+      .slice(0, message.imageCount)
+      .filter(
+        (value) =>
+          typeof value === "string" &&
+          value.length <= MAX_SCREENSHOT_PREVIEW &&
+          /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(
+            value,
+          ),
+      );
+  }
   if (raw.searches)
     message.searches = raw.searches
       .filter((s) => typeof s === "string")
       .slice(0, 3)
       .map(privateText);
   if (raw.recommendations)
-    message.recommendations = raw.recommendations
-      .slice(0, 12)
-      .map((r) => ({
-        name: privateText(r.name || ""),
-        query: privateText(r.query || ""),
-        category: privateText(r.category || ""),
-        reason: privateText(r.reason || ""),
-      }));
+    message.recommendations = raw.recommendations.slice(0, 12).map((r) => ({
+      name: privateText(r.name || ""),
+      query: privateText(r.query || ""),
+      category: privateText(r.category || ""),
+      reason: privateText(r.reason || ""),
+    }));
   if (raw.status)
     message.status = raw.status === "streaming" ? "cancelled" : raw.status;
   if (raw.error) message.error = privateText(raw.error);
@@ -113,6 +132,18 @@ export function loadSessions(store = storage()) {
   }
 }
 function write(sessions, store) {
+  let remaining = PREVIEW_BUDGET;
+  for (const session of sessions) {
+    for (const message of [...session.messages].reverse()) {
+      if (!message.screenshots?.length) continue;
+      const size = message.screenshots.reduce(
+        (total, value) => total + value.length,
+        0,
+      );
+      if (size <= remaining) remaining -= size;
+      else message.screenshots = [];
+    }
+  }
   try {
     store.setItem(SESSION_KEY, JSON.stringify(sessions.slice(0, 30)));
   } catch {
@@ -182,6 +213,7 @@ export function exportMarkdown(session) {
         [
           `## ${m.role === "user" ? "用户" : "AI 助手"} · ${time(m.createdAt || clean.createdAt)}`,
           m.content,
+          m.imageCount ? `（附 ${m.imageCount} 张截图；导出文件不含图片）` : "",
           m.status === "cancelled" ? "（已停止生成）" : "",
           ...(m.recommendations || []).map(
             (r) =>

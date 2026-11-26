@@ -28,10 +28,10 @@ try {
   });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  const old = readFileSync("scripts/assistant-ui-check.mjs", "utf8");
+  const old = readFileSync("tests/fixtures/assistant-desktop.js", "utf8");
   let fixture = old.slice(
     old.indexOf("await page.addInitScript(() => {"),
-    old.indexOf("  await page.goto("),
+    old.indexOf("  // END_DESKTOP_FIXTURE"),
   );
   fixture = fixture.replace(
     "let id = 0;",
@@ -96,12 +96,17 @@ try {
     await page.getByRole("button", { name: "整合包工坊", exact: true }).click();
     const panel = page.getByRole("region", { name: "AI 整合包工坊" });
     await panel.getByRole("button", { name: "玩法模板", exact: true }).click();
-    await page.getByRole("dialog", { name: "从玩法模板开始" }).getByRole("button", { name: /轻量冒险/ }).click();
+    await page
+      .getByRole("dialog", { name: "从玩法模板开始" })
+      .getByRole("button", { name: /轻量冒险/ })
+      .click();
     assert.match(
       await panel.getByLabel("想制作什么整合包？").inputValue(),
       /轻量冒险/,
     );
-    await panel.getByRole("button", { name: "更新与迁移", exact: true }).click();
+    await panel
+      .getByRole("button", { name: "更新与迁移", exact: true })
+      .click();
     await panel
       .getByRole("button", { name: "检查整合包更新", exact: true })
       .click();
@@ -139,7 +144,9 @@ try {
     await panel
       .getByRole("button", { name: "清除忽略记录", exact: true })
       .waitFor();
-    await panel.getByRole("button", { name: "查看换版本方案", exact: true }).click();
+    await panel
+      .getByRole("button", { name: "查看换版本方案", exact: true })
+      .click();
     await panel.getByText("local.jar（未识别）", { exact: true }).waitFor();
     assert.equal(
       await panel
@@ -159,7 +166,9 @@ try {
       .click();
     await page.getByRole("button", { name: "确认执行", exact: true }).click();
     await panel.getByText("迁移验证通过", { exact: true }).waitFor();
-    await panel.getByRole("button", { name: "导出与分享", exact: true }).click();
+    await panel
+      .getByRole("button", { name: "导出与分享", exact: true })
+      .click();
     await panel
       .getByRole("button", { name: "生成分享码", exact: true })
       .click();
@@ -173,7 +182,9 @@ try {
     await panel
       .getByText("保存位置：当前游戏目录 exports/", { exact: true })
       .waitFor();
-    await panel.getByRole("button", { name: "配置与排错", exact: true }).click();
+    await panel
+      .getByRole("button", { name: "配置与排错", exact: true })
+      .click();
     await panel
       .getByRole("button", { name: "分析硬件与当前配置", exact: true })
       .click();
@@ -188,8 +199,12 @@ try {
       .getByText("未测量 FPS；不承诺帧率提升。", { exact: true })
       .waitFor();
     await page.screenshot({ path: output + "/advanced.png" });
-    await panel.getByRole("button", { name: "导入分享码", exact: true }).click();
-    const importDialog = page.getByRole("dialog", { name: "导入分享码或 .kxlpack" });
+    await panel
+      .getByRole("button", { name: "导入分享码", exact: true })
+      .click();
+    const importDialog = page.getByRole("dialog", {
+      name: "导入分享码或 .kxlpack",
+    });
     await importDialog
       .getByRole("textbox", { name: "分享码", exact: true })
       .fill("KXL1.fixture.12345678");
@@ -217,6 +232,8 @@ try {
     name: "发给 AI 助手的消息",
     exact: true,
   });
+  const send = page.getByRole("button", { name: "发送", exact: true });
+  assert.equal(await send.isDisabled(), true, "空消息不能发送");
   await page.getByLabel("选择截图", { exact: true }).setInputFiles({
     name: "test.png",
     mimeType: "image/png",
@@ -231,11 +248,27 @@ try {
       "base64",
     ),
   });
+  await page.getByRole("button", { name: "移除截图", exact: true }).waitFor();
+  assert.equal(await send.isEnabled(), true, "只有截图也能发送");
   await page.getByRole("button", { name: "移除截图", exact: true }).click();
+  assert.equal(
+    await send.isDisabled(),
+    true,
+    "移除最后一张截图后不能发送空消息",
+  );
   await page.evaluate(() => {
     const canvas = document.createElement("canvas");
-    canvas.width = 2;
-    canvas.height = 2;
+    canvas.width = 640;
+    canvas.height = 360;
+    const paint = canvas.getContext("2d");
+    paint.fillStyle = "#152a25";
+    paint.fillRect(0, 0, 640, 360);
+    paint.fillStyle = "#bce8d3";
+    paint.font = "bold 40px sans-serif";
+    paint.fillText("Minecraft", 40, 100);
+    paint.font = "24px monospace";
+    paint.fillText("OutOfMemoryError", 40, 180);
+    paint.fillText("Java heap space", 40, 224);
     window.dropPng = canvas.toDataURL("image/png").split(",")[1];
     const box = document
       .querySelector(".assistant-compose")
@@ -260,7 +293,7 @@ try {
     ),
     true,
   );
-  await input.fill("分析 Minecraft 截图中的错误");
+  await input.fill("   ");
   await page.getByRole("button", { name: "发送", exact: true }).click();
   await page
     .getByRole("alert")
@@ -277,6 +310,35 @@ try {
   await page
     .getByText("截图中的 Minecraft 错误可先检查 Java。", { exact: true })
     .waitFor();
+  const imageRequest = await page.evaluate(
+    () => window.calls.find((c) => c.action === "ai_assistant_stream").payload,
+  );
+  assert.equal(imageRequest.images.length, 1, "截图必须随请求发送");
+  assert.match(imageRequest.images[0], /^data:image\/png;base64,/);
+  assert.match(imageRequest.messages.at(-1).content, /截图/);
+  assert.equal(await send.isDisabled(), true, "发送后空输入框应恢复禁用状态");
+  const sentImage = page
+    .getByRole("button", { name: "查看已发送的第 1 张截图", exact: true })
+    .first();
+  await sentImage.waitFor();
+  assert.equal(
+    await sentImage
+      .locator("img")
+      .evaluate((img) => img.complete && img.naturalWidth > 0),
+    true,
+  );
+  await sentImage.click();
+  const imageViewer = page.getByRole("dialog", {
+    name: "已发送的截图",
+    exact: true,
+  });
+  await imageViewer.waitFor();
+  assert.equal(
+    await imageViewer.locator("img").getAttribute("src"),
+    imageRequest.images[0],
+  );
+  await page.keyboard.press("Escape");
+  await imageViewer.waitFor({ state: "hidden" });
   assert.equal(
     await page.getByRole("button", { name: "移除截图", exact: true }).count(),
     0,
@@ -285,10 +347,38 @@ try {
     await page.evaluate(() =>
       localStorage
         .getItem("kynex-assistant-sessions-v1")
-        .includes("data:image"),
+        .includes("data:image/webp"),
     ),
-    false,
+    true,
   );
+  await page.getByLabel("选择截图", { exact: true }).setInputFiles({
+    name: "with-question.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(imageRequest.images[0].split(",")[1], "base64"),
+  });
+  await page.getByRole("button", { name: "移除截图", exact: true }).waitFor();
+  await input.fill("分析 Minecraft 截图中的错误");
+  await input.press("Enter");
+  await page.waitForFunction(
+    () =>
+      window.calls.filter((c) => c.action === "ai_assistant_stream").length ===
+      2,
+  );
+  const questionRequest = await page.evaluate(
+    () =>
+      window.calls.filter((c) => c.action === "ai_assistant_stream").at(-1)
+        .payload,
+  );
+  assert.equal(questionRequest.images.length, 1);
+  assert.equal(
+    questionRequest.messages.at(-1).content,
+    "分析 Minecraft 截图中的错误",
+  );
+  await page.waitForFunction(
+    () => !document.querySelector(".assistant-thinking"),
+  );
+  assert.equal(await page.locator(".assistant-sent-images img").count(), 2);
+  await page.screenshot({ path: output + "/sent-images.png" });
   await page.evaluate(() => {
     window.voice = true;
     class Recorder {
@@ -346,7 +436,7 @@ try {
       () =>
         window.calls.filter((c) => c.action === "ai_assistant_stream").length,
     ),
-    1,
+    2,
   );
   assert.equal(await page.evaluate(() => window.tracksStopped), true);
   await page.screenshot({ path: output + "/media.png" });
@@ -354,6 +444,15 @@ try {
     await page.locator(".assistant-panel").evaluate((e) => e.scrollLeft),
     0,
   );
+  await page.reload();
+  await page.getByRole("button", { name: "打开 AI 助手", exact: true }).click();
+  assert.equal(
+    await page.locator(".assistant-sent-images img").count(),
+    2,
+    "重开后历史中仍应显示截图预览",
+  );
+  await page.locator(".assistant-message.user").last().scrollIntoViewIfNeeded();
+  await page.screenshot({ path: output + "/sent-images-history.png" });
   assert.deepEqual(errors, []);
   writeFileSync(
     output + "/ui-result.json",
@@ -367,7 +466,7 @@ try {
           "分享预览后确认导入与保存",
           "性能前后对比与确认",
           "模板填入可编辑需求",
-          "截图预览/模型能力拦截/发送后清除/历史无图片",
+          "截图预览/模型能力拦截/发送后消息内显示/点开查看/历史压缩预览",
           "语音按住/松开转写/释放麦克风/不自动发送",
           "提醒已读红点消除/忽略7天",
         ],

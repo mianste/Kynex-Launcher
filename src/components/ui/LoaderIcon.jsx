@@ -51,28 +51,6 @@ export function InstanceIcon({ instance, className = "", cover = false }) {
     [instance.icon, instance.packIcon, instance.packLogo, instance.loader],
   );
   const index = Math.min(failed, sources.length - 1);
-  if (cover && index === sources.length - 1) {
-    return (
-      <span
-        className={`instance-cover-art cover-${key}`}
-        role="img"
-        aria-label={`${instance.name} 图标`}
-      >
-        <img
-          className="instance-cover-backdrop"
-          src={fallback}
-          alt=""
-          draggable={false}
-        />
-        <img
-          className="instance-cover-logo"
-          src={fallback}
-          alt=""
-          draggable={false}
-        />
-      </span>
-    );
-  }
   const coverClass = cover ? "instance-custom-icon" : "";
   return (
     <img
