@@ -8,6 +8,15 @@ import {
   normalizeHexColor,
   normalizeUiOpacity,
 } from "../lib/appearance";
+import {
+  msUntilNextLocalMidnight,
+  resolveActiveHoliday,
+  shouldUseHolidayWallpaper,
+} from "../lib/holidays";
+import { holidayWallpaperUrl } from "../lib/holidayAssets";
+import { HolidayAtmosphere } from "../components/HolidayAtmosphere";
+import { HolidayIslandDecor } from "../components/HolidayIslandDecor";
+import { HolidayLiveWallpaper } from "../components/HolidayLiveWallpaper";
 import { useAdaptiveText } from "../lib/useAdaptiveText";
 import { ReleaseNotices } from "../features/updates/ReleaseNotices";
 import { HotfixStartup } from "../features/updates/Hotfix";
@@ -33,6 +42,7 @@ import {
   Upload,
   PackagePlus,
   Newspaper,
+  Sparkles,
   Wrench,
 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -117,35 +127,87 @@ export function App() {
   const [tasksOpen, TasksOpen] = useState(false);
   const depth = useRef(0);
   const appRoot = useRef(null);
+  const [todayTick, setTodayTick] = useState(() => Date.now());
+  useEffect(() => {
+    let timer = 0;
+    const arm = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        setTodayTick(Date.now());
+        arm();
+      }, msUntilNextLocalMidnight());
+    };
+    const onVisible = () => {
+      if (!document.hidden) setTodayTick(Date.now());
+    };
+    arm();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+  const activeHoliday = resolveActiveHoliday(s.settings, new Date(todayTick));
+  const activeHolidayId = activeHoliday?.holiday.id ?? "";
+  const holidayAccentLight = activeHoliday?.holiday.accent.light ?? "";
+  const holidayAccentDark = activeHoliday?.holiday.accent.dark ?? "";
+  const effectsOn = s.settings.holidayEffects !== false;
+  const holidayEffectsOn = !!activeHoliday && effectsOn;
+  const useHolidayArt = shouldUseHolidayWallpaper(
+    s.settings.wallpaper,
+    s.settings,
+    activeHoliday,
+  );
+  const holidayArtUrl = useHolidayArt
+    ? holidayWallpaperUrl(activeHolidayId)
+    : null;
   const customSurface =
-    s.settings.theme === "custom"
+    !activeHoliday && s.settings.theme === "custom"
       ? (normalizeHexColor(s.settings.customThemeColor) ?? "#f7fafc")
       : undefined;
+  const everydayAccent = normalizeHexColor(s.settings.accent) ?? "#3d7c88";
   useLayoutEffect(() => {
     const media = matchMedia("(prefers-color-scheme: light)");
     const apply = () => {
       const app = appRoot.current;
       if (app) app.dataset.appearanceChanging = "true";
       const root = document.documentElement;
-      const accent = normalizeHexColor(s.settings.accent) ?? "#3d7c88";
-      const ink = customSurface ? colorInk(customSurface) : undefined;
-      const theme = ink
-        ? ink === "#000000"
+      const customInk = customSurface ? colorInk(customSurface) : undefined;
+      const theme = customInk
+        ? customInk === "#000000"
           ? "light"
           : "dark"
         : s.settings.theme === "system"
           ? media.matches
             ? "light"
             : "dark"
-          : s.settings.theme;
+          : s.settings.theme === "custom"
+            ? colorInk(
+                normalizeHexColor(s.settings.customThemeColor) ?? "#f7fafc",
+              ) === "#000000"
+              ? "light"
+              : "dark"
+            : s.settings.theme;
+      const accent = activeHolidayId
+        ? (theme === "light"
+            ? holidayAccentLight || holidayAccentDark
+            : holidayAccentDark || holidayAccentLight) || everydayAccent
+        : everydayAccent;
       root.dataset.theme = theme;
       root.style.colorScheme = theme;
+      if (activeHolidayId) {
+        root.dataset.holiday = activeHolidayId;
+        root.dataset.holidayEffects = holidayEffectsOn ? "true" : "false";
+      } else {
+        delete root.dataset.holiday;
+        delete root.dataset.holidayEffects;
+      }
       root.style.setProperty("--accent", accent);
       root.style.setProperty("--on-accent", colorInk(accent));
       root.toggleAttribute("data-custom-theme", !!customSurface);
-      if (customSurface && ink) {
+      if (customSurface && customInk) {
         root.style.setProperty("--custom-surface", customSurface);
-        root.style.setProperty("--custom-ink", ink);
+        root.style.setProperty("--custom-ink", customInk);
       } else {
         root.style.removeProperty("--custom-surface");
         root.style.removeProperty("--custom-ink");
@@ -157,13 +219,24 @@ export function App() {
     apply();
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
-  }, [customSurface, s.settings.theme, s.settings.accent]);
+  }, [
+    activeHolidayId,
+    holidayAccentLight,
+    holidayAccentDark,
+    holidayEffectsOn,
+    customSurface,
+    everydayAccent,
+    s.settings.theme,
+    s.settings.customThemeColor,
+  ]);
   useAdaptiveText(
     appRoot,
-    s.settings.wallpaper,
+    holidayArtUrl ?? s.settings.wallpaper,
     normalizeUiOpacity(s.settings.uiOpacity),
     s.page,
-    customSurface ?? s.settings.theme,
+    activeHolidayId
+      ? `holiday:${activeHolidayId}:${s.settings.theme}`
+      : (customSurface ?? s.settings.theme),
   );
   const navRoot = useRef(null);
   const navigationToggle = useRef(null);
@@ -374,7 +447,7 @@ export function App() {
       className={`app page-${s.page} ${splash ? "splash-active" : ""} ${dynamicVideo ? "video-wallpaper" : ""}`}
       data-native-window={desktop ? "" : undefined}
       data-default-wallpaper={
-        s.settings.wallpaper === "island" ? "" : undefined
+        !holidayArtUrl && s.settings.wallpaper === "island" ? "" : undefined
       }
       style={{ "--ui-alpha": uiAlpha, "--ui-blur": uiBlur }}
       onDragOverCapture={(e) => {
@@ -407,11 +480,20 @@ export function App() {
       }}
     >
       <div
-        className={`wallpaper ${s.settings.wallpaper === "dusk" ? "dusk" : ""} ${s.settings.wallpaper === "plain" ? "plain" : ""}`}
+        className={`wallpaper ${holidayArtUrl ? "holiday-wallpaper" : ""} ${!holidayArtUrl && s.settings.wallpaper === "dusk" ? "dusk" : ""} ${!holidayArtUrl && s.settings.wallpaper === "plain" ? "plain" : ""}`}
         style={{
-          backgroundImage: `url(${custom ? s.settings.wallpaper : wallpaper})`,
+          backgroundImage: `url(${holidayArtUrl ?? (custom ? s.settings.wallpaper : wallpaper)})`,
         }}
       />
+      {holidayArtUrl && (
+        <HolidayLiveWallpaper
+          holidayId={activeHolidayId}
+          imageUrl={holidayArtUrl}
+          active={effectsOn}
+          isHome={s.page === "home"}
+          appRoot={appRoot}
+        />
+      )}
       {dynamicVideo && desktop && (
         <video
           key={dynamicVideo}
@@ -425,6 +507,13 @@ export function App() {
         />
       )}
       <div className="scrim" />
+      <HolidayAtmosphere
+        holidayId={activeHolidayId}
+        accent={everydayAccent}
+        enabled={effectsOn}
+        appRoot={appRoot}
+        page={s.page}
+      />
       <header className="chrome">
         <div className="drag-region" data-tauri-drag-region />
         <div className="window-controls">
@@ -487,6 +576,10 @@ export function App() {
           aria-hidden={!navOpen}
           ref={navRoot}
         >
+          <HolidayIslandDecor
+            holidayId={activeHolidayId}
+            effectsOn={holidayEffectsOn}
+          />
           <button
             className="brand"
             aria-label="KXL 首页"
@@ -551,6 +644,23 @@ export function App() {
             : ""}
         </button>
         <span className="grow" />
+        {activeHoliday && (
+          <button
+            className="holiday-pill"
+            title="节日主题设置"
+            onClick={() => {
+              s.setPage("settings");
+              window.setTimeout(
+                () =>
+                  window.dispatchEvent(new Event("kynex-open-holiday-settings")),
+                30,
+              );
+            }}
+          >
+            <Sparkles size={12} />
+            {activeHoliday.holiday.name}主题
+          </button>
+        )}
         {s.page !== "home" && (
           <button onClick={() => guarded(importPack)}>
             <PackagePlus size={13} />
