@@ -92,6 +92,38 @@ final class LaunchManifestTest {
     }
 
     @Test
+    void appendsCustomJvmAndGameArgumentsWithWindowsPathSafety() {
+        var request = json("""
+            {"version":{"mainClass":"sample.Main","arguments":{"jvm":[],"game":["--username","\u0024{auth_player_name}"]}},
+             "settings":{"memory":4096,"width":1280,"height":720,
+               "jvmArgs":"-XX:+UseG1GC -javaagent:C:\\\\Tools\\\\agent.jar -DcustomDir=\\"C:\\\\My Folder\\\\mc\\" -Ddir=\u0024{game_directory}",
+               "gameArgs":"--fullscreen --server 'play.example.test'"},
+             "loader":"vanilla"}
+            """);
+        var variables = new JsonObject();
+        variables.addProperty("classpath", "C:\\game\\client.jar");
+        variables.addProperty("auth_player_name", "Alex");
+        variables.addProperty("game_directory", "C:\\game\\instance");
+        variables.addProperty("natives_directory", "C:\\game\\natives");
+        request.add("variables", variables);
+        assertEquals(List.of(
+            "-Xmx4096M",
+            "-Djava.library.path=C:\\game\\natives",
+            "-cp", "C:\\game\\client.jar",
+            "-XX:+UseG1GC",
+            "-javaagent:C:\\Tools\\agent.jar",
+            "-DcustomDir=C:\\My Folder\\mc",
+            "-Ddir=C:\\game\\instance",
+            "sample.Main",
+            "--username", "Alex",
+            "--width", "1280", "--height", "720",
+            "--fullscreen", "--server", "play.example.test"),
+            LaunchManifest.arguments(request, WINDOWS).asList().stream().map(item -> item.getAsString()).toList());
+        assertEquals(List.of(), LaunchManifest.parseCustomArguments("   \t\n "));
+        assertThrows(IllegalArgumentException.class, () -> LaunchManifest.parseCustomArguments("-Dfoo=\"unclosed"));
+    }
+
+    @Test
     void validatesAssetIndexesAndReusesMatchingFiles(@TempDir Path root) throws Exception {
         Path instance = Files.createDirectory(root.resolve("instance"));
         Files.writeString(instance.resolve("client.jar"), "fixture");
