@@ -2,17 +2,19 @@
 
 Kynex 是一个给 Windows 用的 Minecraft Java 版启动器。可以在这里装游戏、下模组和整合包，也可以让不同版本各用各的游戏文件夹。
 
-[下载 Windows 安装器](https://github.com/mianste/Kynex-Launcher/releases/download/v2.0.1/Kynex.Launcher.v2.0.1.Setup.exe) · [看这版改了什么](CHANGELOG.md) · [下载源码](https://github.com/mianste/Kynex-Launcher/releases/download/v2.0.1/Kynex.Launcher.v2.0.1.Open.Source.zip) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
+[下载 Windows 安装器](https://github.com/mianste/Kynex-Launcher/releases/download/v2.1.2/Kynex.Launcher.v2.1.2.Setup.exe) · [看这版改了什么](CHANGELOG.md) · [浏览源码](https://github.com/mianste/Kynex-Launcher) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
 
 ## 怎么装
 
 用 Windows 10 或 11 的 64 位电脑下载安装器，双击打开，按提示装好就能用。已经在用 Kynex 的玩家，可以在启动器里检查更新，也可以下载新版安装器直接覆盖安装。很早的版本请先手动覆盖安装一次。
 
-v2.0.0 的下载列表加载更快。切回看过的分类或页码，会直接显示上次的列表和图标。正式版安装器自带启动器所需的 Java。
+v2.1.2 新增自定义启动参数（支持自定义 JVM 参数与游戏参数），内置原版与各加载器版本索引，打开版本选择即可秒出列表；十套节日主题支持灵动岛节日装饰、全板块动态背景与顺滑首页切换动画。正式版安装器自带启动器所需的 Java。
 
 ## 能做什么
 
-- 安装原版 Minecraft，也可以装 Fabric、Forge、NeoForge、Quilt 和 OptiFine。
+- 安装原版 Minecraft，也可以装 Fabric、Forge、NeoForge、Quilt 和 OptiFine，内置版本索引秒开列表。
+- 在「设置 → 启动」自定义 JVM 参数与游戏参数，并支持常用优化预设一键添加。
+- 内置十套节日主题与自动节日切换，支持灵动岛节日装饰、动态背景与氛围特效。
 - 在「下载」里找 Modrinth 和 CurseForge 上的模组、整合包、资源包、数据包和光影。点「安装」就能在选版本时翻看作者上传的预览图。
 - 在「下载 → 地图」找像素茶艺和 CurseForge 的地图。有可安装文件时，可以直接安装到选中的实例。
 - 让不同版本各用各的文件夹，分开管理模组和存档。建好存档后，可以选中它安装数据包。

@@ -1,3 +1,99 @@
+# v2.1.2
+
+- 新增自定义启动参数
+
+[下载 v2.1.2](https://github.com/mianste/Kynex-Launcher/releases/tag/v2.1.2)
+
+# v2.1.1
+
+- 新增了节日主题灵动岛的装饰
+
+[下载 v2.1.1](https://github.com/mianste/Kynex-Launcher/releases/tag/v2.1.1)
+
+# v2.1.0
+
+- 新增自动节日主题
+- 新增鼠标拖尾
+- 新增悬浮动效
+
+[下载 v2.1.0](https://github.com/mianste/Kynex-Launcher/releases/tag/v2.1.0)
+
+# v2.0.11
+
+- Fabric、Quilt 和原版游戏版本列表也改为内置索引，所有加载器的版本选择都立即返回；Fabric 1.21.1 实测约 95ms、Quilt 约 13ms、原版版本列表约 9ms。
+- 包含 2.0.10 的 Forge/NeoForge 内置索引、2.0.9 的 OptiFine 内置索引和 2.0.8 的图标/封面改进。
+
+[下载 v2.0.11](https://github.com/mianste/Kynex-Launcher/releases/tag/v2.0.11)
+
+# v2.0.10
+
+- Forge 和 NeoForge 版本列表也改为内置索引，打开版本选择立即返回，不再等待 Maven 元数据下载；NeoForge 1.21.1 实测约 0.2 秒列出 262 个版本，Forge 约 30ms。
+- 内置索引之外的加载器版本仍会在线刷新；包含 2.0.9 的 OptiFine 内置索引和 2.0.8 的图标/封面改进。
+
+[下载 v2.0.10](https://github.com/mianste/Kynex-Launcher/releases/tag/v2.0.10)
+
+# v2.0.9
+
+- OptiFine 版本列表改为内置索引，打开选择版本时立即返回，不再等待 optifine.net 下载页；内置索引外的版本仍会在线刷新。
+- 包含 2.0.8 的图标非阻塞加载和实例整张主题封面，以及 2.0.7 的原版页签隐藏和 2.0.6 的 CurseForge 官方接口修复。
+
+[下载 v2.0.9](https://github.com/mianste/Kynex-Launcher/releases/tag/v2.0.9)
+
+# v2.0.8
+
+- 图标加载不再卡住整个下载列表：先显示资源内容，再逐个补图标；前 6 个优先加载，其余滚动到再加载，本地有缓存时优先用缓存。
+- Forge、原版、NeoForge、Fabric 等实例卡片新增整张主题封面并铺满卡片，不再只显示中间一个小图标。
+- 包含 2.0.7 的原版实例页签隐藏和图标空白修复，以及 2.0.6 的 CurseForge 官方接口修复。
+
+[下载 v2.0.8](https://github.com/mianste/Kynex-Launcher/releases/tag/v2.0.8)
+
+# v2.0.7
+
+- 修复下载列表有时数据已经加载、图标却一直空白的问题：全部来源时两个来源都会预取图标，预取失败也会回退到项目原始图标地址。
+- 原版实例不再显示 Mod、光影、投影入口；Forge 和原版实例卡片改为整张背景显示，和整合包卡片保持一致。
+- 包含 2.0.6 的 CurseForge 官方接口修复和 2.0.5 的更新源加速。
+
+[下载 v2.0.7](https://github.com/mianste/Kynex-Launcher/releases/tag/v2.0.7)
+
+# v2.0.6
+
+- CurseForge 已内置官方 API Key，搜索和下载改用官方接口，不再依赖慢速公共镜像；CurseForge 结果通常几秒内返回。
+- 安装后无需填写 Key，模组、整合包、资源包、光影、地图和数据包的 CurseForge 结果都能正常加载。
+
+[下载 v2.0.6](https://github.com/mianste/Kynex-Launcher/releases/tag/v2.0.6)
+
+# v2.0.5
+
+- 更新检查新增 ghfast 国内加速，修复 gh-proxy 返回 403 时提示“检查更新失败”的问题；之后检查更新和下载安装包会更稳。
+- 包含 2.0.4 的资源加速：模组、整合包、材质包、光影、地图和数据包不再等慢速镜像，单次加载约 2.5 秒。
+- 包含 2.0.3 的修复：像素茶艺的 .schem 投影可以正常列出、预览和下载，投影空结果可直接重新加载。
+
+[下载 v2.0.5](https://github.com/mianste/Kynex-Launcher/releases/tag/v2.0.5)
+
+# v2.0.4
+
+- 资源列表加载更快：模组、整合包、材质包、光影、地图和数据包会先显示已返回的来源，不再等慢速镜像，单次加载从十几秒降到约 2.5 秒。
+- 同时包含 2.0.3 的修复：像素茶艺的 .schem 投影可以正常列出、预览和下载，投影空结果可以直接重新加载，CurseForge 的镜像误报也减少了。
+
+[下载 v2.0.4](https://github.com/mianste/Kynex-Launcher/releases/tag/v2.0.4)
+
+# v2.0.3
+
+- 修复「下载 → 投影 → 像素茶艺」一直显示没有可下载投影的问题，作者最新上传的 .schem 投影可以正常列出、预览和下载。
+- 投影列表为空或加载失败时可以直接重新加载，不再把空结果缓存十分钟。
+- 改进 CurseForge 连接：移除失效镜像，单独浏览 CurseForge 时等待较慢的公共镜像，减少“HTTP 403 + 镜像超时”的误报。
+
+[下载 v2.0.3](https://github.com/mianste/Kynex-Launcher/releases/tag/v2.0.3)
+
+# v2.0.2
+
+- 整体动效更自然：页面切换、卡片入场、按钮和导航反馈更顺滑，助手球有轻微呼吸效果。
+- 更新进度卡片跟随透明主题，可以拖动、收起；版本名过长时不会压到关闭按钮。
+- 下载完成和提示小灵动岛保留原来的样子，修复长文件名和透明背景下文字重叠的问题。
+- 手动更新也会静默安装；自动更新会等更新日志和新手引导关闭后再开始，安装失败时下次启动会提示重试。
+
+[下载 v2.0.2](https://github.com/mianste/Kynex-Launcher/releases/tag/v2.0.2)
+
 # v2.0.1
 
 - 修复 Windows 任务栏预览左上角不显示启动器图标的问题。
