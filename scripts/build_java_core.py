@@ -58,6 +58,10 @@ def build(jdk: Path, gson: Path, output: Path, swt: Path | None = None, jna: Pat
         if swt:
             for asset in (project / "desktop/resources").glob("*.js"):
                 shutil.copyfile(asset, Path(classes) / asset.name)
+            for name in ("optifine-versions.json", "forge-maven.xml", "neoforge-maven.xml",
+                         "fabric-game.json", "fabric-loader.json", "quilt-game.json", "quilt-loader.json",
+                         "version-manifest.json"):
+                shutil.copyfile(project / "desktop/resources" / name, Path(classes) / name)
             for name in ("build-channel.json", "update-sources.json", "updater-public-key.txt"):
                 shutil.copyfile(config / name, Path(classes) / name)
         tool("jar", "--create", "--file", str(output / "core.jar"), "-C", classes, ".")
