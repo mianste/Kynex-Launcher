@@ -37,12 +37,12 @@ final class InstalledGameLauncher {
     JsonObject launch(JsonObject payload, GameRuntimeInstaller installer, MicrosoftLogin login, ExternalLogin external,
                       MinecraftInstaller.Progress progress)
         throws IOException, InterruptedException {
-        return launch(payload, installer, login, external, progress, (process, log, gameDir) -> {});
+        return launch(payload, installer, login, external, progress, (process, log, gameDir, title) -> {});
     }
 
     @FunctionalInterface
     interface LaunchObserver {
-        void started(Process process, Path log, Path gameDirectory) throws IOException, InterruptedException;
+        void started(Process process, Path log, Path gameDirectory, String title) throws IOException, InterruptedException;
     }
 
     JsonObject launch(JsonObject payload, GameRuntimeInstaller installer, MicrosoftLogin login, ExternalLogin external,
@@ -117,12 +117,21 @@ final class InstalledGameLauncher {
             String globalGameArgs = text(global, "gameArgs", "");
             if (!globalGameArgs.isBlank()) effectiveSettings.addProperty("gameArgs", globalGameArgs);
         }
+        for (String key : List.of("fullscreen", "customInfo")) {
+            if (!effectiveSettings.has(key) && global.has(key)) effectiveSettings.add(key, global.get(key));
+        }
         var request = new JsonObject();
         request.add("version", version);
         request.add("settings", effectiveSettings);
         request.addProperty("loader", text(config, "loader", "vanilla"));
         if (authAgent != null) request.addProperty("authAgent", authAgent);
-        request.add("variables", variables(root, gameDir, natives, game, classpath, version, global, account, session));
+        JsonObject launchVariables = variables(root, gameDir, natives, game, classpath, version, global, account, session);
+        launchVariables.addProperty("instance_name", id);
+        launchVariables.addProperty("minecraft_directory", root + File.separator);
+        launchVariables.addProperty("instance_directory", instance + File.separator);
+        launchVariables.addProperty("isolated_directory", gameDir + File.separator);
+        request.add("variables", launchVariables);
+        String windowTitle = LaunchManifest.windowTitle(effectiveSettings, launchVariables);
         var command = new ArrayList<String>();
         command.add(runtime);
         for (JsonElement argument : LaunchManifest.arguments(request, platform)) command.add(argument.getAsString());
@@ -142,7 +151,7 @@ final class InstalledGameLauncher {
             process.destroyForcibly();
             throw error;
         }
-        observer.started(process, log, gameDir);
+        observer.started(process, log, gameDir, windowTitle);
         var reply = new JsonObject();
         reply.addProperty("pid", process.pid());
         reply.addProperty("log", log.toString());

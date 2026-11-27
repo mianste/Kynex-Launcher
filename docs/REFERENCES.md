@@ -166,3 +166,27 @@ Windows 凭据只保存必要的登录字段，使用系统凭据库的字节存
 
 - PCL 保存已经获取的搜索结果和来源偏移量，已有足够结果时直接取对应页。HMCL 在列表首次打开时发起搜索，用请求编号丢弃过时的响应，并按 URL 缓存和合并图标请求。 [PCL 资源搜索](https://github.com/Meloong-Git/PCL/blob/main/Plain%20Craft%20Launcher%202/Modules/Resource/ResourceSearcher.vb) · [HMCL 资源列表](https://github.com/HMCL-dev/HMCL/blob/main/HMCL/src/main/java/org/jackhuang/hmcl/ui/instances/DownloadListPage.java) · [HMCL 图片加载](https://github.com/HMCL-dev/HMCL/blob/main/HMCL/src/main/java/org/jackhuang/hmcl/util/RemoteImageLoader.java)
 - KXL 独立实现按筛选和页码缓存列表，图标与列表一起显示。慢来源后续返回时缓存该来源结果，当前列表保持稳定。
+
+## 启动设置与参数（2026-11-28）
+
+- 功能与替换标记参考 [PCL 官方帮助](https://github.com/Meloong-Git/PCL/wiki/替换标记)，署名龙腾猫跃及 PCL 贡献者。仅参考设置分类与用户可见行为，未复制 PCL 源码。
+- KXL 独立实现全屏、自定义窗口标题及玩家/版本/路径标记；未声明兼容 PCL 全部设置或标记。旧版 Minecraft 的服务器参数和新版 Quick Play 分别处理。
+
+- 按用户验收反馈移除初始内存与默认直连服务器；“自定义版本信息”保留原设置名称，改为游戏进程窗口标题，使用 Windows EnumWindows / GetWindowThreadProcessId 定位本次游戏窗口，再通过有超时的 WM_SETTEXT 更新 Unicode 标题，不改游戏 JAR。接口参考 [Microsoft Win32 文档](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessagetimeoutw)。
+
+## 用户提供的液态玻璃资料（2026-11-28）
+
+参考用户提供的八份 YeMotion 液态玻璃资料包：第20期控件、第9期拟态动效、形变菜单、拖拽、搜索框、歌词播放器、8件套和透明边缘折射。署名画心人（simot0etf）与资料包注明的原作者。仅参考边缘厚度、局部折射、高光、胶囊形态及动作连续性，KXL 独立实现 CSS 材质与低分辨率静态位移图，不引入资料包的整屏 WebGL 引擎、歌曲、示例背景或品牌资源。群友来源的源码未直接复制。
+AI 异常退出结果弹窗参考 PCL 的“错误结果集中展示”流程：[官方更新说明](https://github.com/Meloong-Git/PCL/discussions/8634)，未复制分析代码或界面。
+
+页面转场与加载反馈另参考用户提供的「第八期 8个页面动效资料包」（PageMotion Pack，画心人，MIT）：采用双向转场、骨架占位和即时校验反馈的思路，未增加滑动删除等用户未要求的数据操作。
+
+导航指示器的短暂融合参考用户提供的「融球效果资料包实验台」（画心人 / simot0etf），独立采用小区域 SVG 模糊与 Alpha 阈值合成，不过滤文字，也不运行常驻的融球模拟。
+
+用户另提供「液态玻璃第二期详细资料包 LiquidGlass-Pack-v2」（画心人，MIT），参考局部法线折射、细亮边与开关/滑块形变的视觉原则。项目未引入其中的 TSX 或 GLSL 文件，交付仍为 Java、JavaScript 和 Python。
+
+玻璃材质集中在设置中的“玻璃主题”，沿用原壁纸、强调色和节日配色。采用静态边缘位移图、局部背景模糊与 CSS 高光；长列表条目不逐行增加背景滤镜。主题单独保存透明度，切回其他主题保留原设置。字体适配按实际壁纸缩放、节日遮罩和面板叠色计算，转场结束后再次校准；静态背景即时更新，视频背景保留稳定阈值。
+
+交互动效在既有转场上叠加短时的控件反馈：标签回弹、菜单文字进入、勾选描画、滑杆按压、图标悬停与按钮扫光。以 CSS 和短时 WAAPI 实现，连点中断旧水波，闲置时无新增循环；减少动态效果时保留可操作状态。节日判断、节日壁纸和装饰继续使用既有流程。
+
+主题与强调色更换采用浏览器 View Transition 的短时快照淡入淡出。壁纸单独使用可衔接的背景层：图片解码、视频首帧就绪后才淡入，等待时保留当前背景与视频播放；过渡后释放旧层。节日开关不经过整页历史快照，上传图片留在当前页，首页切出时卸载旧首页组件。参考 [MDN View Transition 接口文档](https://developer.mozilla.org/en-US/docs/Web/API/Document/startViewTransition)，不引入额外动效运行库。聚焦提示以控件内反馈代替额外描边，保留键盘输入与导航。

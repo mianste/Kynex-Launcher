@@ -1,0 +1,23 @@
+/* No extra rectangular frame on focus, including lazy pages and native controls. */
+:root[data-theme] .app :is(:focus, :focus-visible, :focus-within) {
+  outline: 0 !important;
+  outline-offset: 0;
+}
+
+/* Keyboard location stays visible through the control itself, without a ring. */
+:root[data-theme] .app :is(button, a, summary):focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+:root[data-theme] .app :is(button, summary):focus-visible > svg {
+  scale: 1.08;
+}
+:root[data-theme] .app .search:focus-within > svg {
+  color: var(--accent);
+}
+:root[data-theme] .app :is(input, textarea) {
+  caret-color: var(--accent);
+}
+:root[data-theme] .app input[type="range"]:focus-visible::-webkit-slider-thumb {
+  scale: 1.12;
+}

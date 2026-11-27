@@ -19,15 +19,18 @@ export const initialSettings = {
   accent: "#3D7C88",
   wallpaper: "island",
   uiOpacity: 100,
+  liquidOpacity: 58,
   theme: "light",
   customThemeColor: "#f7fafc",
   clientId: "",
   curseforgeKey: "",
-  threads: 8,
+  threads: 16,
   downloadSource: "bmclapi",
   gameLanguage: "zh_cn",
   jvmArgs: "",
   gameArgs: "",
+  fullscreen: false,
+  customInfo: "",
 };
 const allowed = [
   "home",
@@ -140,8 +143,10 @@ export const useStore = create()(
           });
         }
         await api("download_config", { source: get().settings.downloadSource });
-        const instances = await api("list_instances");
-        const accounts = await api("list_accounts");
+        const [instances, accounts] = await Promise.all([
+          api("list_instances"),
+          api("list_accounts"),
+        ]);
         if (generation !== refreshGeneration) return;
         const remembered = get().directorySelections[directoryId];
         const selected = instances.some((x) => x.id === get().selected)
@@ -221,7 +226,8 @@ export const useStore = create()(
               old.settings?.theme === "dark" ||
               old.settings?.theme === "system" ||
               old.settings?.theme === "light" ||
-              old.settings?.theme === "custom"
+              old.settings?.theme === "custom" ||
+              old.settings?.theme === "liquid"
                 ? old.settings.theme
                 : initialSettings.theme,
             customThemeColor:

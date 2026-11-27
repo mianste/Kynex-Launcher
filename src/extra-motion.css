@@ -1,0 +1,303 @@
+/* Additional state feedback. Existing page, panel and glass transitions remain. */
+.app
+  :is(
+    .chip,
+    .nav > button,
+    .settings-nav button,
+    .choice-trigger,
+    .taskbar button,
+    .music-main,
+    .music-quick-play
+  ) {
+  position: relative;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* A new selection lands once; rapid changes never wait for this flourish. */
+  .app .chip.on {
+    animation: kxl-extra-select 260ms var(--motion-spring);
+  }
+  .app .theme-choices button.on > svg {
+    animation: kxl-extra-theme 380ms var(--motion-emphasized);
+  }
+  .app .theme-choices button > svg {
+    transform-origin: center;
+  }
+  .app .liquid-theme-note > svg {
+    animation: kxl-extra-theme 440ms var(--motion-emphasized) backwards;
+  }
+
+  /* Animate menu copy inside its stable surface, keeping the cutout covered. */
+  .app .choice-popover .choice-option:nth-child(-n + 8) > span {
+    animation: kxl-extra-option 180ms var(--motion-emphasized) backwards;
+  }
+  .app .choice-option:nth-child(2) > span {
+    animation-delay: 18ms;
+  }
+  .app .choice-option:nth-child(3) > span {
+    animation-delay: 32ms;
+  }
+  .app .choice-option:nth-child(4) > span {
+    animation-delay: 46ms;
+  }
+  .app .choice-option:nth-child(n + 5):nth-child(-n + 8) > span {
+    animation-delay: 60ms;
+  }
+  .app .choice-selected-mark {
+    animation: kxl-extra-mark 220ms var(--motion-spring);
+  }
+  .app .choice-selected-mark polyline {
+    stroke-dasharray: 24;
+    animation: kxl-extra-check 240ms var(--motion-emphasized);
+  }
+
+  /* Checkboxes, radios and slider thumbs retain native hit areas and input. */
+  .app input:is([type="checkbox"], [type="radio"]):checked::before {
+    animation: kxl-extra-mark 220ms var(--motion-spring);
+  }
+  .app .switch.on i {
+    animation: kxl-extra-thumb 280ms var(--motion-emphasized);
+  }
+  .app input[type="range"]::-webkit-slider-thumb {
+    transition: scale 140ms var(--motion-emphasized);
+  }
+  .app input[type="range"]:active::-webkit-slider-thumb {
+    scale: 1.2;
+  }
+
+  /* Status icons acknowledge the result rather than moving the whole panel. */
+  .app .toast > svg {
+    animation: kxl-extra-mark 320ms var(--motion-spring) 40ms backwards;
+  }
+  .app :is(.ai-connection-result, .agent-status) > svg:not(.spin) {
+    animation: kxl-extra-mark 300ms var(--motion-spring);
+  }
+  .app :is(.empty, .empty-state, .music-empty, .native-empty) > svg {
+    animation: kxl-extra-empty 400ms var(--motion-emphasized) backwards;
+  }
+  .app .assistant-images figure {
+    animation: kxl-extra-attachment 240ms var(--motion-emphasized) backwards;
+  }
+  .app .assistant-images figure:nth-child(2) {
+    animation-delay: 35ms;
+  }
+  .app .assistant-images figure:nth-child(3) {
+    animation-delay: 65ms;
+  }
+
+  /* Short shine passes are tied to an explicit hover/focus, with no idle loop. */
+  .app .btn.primary::after,
+  :root[data-material="liquid"] .app .btn:not(.primary)::after {
+    content: "";
+    position: absolute;
+    inset: -30% -60%;
+    background: linear-gradient(
+      110deg,
+      transparent 36%,
+      var(--liquid-reflection) 50%,
+      transparent 64%
+    );
+    transform: translateX(-65%) rotate(-8deg);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .app .btn.primary:is(:hover, :focus-visible)::after,
+  :root[data-material="liquid"]
+    .app
+    .btn:not(.primary):is(:hover, :focus-visible)::after {
+    animation: kxl-extra-shine 540ms var(--motion-emphasized);
+  }
+  .app .btn:disabled::after {
+    animation: none !important;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  /* Independent transform properties compose with the existing press feedback. */
+  .app .nav > button > svg,
+  .app .taskbar button > svg,
+  .app .btn > svg:not(.spin),
+  .app .music-disc > svg,
+  .app .music-quick-play > svg,
+  .app .choice-option > span,
+  .app .version-row > b,
+  .app .native-song .music-artwork,
+  .app .account-card .avatar {
+    transition:
+      translate 170ms var(--motion-emphasized),
+      rotate 190ms var(--motion-emphasized),
+      scale 190ms var(--motion-spring);
+  }
+  .app .nav > button:hover > svg {
+    translate: 0 -2px;
+    rotate: -6deg;
+  }
+  .app .taskbar button:hover > svg {
+    translate: 0 -2px;
+  }
+  .app .btn:hover > svg.lucide-download {
+    translate: 0 2px;
+  }
+  .app .btn:hover > svg.lucide-plus {
+    rotate: 90deg;
+  }
+  .app .btn:hover > svg.lucide-folder-open {
+    rotate: -8deg;
+    scale: 1.08;
+  }
+  .app .btn:hover > svg.lucide-copy {
+    translate: 1px -1px;
+  }
+  .app .btn:hover > svg.lucide-refresh-cw:not(.spin) {
+    rotate: 35deg;
+  }
+  .app .choice-option:hover > span {
+    translate: 3px 0;
+  }
+  .app .version-row:hover > b {
+    translate: 3px 0;
+  }
+  .app .native-song:hover .music-artwork {
+    scale: 1.04;
+    rotate: -2deg;
+  }
+  .app .account-card:hover .avatar {
+    scale: 1.06;
+    rotate: -4deg;
+  }
+  .app .music-edge-dock:hover .music-disc > svg {
+    animation: kxl-extra-note 380ms var(--motion-emphasized);
+  }
+  .app .music-quick-play:hover > svg {
+    scale: 1.15;
+  }
+  .app
+    :is(.modal-close, .music-panel-actions > button, .assistant-close)
+    > svg {
+    transition: rotate 180ms var(--motion-emphasized);
+  }
+  .app
+    :is(.modal-close, .music-panel-actions > button, .assistant-close):hover
+    > svg.lucide-x {
+    rotate: 90deg;
+  }
+}
+
+@keyframes kxl-extra-select {
+  0% {
+    scale: 0.95;
+  }
+  65% {
+    scale: 1.035;
+  }
+  100% {
+    scale: 1;
+  }
+}
+@keyframes kxl-extra-theme {
+  from {
+    rotate: -22deg;
+    scale: 0.72;
+    opacity: 0.4;
+  }
+  to {
+    rotate: 0deg;
+    scale: 1;
+    opacity: 1;
+  }
+}
+@keyframes kxl-extra-option {
+  from {
+    translate: -5px 0;
+    opacity: 0.35;
+  }
+  to {
+    translate: 0 0;
+    opacity: 1;
+  }
+}
+@keyframes kxl-extra-mark {
+  0% {
+    scale: 0.65;
+    opacity: 0.25;
+  }
+  70% {
+    scale: 1.12;
+    opacity: 1;
+  }
+  100% {
+    scale: 1;
+    opacity: 1;
+  }
+}
+@keyframes kxl-extra-check {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes kxl-extra-thumb {
+  0% {
+    scale: 0.82 1;
+  }
+  55% {
+    scale: 1.12 0.94;
+  }
+  100% {
+    scale: 1;
+  }
+}
+@keyframes kxl-extra-empty {
+  from {
+    translate: 0 8px;
+    rotate: -8deg;
+    scale: 0.9;
+    opacity: 0.3;
+  }
+  to {
+    translate: 0 0;
+    rotate: 0deg;
+    scale: 1;
+    opacity: 1;
+  }
+}
+@keyframes kxl-extra-attachment {
+  from {
+    translate: 0 6px;
+    scale: 0.92;
+    opacity: 0.4;
+  }
+  to {
+    translate: 0 0;
+    scale: 1;
+    opacity: 1;
+  }
+}
+@keyframes kxl-extra-note {
+  0%,
+  100% {
+    rotate: 0deg;
+  }
+  30% {
+    rotate: -16deg;
+  }
+  65% {
+    rotate: 10deg;
+  }
+}
+@keyframes kxl-extra-shine {
+  0% {
+    transform: translateX(-65%) rotate(-8deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateX(65%) rotate(-8deg);
+    opacity: 0;
+  }
+}

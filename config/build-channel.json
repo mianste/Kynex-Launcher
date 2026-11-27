@@ -1,19 +1,18 @@
 {
   "channel": "stable",
-  "version": "2.1.3",
-  "displayVersion": "v2.1.3",
-  "label": "正式版 v2.1.3",
+  "version": "2.2.0",
+  "displayVersion": "v2.2.0",
+  "label": "正式版 v2.2.0",
   "repositoryUrl": "https://github.com/mianste/Kynex-Launcher",
   "supportUrl": "https://afdian.com/a/keke_657",
   "changes": [
-    "AI 助手支持只发图片，发送后可查看、点开放大，历史保留压缩预览。",
-    "修复重启后选中的版本变回第一个的问题，各游戏目录分别记住选择。",
-    "更换实例图标只更新对应实例，不再刷新其他实例。",
-    "默认实例图标也会铺满卡片封面。",
-    "改进窗口圆角与边框衔接，修复聚焦控件时窗口内容错位。"
+    "新增玻璃主题。",
+    "启动设置增加更多设置。",
+    "优化性能。",
+    "提高下载速度和检查更新速度。"
   ],
   "productName": "Kynex Launcher Source",
   "identifier": "com.keke.kynex.source",
   "mainBinaryName": "Kynex Launcher Source",
-  "releaseTag": "v2.1.3"
+  "releaseTag": "v2.2.0"
 }

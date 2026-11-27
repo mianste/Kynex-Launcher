@@ -53,10 +53,6 @@
   border-radius: var(--r-sm);
 }
 
-.app .page-content :is(.input, .search):focus-within,
-.app .overlay :is(.input, .search):focus-within {
-  border-color: var(--workspace-focus);
-}
 
 .app .page-content :is(.btn, .chip, .tabs button, .source-tabs button),
 .app .overlay .btn {
@@ -540,7 +536,7 @@
   gap: 0;
 }
 
-.app .music-edge-dock .music-main:focus-visible { outline-offset: -3px; }
+.app .music-edge-dock .music-main:focus-visible {  }
 
 .music-edge-dock .music-disc {
   grid-area: 1 / 2;

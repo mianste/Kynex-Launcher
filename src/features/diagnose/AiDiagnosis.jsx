@@ -1,9 +1,11 @@
 import { create } from "zustand";
 import { FormattedAnswer } from "../assistant/FormattedAnswer";
-import { Button } from "../../components/ui";
+import { Button, Modal } from "../../components/ui";
 import { useStore, guarded } from "../../store";
 export const useDiagnosis = create((set) => ({
   event: null,
+  automaticResult: null,
+  dismissAutomatic: () => set({ automaticResult: null }),
   open: false,
   unread: false,
   markRead: () => set({ unread: false }),
@@ -12,14 +14,40 @@ export const useDiagnosis = create((set) => ({
       event: {
         ...s.event,
         ...event,
+        autoDiagnosis: event.autoDiagnosis === true,
         error: event.error,
         report: event.status === "analyzing" ? undefined : event.report,
       },
-      open: true,
+      open: event.autoDiagnosis !== true,
+      ...(event.autoDiagnosis === true &&
+      ["done", "error"].includes(event.status)
+        ? { automaticResult: { ...s.event, ...event } }
+        : {}),
       unread: true,
     })),
   close: () => set({ open: false }),
 }));
+export function DiagnosisPopup() {
+  const event = useDiagnosis((state) => state.automaticResult);
+  const close = useDiagnosis((state) => state.dismissAutomatic);
+  if (!event) return null;
+  return (
+    <Modal
+      title={
+        event.error ? "游戏异常退出 · 分析未完成" : "游戏异常退出 · AI 分析结果"
+      }
+      onClose={close}
+      footer={
+        <Button primary onClick={close}>
+          知道了
+        </Button>
+      }
+    >
+      <DiagnosisResult event={event} />
+    </Modal>
+  );
+}
+
 export function DiagnosisResult({ event }) {
   return (
     <div aria-live="polite">

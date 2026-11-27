@@ -468,8 +468,8 @@
 }
 .agent-template-grid button:focus-visible,
 .agent-insights summary:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: none;
+  
 }
 @media (max-width: 600px) {
   .agent-template-grid,

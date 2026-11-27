@@ -731,8 +731,8 @@
   gap: 2px;
 }
 /* Preserve the page layout beneath the transparent floating assistant. */
-.app,
-.app * {
+:root:not([data-material="liquid"]) .app,
+:root:not([data-material="liquid"]) .app * {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }

@@ -104,14 +104,16 @@ export function Assistant({ ready }) {
   useEffect(() => {
     if (!open) clearImages();
   }, [open]);
-  const [session, Session] = useState(() => loadSessions()[0] || newSession());
+  const [initialHistory] = useState(loadSessions);
+  const [session, Session] = useState(() => initialHistory[0] || newSession());
   const [messages, SetMessages] = useState(session.messages);
   function M(value) {
     SetMessages((previous) =>
       (typeof value === "function" ? value(previous) : value).slice(-200),
     );
   }
-  const [historyItems, HistoryItems] = useState(() => loadSessions());
+  const [historyItems, HistoryItems] = useState(initialHistory);
+  const persistedMessages = useRef({ id: session.id, messages });
   const [historyOpen, HistoryOpen] = useState(false);
   const [renameId, RenameId] = useState("");
   const [renameTitle, RenameTitle] = useState("");
@@ -200,7 +202,13 @@ export function Assistant({ ready }) {
     };
   }, []);
   useEffect(() => {
-    if (busy || logBusy) return;
+    if (
+      busy ||
+      logBusy ||
+      (persistedMessages.current.id === session.id &&
+        persistedMessages.current.messages === messages)
+    )
+      return;
     try {
       const saved = saveSession({
         ...session,
@@ -208,6 +216,7 @@ export function Assistant({ ready }) {
         updatedAt: Date.now(),
         messages,
       });
+      persistedMessages.current = { id: session.id, messages };
       Session(saved);
       HistoryItems(loadSessions());
     } catch (e) {
@@ -368,6 +377,7 @@ export function Assistant({ ready }) {
     }
   }, [d.open]);
   useEffect(() => {
+    if (d.event?.autoDiagnosis) return;
     if (d.event?.status === "done" && d.event.report) {
       const report = d.event.report;
       M((previous) => [

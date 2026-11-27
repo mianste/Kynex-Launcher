@@ -1,3 +1,4 @@
+import { pressWave } from "../../lib/motionFeedback";
 import { ChoiceSelect } from "./ChoiceSelect";
 export { ChoiceSelect } from "./ChoiceSelect";
 import { useEffect, useContext, useRef, useId, useState } from "react";
@@ -9,6 +10,14 @@ export function Button({ children, primary = false, busy = false, ...props }) {
   return (
     <button
       {...props}
+      onPointerDown={(event) => {
+        props.onPointerDown?.(event);
+        if (!event.defaultPrevented && event.button === 0) pressWave(event);
+      }}
+      onClick={(event) => {
+        if (event.detail === 0) pressWave(event);
+        props.onClick?.(event);
+      }}
       className={`btn ${primary ? "primary" : ""} ${props.className ?? ""}`}
       disabled={props.disabled || busy}
       aria-busy={busy || undefined}

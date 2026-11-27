@@ -3,6 +3,13 @@ export function normalizeUiOpacity(value) {
     ? Math.min(100, Math.max(0, value))
     : 100;
 }
+export function effectiveUiOpacity(settings) {
+  return normalizeUiOpacity(
+    settings.theme === "liquid"
+      ? (settings.liquidOpacity ?? 58)
+      : settings.uiOpacity,
+  );
+}
 export function normalizeHexColor(value) {
   if (typeof value !== "string") return;
   const hex = value.trim().replace(/^#/, "");

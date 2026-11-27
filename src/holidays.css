@@ -380,15 +380,15 @@
 /* Match original acrylic.css: the wallpaper itself is ALWAYS 100% opaque on
    every page so lowering --ui-alpha reveals the launcher wallpaper, NEVER the
    Windows desktop behind the window. */
-:root[data-holiday] .app > .wallpaper {
+:root[data-holiday] .app .wallpaper {
   opacity: 1;
   filter: none;
   transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-:root[data-holiday] .app:not(.page-home) > .wallpaper {
+:root[data-holiday] .app:not(.page-home) .wallpaper {
   transform: scale(1.045);
 }
-:root[data-holiday] .app.page-home > .wallpaper {
+:root[data-holiday] .app.page-home .wallpaper {
   transform: scale(1);
 }
 
@@ -410,7 +410,7 @@
 
 /* Live holiday wallpaper canvas: visible & animating across ALL pages,
    with subtle depth zoom ease when switching to/from Home. */
-.app > .holiday-live-wallpaper {
+.app .holiday-live-wallpaper {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -423,10 +423,10 @@
   transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
-.app.page-home > .holiday-live-wallpaper {
+.app.page-home .holiday-live-wallpaper {
   transform: scale(1);
 }
-:root[data-holiday-effects="false"] .app > .holiday-live-wallpaper {
+:root[data-holiday-effects="false"] .app .holiday-live-wallpaper {
   display: none;
 }
 

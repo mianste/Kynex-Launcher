@@ -99,6 +99,7 @@ public final class JavaDesktop {
     }
 
     public static void main(String[] args) throws Exception {
+        if (System.getProperty("http.maxConnections") == null) System.setProperty("http.maxConnections", "64");
         if (args.length == 0 || args.length == 2 && "--verify".equals(args[0])) {
             Path application = Path.of(JavaDesktop.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getParent();
             boolean verification = args.length == 2;
@@ -708,8 +709,10 @@ public final class JavaDesktop {
         }
         String id = required(request, "id");
         java.time.Instant started = java.time.Instant.now();
-        return new InstalledGameLauncher(dataRoot).launch(request, runtimes, microsoft, external, task, (process, log, game) ->
-            process.onExit().thenAccept(exited -> Thread.startVirtualThread(() -> gameExited(root, id, log, game, started, exited.exitValue(), event))));
+        return new InstalledGameLauncher(dataRoot).launch(request, runtimes, microsoft, external, task, (process, log, game, title) -> {
+            GameWindowTitle.watch(process, title);
+            process.onExit().thenAccept(exited -> Thread.startVirtualThread(() -> gameExited(root, id, log, game, started, exited.exitValue(), event)));
+        });
     }
 
     private void gameExited(Path root, String instance, Path log, Path game, java.time.Instant started, int status,
@@ -742,7 +745,10 @@ public final class JavaDesktop {
         WorkshopVerification.ensureIdle();
         java.time.Instant started = java.time.Instant.now();
         new InstalledGameLauncher(dataRoot).launch(request, runtimes, microsoft, external, progress,
-            (process, log, game) -> WorkshopVerification.observe(process, log, game, started, progress::stopped));
+            (process, log, game, title) -> {
+                GameWindowTitle.watch(process, title);
+                WorkshopVerification.observe(process, log, game, started, progress::stopped);
+            });
     }
 
     private boolean scheduleModScan(Path root, JsonObject request, java.util.concurrent.ExecutorService queue, Browser browser,

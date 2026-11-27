@@ -34,6 +34,11 @@ final class DesktopStorage {
     String read() { return values.toString(); }
 
     void change(String action, String key, String value) throws IOException {
+        // Persist emits unchanged preferences during progress updates as well. Avoid
+        // copying large wallpaper/chat data on the SWT thread for a no-op write.
+        if ("set".equals(action) && values.has(key) && values.get(key).isJsonPrimitive()
+            && values.get(key).getAsJsonPrimitive().isString() && value.equals(values.get(key).getAsString())) return;
+        if ("remove".equals(action) && !values.has(key) || "clear".equals(action) && values.isEmpty()) return;
         JsonObject updated = values.deepCopy();
         switch (action) {
             case "set" -> updated.addProperty(key, value);

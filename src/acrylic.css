@@ -27,7 +27,7 @@
   box-shadow: none;
 }
 
-.app > .wallpaper,
+.app .wallpaper,
 .app > .scrim {
   border-radius: 0;
 }
@@ -920,8 +920,8 @@
 }
 .settings-page button:focus-visible,
 .wall-upload:focus-within {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
+  outline: none;
+  
 }
 .settings-page .wall-picker {
   display: block;
@@ -1621,9 +1621,9 @@
 }
 .app .choice-trigger.open,
 .app .choice-trigger:focus-visible {
-  border-color: var(--control-selected-edge);
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  background: var(--control-hover);
+  outline: none;
+  
 }
 .app .choice-trigger:hover {
   background: var(--control-hover);
@@ -1841,8 +1841,8 @@
 }
 
 /* One wallpaper treatment on every page, for both static images and video. */
-:root[data-theme] .app > .wallpaper,
-:root[data-theme] .app > .wallpaper-video {
+:root[data-theme] .app .wallpaper,
+:root[data-theme] .app .wallpaper-video {
   opacity: 1;
   filter: none;
 }

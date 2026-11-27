@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
-import { chooseInk } from "./adaptiveInk";
+import { chooseInk, compositeInkBackground as composite } from "./adaptiveInk";
 /**
  * Pick a solid ink colour for text sitting on translucent panels.
  *
@@ -15,13 +15,6 @@ export function useAdaptiveText(root, wallpaper, opacity, page, theme) {
   useLayoutEffect(() => {
     const app = root.current;
     if (!app) return;
-    const clearAll = () => {
-      for (const node of app.querySelectorAll("[data-adaptive-ink]")) {
-        delete node.dataset.adaptiveInk;
-        node.style.removeProperty("--adaptive-ink");
-        node.style.removeProperty("--adaptive-edge");
-      }
-    };
     let live = true;
     const canvas = document.createElement("canvas");
     canvas.width = 480;
@@ -39,7 +32,9 @@ export function useAdaptiveText(root, wallpaper, opacity, page, theme) {
       lastAppearance.current = appearance;
     }
     let settlingTimer = 0;
-    const background = app.querySelector(".wallpaper");
+    const activeBackdrop =
+      app.querySelector('.wallpaper-frame[data-active="true"]') ?? app;
+    const background = activeBackdrop.querySelector(".wallpaper");
     const url = background
       ? getComputedStyle(background).backgroundImage.match(
           /^url\(["']?(.*?)["']?\)$/,
@@ -70,14 +65,6 @@ export function useAdaptiveText(root, wallpaper, opacity, page, theme) {
     };
     const update = () => {
       if (!live || document.hidden) return;
-      const alpha = Number.parseFloat(
-        getComputedStyle(app).getPropertyValue("--ui-alpha"),
-      );
-      if (alpha >= 92) {
-        clearAll();
-        decisions.clear();
-        return;
-      }
       const box = app.getBoundingClientRect();
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
@@ -86,7 +73,7 @@ export function useAdaptiveText(root, wallpaper, opacity, page, theme) {
         Math.round((canvas.width * box.height) / box.width),
       );
       if (canvas.height !== height) canvas.height = height;
-      const frame = app.querySelector(".wallpaper-video");
+      const frame = activeBackdrop.querySelector(".wallpaper-video");
       let pixels;
       try {
         const source =
@@ -104,16 +91,28 @@ export function useAdaptiveText(root, wallpaper, opacity, page, theme) {
             ? source.videoHeight
             : source?.naturalHeight;
         if (source && width && sourceHeight && wallpaper !== "plain") {
+          // The non-home wallpaper is zoomed. Sample its displayed bounds,
+          // rather than the untransformed app bounds.
+          const wallpaperBox = (frame ?? background).getBoundingClientRect();
           const scale = Math.max(
-            canvas.width / width,
-            canvas.height / sourceHeight,
+            wallpaperBox.width / width,
+            wallpaperBox.height / sourceHeight,
           );
+          const sx = canvas.width / box.width;
+          const sy = canvas.height / box.height;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(
             source,
-            (canvas.width - width * scale) / 2,
-            (canvas.height - sourceHeight * scale) / 2,
-            width * scale,
-            sourceHeight * scale,
+            (wallpaperBox.left -
+              box.left +
+              (wallpaperBox.width - width * scale) / 2) *
+              sx,
+            (wallpaperBox.top -
+              box.top +
+              (wallpaperBox.height - sourceHeight * scale) / 2) *
+              sy,
+            width * scale * sx,
+            sourceHeight * scale * sy,
           );
           pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         }
@@ -144,11 +143,41 @@ export function useAdaptiveText(root, wallpaper, opacity, page, theme) {
         return value;
       };
       const base = rgba(style(app).getPropertyValue("--bg")).slice(0, 3);
+      const lightInk = style(app)
+        .getPropertyValue("--adaptive-light-ink")
+        .trim();
+      const darkInk = style(app).getPropertyValue("--adaptive-dark-ink").trim();
+      const themeInk =
+        luminance(rgba(style(app).getPropertyValue("--text")).slice(0, 3)) >
+        0.179
+          ? "light"
+          : "dark";
+      // These are siblings of the content, so walking a text node's ancestors
+      // cannot find them. In particular, holiday scrims darken the wallpaper.
+      const backdropLayers = [
+        ...app.querySelectorAll(":scope > .scrim, :scope > .ui-tint"),
+      ]
+        .filter(
+          (layer) =>
+            style(layer).display !== "none" &&
+            style(layer).visibility !== "hidden",
+        )
+        .map((layer) => ({
+          color: rgba(style(layer).backgroundColor),
+          opacity: Number(style(layer).opacity),
+        }));
       const seen = new Set();
       const candidates = app.querySelectorAll(
         "h1,h2,h3,h4,h5,p,small,b,strong,label,time,button,span,div,li,a,summary,dt,dd,td,th,pre,code,input,textarea,figcaption,output",
       );
       for (const node of candidates) {
+        // A button is one label, even when its title and subtitle use separate
+        // elements. Independent sampling gave those elements opposite colours.
+        const button = node.closest("button");
+        if (button && button !== node) {
+          if (node.dataset.adaptiveInk) reset(node);
+          continue;
+        }
         if (
           node.closest(
             ".switch,.project-icon,.music-artwork,.native-qr,.color-dots,[data-fixed-ink]",
@@ -156,7 +185,19 @@ export function useAdaptiveText(root, wallpaper, opacity, page, theme) {
         ) {
           continue;
         }
-        const textNodes = [...node.childNodes].filter(
+        const children =
+          node instanceof HTMLButtonElement
+            ? (() => {
+                const texts = [];
+                const walker = document.createTreeWalker(
+                  node,
+                  NodeFilter.SHOW_TEXT,
+                );
+                while (walker.nextNode()) texts.push(walker.currentNode);
+                return texts;
+              })()
+            : [...node.childNodes];
+        const textNodes = children.filter(
           (child) =>
             child.nodeType === Node.TEXT_NODE && child.textContent?.trim(),
         );
@@ -230,6 +271,8 @@ export function useAdaptiveText(root, wallpaper, opacity, page, theme) {
           }
         }
         const parents = [];
+        for (const layer of backdropLayers)
+          composite(samples, layer.color, layer.opacity);
         for (
           let parent = node;
           parent && parent !== app;
@@ -239,13 +282,7 @@ export function useAdaptiveText(root, wallpaper, opacity, page, theme) {
         }
         for (const parent of parents.reverse()) {
           const color = rgba(style(parent).backgroundColor);
-          const alpha = color[3] / 255;
-          for (let channel = 0; channel < 3; channel += 1) {
-            for (const rgb of samples) {
-              rgb[channel] =
-                color[channel] * alpha + rgb[channel] * (1 - alpha);
-            }
-          }
+          composite(samples, color);
         }
         // Ignore isolated pixels at either extreme while retaining local contrast.
         const levels = samples.map(luminance).sort((a, b) => a - b);
@@ -253,12 +290,23 @@ export function useAdaptiveText(root, wallpaper, opacity, page, theme) {
           1.05 / (levels[Math.floor((levels.length - 1) * 0.9)] + 0.05);
         const blackScore =
           (levels[Math.floor((levels.length - 1) * 0.1)] + 0.05) / 0.05;
-        const decision = chooseInk(
-          decisions.get(node),
-          whiteScore,
-          blackScore,
-          performance.now(),
-        );
+        // Large page titles keep the theme's polarity whenever it is readable.
+        // Choosing the absolute maximum made adjacent dark-theme titles black
+        // and white even though both could use the same readable light ink.
+        const keepHeadingInk =
+          !frame?.videoWidth &&
+          node.tagName === "H1" &&
+          (themeInk === "light" ? whiteScore : blackScore) >= 3;
+        const decision = keepHeadingInk
+          ? { ink: themeInk, changedAt: performance.now() }
+          : chooseInk(
+              // Static themes must follow their settled material immediately.
+              // Only moving video needs the delay that prevents frame-to-frame flicker.
+              frame?.videoWidth ? decisions.get(node) : undefined,
+              whiteScore,
+              blackScore,
+              performance.now(),
+            );
         decisions.set(node, decision);
         if (decision.pending && !settlingTimer) {
           settlingTimer = window.setTimeout(() => {
@@ -266,7 +314,7 @@ export function useAdaptiveText(root, wallpaper, opacity, page, theme) {
             update();
           }, 650);
         }
-        const ink = decision.ink === "light" ? "#ffffff" : "#000000";
+        const ink = decision.ink === "light" ? lightInk : darkInk;
         if (!node.dataset.adaptiveInk) node.dataset.adaptiveInk = "true";
         if (node.style.getPropertyValue("--adaptive-ink") !== ink) {
           node.style.setProperty("--adaptive-ink", ink);
@@ -310,6 +358,10 @@ export function useAdaptiveText(root, wallpaper, opacity, page, theme) {
     app.addEventListener("kynex-appearance-preview", scheduleSync);
     app.addEventListener("focusin", scheduleFrame);
     app.addEventListener("focusout", scheduleFrame);
+    // Route changes and material transitions change the final sampled pixels
+    // after the initial DOM mutation. Recheck their settled appearance.
+    app.addEventListener("transitionend", scheduleFrame);
+    app.addEventListener("animationend", scheduleFrame);
     const themeObserver = new MutationObserver(scheduleSync);
     themeObserver.observe(document.documentElement, {
       attributes: true,
@@ -331,7 +383,7 @@ export function useAdaptiveText(root, wallpaper, opacity, page, theme) {
     app.addEventListener("scroll", onScroll, { capture: true, passive: true });
     app.addEventListener("scrollend", scheduleFrame, { passive: true });
     // Follow video luminance without sampling on every playback frame.
-    const video = app.querySelector(".wallpaper-video");
+    const video = activeBackdrop.querySelector(".wallpaper-video");
     const interval = video ? window.setInterval(update, 1000) : 0;
     video?.addEventListener("loadeddata", scheduleFrame);
     video?.addEventListener("seeked", scheduleFrame);
@@ -350,12 +402,12 @@ export function useAdaptiveText(root, wallpaper, opacity, page, theme) {
       app.removeEventListener("kynex-appearance-preview", scheduleSync);
       app.removeEventListener("focusin", scheduleFrame);
       app.removeEventListener("focusout", scheduleFrame);
+      app.removeEventListener("transitionend", scheduleFrame);
+      app.removeEventListener("animationend", scheduleFrame);
       window.removeEventListener("resize", scheduleFrame);
       app.removeEventListener("scroll", onScroll, true);
       app.removeEventListener("scrollend", scheduleFrame);
-      // Keep the last ink while this effect re-runs (e.g. while dragging the
-      // opacity slider); only remove it when adaptive mode is disabled.
-      if (opacity >= 92) clearAll();
+      // Preserve ink until the next layout effect measures the new appearance.
     };
   }, [root, wallpaper, opacity, page, theme]);
 }

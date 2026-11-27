@@ -171,7 +171,8 @@ final class LaunchManifest {
             values.put(key, required(variables, key));
         }
         var args = new ArrayList<String>();
-        args.add("-Xmx" + bounded(settings, "memory", 4096, 512, 65536) + "M");
+        long memory = bounded(settings, "memory", 4096, 512, 65536);
+        args.add("-Xmx" + memory + "M");
         String agent = text(request, "authAgent", null);
         if (agent != null) args.add(agent);
         var arguments = object(version.get("arguments"));
@@ -182,7 +183,7 @@ final class LaunchManifest {
             args.add(values.get("classpath"));
         }
         for (String token : parseCustomArguments(text(settings, "jvmArgs", ""))) {
-            args.add(substitute(token, values));
+            args.add(customSubstitute(token, values));
         }
         args.add(required(version, "mainClass"));
         if (Set.of("forge", "neoforge").contains(text(request, "loader", ""))) {
@@ -191,15 +192,16 @@ final class LaunchManifest {
         }
         String legacy = text(version, "minecraftArguments", null);
         if (legacy != null) {
-            for (String token : legacyWords(legacy)) args.add(substitute(token, values));
+            for (String token : legacyWords(legacy)) args.add(customSubstitute(token, values));
         } else {
             addArguments(args, arguments.get("game"), values, platform);
         }
         args.addAll(List.of("--width", Long.toString(bounded(settings, "width", 1280, 640, 7680)),
             "--height", Long.toString(bounded(settings, "height", 720, 360, 4320))));
         for (String token : parseCustomArguments(text(settings, "gameArgs", ""))) {
-            args.add(substitute(token, values));
+            args.add(customSubstitute(token, values));
         }
+        if (is(settings.get("fullscreen"), true) && !args.contains("--fullscreen")) args.add("--fullscreen");
         var rows = new JsonArray();
         args.forEach(rows::add);
         return rows;
@@ -308,6 +310,31 @@ final class LaunchManifest {
                 }
             }
         }
+    }
+
+    static String windowTitle(JsonObject settings, JsonObject variables) {
+        String title = text(settings, "customInfo", "").strip();
+        var values = new TreeMap<String, String>(TEXT_ORDER);
+        for (String key : variables.keySet()) values.put(key, required(variables, key));
+        title = customSubstitute(title, values);
+        if (title.length() > 256) title = title.substring(0, 256);
+        return title.replaceAll("[\\p{Cntrl}]", " ");
+    }
+
+    // Single pass: substituted user names and paths must not be interpreted as new markers.
+    private static String customSubstitute(String value, Map<String, String> variables) {
+        var aliases = Map.of("user", "auth_player_name", "uuid", "auth_uuid", "version", "version_name",
+            "name", "instance_name", "minecraft", "minecraft_directory", "verpath", "instance_directory",
+            "version_path", "instance_directory", "verindie", "isolated_directory", "version_indie", "isolated_directory");
+        var matcher = java.util.regex.Pattern.compile("\\$\\{([^{}]+)\\}|\\{([^{}]+)\\}").matcher(value);
+        var result = new StringBuilder();
+        while (matcher.find()) {
+            String key = matcher.group(1) != null ? matcher.group(1) : aliases.get(matcher.group(2));
+            String replacement = key == null ? null : variables.get(key);
+            matcher.appendReplacement(result, java.util.regex.Matcher.quoteReplacement(replacement == null ? matcher.group() : replacement));
+        }
+        matcher.appendTail(result);
+        return result.toString();
     }
 
     private static String substitute(String value, Map<String, String> variables) {

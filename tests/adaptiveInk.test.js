@@ -1,6 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { chooseInk } from "../src/lib/adaptiveInk";
+import { chooseInk, compositeInkBackground } from "../src/lib/adaptiveInk";
 describe("adaptive ink stability", () => {
+  it("includes the holiday scrim and its animated opacity before selecting text", () => {
+    const sample = [[160, 120, 80]];
+    compositeInkBackground(sample, [26, 17, 11, 128], 0);
+    expect(sample).toEqual([[160, 120, 80]]);
+    compositeInkBackground(sample, [26, 17, 11, 128], 1);
+    const channels = sample[0]
+      .map((value) => value / 255)
+      .map((value) =>
+        value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
+      );
+    const luminance = channels.reduce(
+      (sum, value, i) => sum + value * [0.2126, 0.7152, 0.0722][i],
+      0,
+    );
+    expect(
+      chooseInk(
+        undefined,
+        1.05 / (luminance + 0.05),
+        (luminance + 0.05) / 0.05,
+        0,
+      ).ink,
+    ).toBe("light");
+  });
   it("retains readable ink despite a brighter alternative", () => {
     const initial = chooseInk(undefined, 5, 4, 0);
     expect(chooseInk(initial, 4.6, 8, 3000).ink).toBe("light");

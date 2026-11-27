@@ -71,7 +71,19 @@
   color: var(--adaptive-ink) !important;
   -webkit-text-stroke: 0;
   text-shadow: none;
-  transition: color 180ms ease;
+  /* Ink changes must not tween through unreadable grey between black and white. */
+  transition: none;
+}
+.app button[data-adaptive-ink="true"] {
+  transition: transform var(--motion-fast) var(--motion-emphasized),
+    translate var(--motion-fast) var(--motion-emphasized),
+    rotate var(--motion-fast) var(--motion-emphasized),
+    scale var(--motion-fast) var(--motion-spring),
+    background-color var(--motion-fast), border-color var(--motion-fast),
+    box-shadow var(--motion-fast), filter var(--motion-fast);
+}
+.app button[data-adaptive-ink="true"] :is(span, b, strong, small) {
+  color: inherit !important;
 }
 .app :is(input, textarea)[data-adaptive-ink]::placeholder {
   color: var(--adaptive-ink);

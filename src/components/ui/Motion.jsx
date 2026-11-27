@@ -32,6 +32,19 @@ export function MotionPresence({ children, toast = false }) {
     </MotionExitContext.Provider>
   ) : null;
 }
+const pageOrder = [
+  "home",
+  "library",
+  "instance",
+  "discover",
+  "workshop",
+  "news",
+  "account",
+  "skin",
+  "settings",
+  "help",
+  "components",
+];
 export function MotionPage({ id, children }) {
   const [entries, setEntries] = useState(() => [
     { id, children, leaving: false },
@@ -57,13 +70,15 @@ export function MotionPage({ id, children }) {
       }
 
       const involvesHome = active && (active.id === "home" || id === "home");
-      if (!active || reduced || !involvesHome) {
+      if (!active || reduced || involvesHome) {
         return [{ id, children, leaving: false }];
       }
 
       const leavingEntry = { ...active, leaving: true };
-      const nextEntry = { id, children, leaving: false };
-      const duration = id === "home" ? 260 : 200;
+      const direction =
+        pageOrder.indexOf(id) >= pageOrder.indexOf(active.id) ? 1 : -1;
+      const nextEntry = { id, children, leaving: false, direction };
+      const duration = involvesHome ? (id === "home" ? 260 : 200) : 150;
       exitTimer.current = window.setTimeout(() => {
         exitTimer.current = 0;
         setEntries((curr) => curr.filter((e) => !e.leaving));
@@ -84,6 +99,10 @@ export function MotionPage({ id, children }) {
       {entries.map((entry) => (
         <section
           key={entry.id}
+          ref={(node) => {
+            if (node) node.inert = entry.leaving;
+          }}
+          style={{ "--page-shift": `${(entry.direction || 1) * 16}px` }}
           aria-hidden={entry.leaving ? "true" : undefined}
           className={`page-content ${entry.id === "home" ? "home" : ""} ${
             entry.leaving ? "page-leaving" : "page-entering"

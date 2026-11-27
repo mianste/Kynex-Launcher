@@ -103,8 +103,8 @@
 }
 
 .launch-arg-presets button:focus-visible {
-  outline: 2px solid var(--workspace-focus);
-  outline-offset: 2px;
+  outline: none;
+  
 }
 
 .launch-arg-note {
@@ -162,8 +162,8 @@
 
 .launch-settings-card .memory-slider input:focus-visible,
 .launch-settings-card .window-presets button:focus-visible {
-  outline: 2px solid var(--workspace-focus);
-  outline-offset: 2px;
+  outline: none;
+  
 }
 
 .app .launch-settings-card .window-size-inputs {
@@ -231,3 +231,13 @@
     padding-inline-start: 0;
   }
 }
+
+.launch-advanced-title { margin: 0; font-size: 14px; color: var(--text); }
+.app .launch-settings-card textarea.launch-arg-input { min-height: 84px; resize: vertical; line-height: 1.6; padding: 10px 12px; }
+.launch-arg-field .setting-control:has(textarea) { align-items: flex-start; }
+.launch-arg-help { font-size: 12px; color: var(--text2); line-height: 1.6; }
+.launch-arg-help summary { cursor: pointer; color: var(--text); padding-block: 6px; }
+.launch-arg-help dl { display: grid; gap: 6px; margin: 12px 0; }
+.launch-arg-help dl > div { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 12px; }
+.launch-arg-help dt, .launch-arg-help code { font-family: var(--mono); overflow-wrap: anywhere; }
+.launch-arg-help dd { margin: 0; }

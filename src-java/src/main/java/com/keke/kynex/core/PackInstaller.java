@@ -110,13 +110,13 @@ final class PackInstaller {
                 switch (pack.variant()) {
                     case "modrinth" -> {
                         records = modrinthFiles(pack.manifest());
-                        applyFiles(root, staging, records, progress);
+                        applyFiles(root, staging, records, progress, MinecraftInstaller.threadCount(preferences));
                         extract(archive, staging, pack.base() + "overrides/", null, progress);
                         extract(archive, staging, pack.base() + "client-overrides/", null, progress);
                     }
                     case "curseforge" -> {
                         records = curseFiles(pack.manifest(), request, progress);
-                        applyFiles(root, staging, records, progress);
+                        applyFiles(root, staging, records, progress, MinecraftInstaller.threadCount(preferences));
                         extract(archive, staging, pack.base() + prefix(text(pack.manifest(), "overrides", "overrides")), null, progress);
                         String client = text(pack.manifest(), "clientOverrides", text(pack.manifest(), "client-overrides", ""));
                         if (!client.isEmpty()) extract(archive, staging, pack.base() + prefix(client), null, progress);
@@ -541,7 +541,7 @@ final class PackInstaller {
         }
     }
 
-    private void applyFiles(Path root, Path staging, List<FileEntry> entries, MinecraftInstaller.Progress progress)
+    private void applyFiles(Path root, Path staging, List<FileEntry> entries, MinecraftInstaller.Progress progress, int threads)
         throws IOException, InterruptedException {
         if (entries.size() > 5000) throw new IOException("整合包文件数量过多");
         var work = new ArrayList<Callable<Void>>();
@@ -552,11 +552,13 @@ final class PackInstaller {
             if (dest == null || !destinations.add(dest)) throw new IOException("整合包文件路径冲突：" + row.path());
             work.add(() -> {
                 fetch(root, row, dest, progress);
-                progress.update("安装整合包资源", done.incrementAndGet(), entries.size());
+                int count = done.incrementAndGet();
+                if (count == entries.size() || count % Math.max(1, entries.size() / 100) == 0)
+                    progress.update("安装整合包资源", count, entries.size());
                 return null;
             });
         }
-        try (var pool = Executors.newFixedThreadPool(12)) {
+        try (var pool = Executors.newFixedThreadPool(threads)) {
             var queue = new java.util.concurrent.ExecutorCompletionService<Void>(pool);
             var active = work.stream().map(queue::submit).toList();
             try {

@@ -1,23 +1,202 @@
 /* Natural interaction layer: short distances, spring release, no layout jank. */
 
+.app .btn {
+  position: relative;
+  overflow: hidden;
+}
+.kxl-press-wave {
+  position: absolute;
+  border-radius: 50%;
+  background: currentColor;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app .page-content:not(.home).page-entering {
+    animation: kxl-direction-enter 260ms var(--motion-emphasized) backwards;
+  }
+  .app:not(.page-home) .page-content:not(.home).page-leaving {
+    animation: kxl-direction-exit 150ms var(--motion-standard) forwards;
+  }
+  .app .overlay > .modal > header {
+    animation: kxl-layer-enter 240ms var(--motion-emphasized) 25ms backwards;
+  }
+  .app .overlay > .modal > .modal-body {
+    animation: kxl-layer-enter 280ms var(--motion-emphasized) 45ms backwards;
+  }
+  .app .overlay > .modal > footer {
+    animation: kxl-layer-enter 260ms var(--motion-emphasized) 70ms backwards;
+  }
+  .app .overlay > .modal {
+    animation-duration: 300ms;
+  }
+  .app .overlay.is-exiting > .modal {
+    animation-duration: 120ms;
+  }
+  .app
+    .page-content
+    :is(.resource-row, .version-card, .instance-card):nth-child(n + 13) {
+    animation: none;
+  }
+  .app .download-completion-check {
+    position: relative;
+  }
+  .app .download-completion-check::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border: 1px solid currentColor;
+    border-radius: inherit;
+    animation: kxl-completion-ring 520ms var(--motion-emphasized) both;
+  }
+  .app .download-completion-check svg {
+    animation: kxl-check-flourish 380ms var(--motion-emphasized) 80ms backwards;
+  }
+  .app .input[aria-invalid="true"] {
+    animation: kxl-invalid-nudge 220ms ease-out;
+  }
+  .app .btn:not(:disabled):active {
+    transform: scale(0.96);
+    transition-duration: 0ms;
+  }
+  .app .switch.on i {
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .app .page-content > :is(.page-head, .settings-page > .page-head) {
+    animation: kxl-layer-enter 300ms var(--motion-emphasized) backwards;
+  }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .app .btn.primary > svg {
+    transition: transform 200ms var(--motion-emphasized);
+  }
+  .app .btn.primary:hover > svg {
+    transform: translateX(2px) rotate(-8deg);
+  }
+  .app .home-launch-button > svg {
+    transition: transform 240ms var(--motion-emphasized);
+  }
+  .app .home-launch-button:hover > svg {
+    transform: translateX(3px) rotate(-10deg);
+  }
+  .app .settings-nav button:hover svg {
+    transform: rotate(-8deg) scale(1.08);
+  }
+  .app .settings-nav button svg {
+    transition: transform 180ms var(--motion-emphasized);
+  }
+}
+@keyframes kxl-direction-enter {
+  from {
+    opacity: 0.35;
+    transform: translateX(var(--page-shift, 16px)) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes kxl-direction-exit {
+  to {
+    opacity: 0;
+    transform: translateX(calc(var(--page-shift, 16px) * -0.5)) scale(0.995);
+  }
+}
+@keyframes kxl-layer-enter {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes kxl-completion-ring {
+  from {
+    opacity: 0.7;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+}
+@keyframes kxl-check-flourish {
+  from {
+    opacity: 0;
+    transform: rotate(-25deg) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes kxl-invalid-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  35% {
+    transform: translateX(-3px);
+  }
+  70% {
+    transform: translateX(2px);
+  }
+}
+
 /* Page and content entrances are transform-only so transparent themes never flash. */
 .app .page-content.page-entering {
-  animation: kxl-page-enter var(--motion-page) var(--motion-emphasized) backwards;
+  animation: kxl-page-enter var(--motion-page) var(--motion-emphasized)
+    backwards;
 }
-.app .page-content
-  :is(.card, .resource-row, .version-card, .account-card, .instance-card, .skin-saved-entry) {
-  animation: kxl-card-enter var(--motion-slow) var(--motion-emphasized) backwards;
+.app
+  .page-content
+  :is(
+    .card,
+    .resource-row,
+    .version-card,
+    .account-card,
+    .instance-card,
+    .skin-saved-entry
+  ) {
+  animation: kxl-card-enter var(--motion-slow) var(--motion-emphasized)
+    backwards;
 }
-.app .page-content
-  :is(.card, .resource-row, .version-card, .account-card, .instance-card, .skin-saved-entry):nth-child(2) {
+.app
+  .page-content
+  :is(
+    .card,
+    .resource-row,
+    .version-card,
+    .account-card,
+    .instance-card,
+    .skin-saved-entry
+  ):nth-child(2) {
   animation-delay: 22ms;
 }
-.app .page-content
-  :is(.card, .resource-row, .version-card, .account-card, .instance-card, .skin-saved-entry):nth-child(3) {
+.app
+  .page-content
+  :is(
+    .card,
+    .resource-row,
+    .version-card,
+    .account-card,
+    .instance-card,
+    .skin-saved-entry
+  ):nth-child(3) {
   animation-delay: 44ms;
 }
-.app .page-content
-  :is(.card, .resource-row, .version-card, .account-card, .instance-card, .skin-saved-entry):nth-child(n + 4) {
+.app
+  .page-content
+  :is(
+    .card,
+    .resource-row,
+    .version-card,
+    .account-card,
+    .instance-card,
+    .skin-saved-entry
+  ):nth-child(n + 4) {
   animation-delay: 66ms;
 }
 
@@ -59,9 +238,15 @@
   animation: kxl-nav-icon 300ms var(--motion-spring);
 }
 @keyframes kxl-nav-icon {
-  0% { transform: scale(0.82); }
-  55% { transform: scale(1.07); }
-  100% { transform: none; }
+  0% {
+    transform: scale(0.82);
+  }
+  55% {
+    transform: scale(1.07);
+  }
+  100% {
+    transform: none;
+  }
 }
 
 /* Cards and rows: lift toward the pointer only where it is actionable. */
@@ -117,26 +302,41 @@
   animation: kxl-sheet-out var(--motion-exit) var(--motion-standard) both;
 }
 @keyframes kxl-sheet-in {
-  from { transform: translateY(12px) scale(0.965); }
-  to { transform: none; }
+  from {
+    transform: translateY(12px) scale(0.965);
+  }
+  to {
+    transform: none;
+  }
 }
 @keyframes kxl-sheet-out {
-  to { transform: translateY(6px) scale(0.985); opacity: 0; }
+  to {
+    transform: translateY(6px) scale(0.985);
+    opacity: 0;
+  }
 }
 
 .app .toast {
-  animation: kxl-toast-spring var(--motion-normal) var(--motion-spring) backwards;
+  animation: kxl-toast-spring var(--motion-normal) var(--motion-spring)
+    backwards;
 }
 .app .is-exiting .toast,
 .app .toast-presence.is-exiting .toast {
   animation: kxl-toast-out var(--motion-exit) var(--motion-standard) both;
 }
 @keyframes kxl-toast-spring {
-  from { transform: translateY(10px) scale(0.96); }
-  to { transform: none; }
+  from {
+    transform: translateY(10px) scale(0.96);
+  }
+  to {
+    transform: none;
+  }
 }
 @keyframes kxl-toast-out {
-  to { transform: translateY(6px) scale(0.97); opacity: 0; }
+  to {
+    transform: translateY(6px) scale(0.97);
+    opacity: 0;
+  }
 }
 
 /* Update status floats in instead of popping. */
@@ -147,12 +347,20 @@
   animation: kxl-chip-in 200ms var(--motion-spring) backwards;
 }
 @keyframes kxl-float-in {
-  from { transform: translateY(10px) scale(0.97); }
-  to { transform: none; }
+  from {
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    transform: none;
+  }
 }
 @keyframes kxl-chip-in {
-  from { transform: translateY(6px) scale(0.94); }
-  to { transform: none; }
+  from {
+    transform: translateY(6px) scale(0.94);
+  }
+  to {
+    transform: none;
+  }
 }
 
 /* Keep the existing glass look, but frost what is behind it so page text
@@ -215,8 +423,15 @@
   animation: kxl-orb-breathe 5.6s var(--motion-standard) infinite;
 }
 @keyframes kxl-orb-breathe {
-  0%, 100% { transform: scale(0.98); opacity: 0.38; }
-  50% { transform: scale(1.12); opacity: 0.06; }
+  0%,
+  100% {
+    transform: scale(0.98);
+    opacity: 0.38;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 0.06;
+  }
 }
 
 /* Footer actions keep the same quiet feedback as the rest of the chrome. */
@@ -251,4 +466,14 @@ progress::-webkit-progress-value {
     animation: none !important;
     transition: none !important;
   }
+}
+
+.page-load-skeleton {
+  display: grid;
+  gap: 16px;
+  padding: 12px 0;
+}
+.page-load-skeleton .skeleton {
+  min-height: 84px;
+  border-radius: 16px;
 }

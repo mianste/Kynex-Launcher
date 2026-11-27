@@ -1,0 +1,263 @@
+/* Inspired by user-supplied YeMotion studies; independent launcher implementation. */
+.app {
+  --liquid-filter-blur: min(var(--ui-blur, 26px), var(--liquid-blur));
+  --liquid-edge: color-mix(
+    in srgb,
+    var(--liquid-rim) var(--ui-alpha),
+    transparent
+  );
+  --liquid-depth: color-mix(
+    in srgb,
+    var(--liquid-shadow) var(--ui-alpha),
+    transparent
+  );
+  --liquid-surface:
+    linear-gradient(
+      132deg,
+      color-mix(in srgb, var(--liquid-reflection) var(--ui-alpha), transparent),
+      color-mix(
+          in srgb,
+          var(--liquid-reflection-soft) var(--ui-alpha),
+          transparent
+        )
+        16%,
+      transparent 38%,
+      transparent 72%,
+      color-mix(
+        in srgb,
+        var(--liquid-reflection-soft) var(--ui-alpha),
+        transparent
+      )
+    ),
+    var(--glass);
+}
+.liquid-glass-defs {
+  position: absolute;
+  pointer-events: none;
+  overflow: hidden;
+}
+.theme-choices {
+  flex-wrap: wrap;
+}
+.liquid-theme-note {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--liquid-edge);
+  background: var(--liquid-surface);
+}
+.liquid-theme-note > div {
+  display: grid;
+  gap: 4px;
+}
+.liquid-theme-note b {
+  color: var(--text);
+}
+.liquid-theme-note span {
+  color: var(--text2);
+  font-size: 12px;
+  line-height: 1.6;
+}
+:root[data-material="liquid"]
+  .app
+  :is(
+    .nav,
+    .settings-sidebar,
+    .music-panel,
+    .music-compact,
+    .modal,
+    .home-popover,
+    .release-update-panel,
+    .filters,
+    .download-main,
+    .agent-controls,
+    .agent-history,
+    .agent-detail,
+    .news-feature,
+    .home-quick-panel,
+    .other-games
+  ) {
+  background: var(--liquid-surface);
+  border: 1px solid color-mix(in srgb, var(--liquid-edge) 78%, var(--line));
+  box-shadow:
+    inset 1px 1px 1px var(--liquid-edge),
+    inset -1px -1px 1px color-mix(in srgb, var(--liquid-edge) 42%, transparent),
+    inset 0 8px 18px -12px var(--liquid-rim),
+    0 8px 28px var(--liquid-depth);
+}
+:root[data-material="liquid"] .app .nav {
+  /* WebView2 aliases both properties: the fallback must precede the URL. */
+  -webkit-backdrop-filter: blur(min(var(--ui-blur), 6px)) saturate(145%);
+  backdrop-filter: url("#kynex-nav-refraction") blur(min(var(--ui-blur), 6px))
+    saturate(145%);
+}
+:root[data-material="liquid"]
+  .app
+  :is(.music-compact, .home-popover, .release-update-panel) {
+  -webkit-backdrop-filter: blur(var(--liquid-filter-blur)) saturate(145%);
+  backdrop-filter: blur(var(--liquid-filter-blur)) saturate(145%);
+}
+:root[data-material="liquid"]
+  .app
+  :is(
+    .settings-sidebar,
+    .modal,
+    .music-panel,
+    .filters,
+    .download-main,
+    .agent-controls,
+    .agent-history,
+    .agent-detail,
+    .news-feature,
+    .home-quick-panel,
+    .other-games
+  ) {
+  -webkit-backdrop-filter: blur(var(--liquid-filter-blur)) saturate(145%);
+  backdrop-filter: blur(var(--liquid-filter-blur)) saturate(145%);
+}
+:root[data-material="liquid"] .app .modal {
+  border-radius: 24px;
+}
+:root[data-material="liquid"] .app .overlay {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+:root[data-material="liquid"]
+  .app
+  :is(
+    .card:not(.agent-controls, .agent-history, .agent-detail),
+    .instance-card,
+    .download-task-card,
+    .news-card,
+    .music-player-bar
+  ) {
+  background: var(--liquid-surface);
+  border-color: var(--line);
+  box-shadow:
+    inset 0 1px 0 var(--liquid-edge),
+    inset 0 -1px 0 color-mix(in srgb, var(--liquid-edge) 20%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root[data-material="liquid"]
+  .app
+  :is(.search, .choice-trigger, .btn:not(.primary), .theme-choices, .tabs) {
+  background: var(--liquid-surface);
+  box-shadow:
+    inset 0 1px 0 var(--liquid-edge),
+    0 2px 5px var(--liquid-depth);
+  border-color: var(--line);
+}
+/* Small controls share the lens edge without adding another blur layer. */
+:root[data-material="liquid"]
+  .app
+  :is(.chip, .version-options > button, .settings-nav button.on) {
+  background: var(--liquid-surface);
+  border-color: color-mix(in srgb, var(--liquid-edge) 60%, var(--line));
+  box-shadow:
+    inset 0 1px 0 var(--liquid-edge),
+    inset 0 -1px 0 var(--liquid-reflection-soft);
+}
+:root[data-material="liquid"]
+  .app
+  :is(.btn:not(.primary), .chip, .choice-trigger):hover {
+  border-color: var(--liquid-rim);
+  box-shadow:
+    inset 1px 1px 1px var(--liquid-edge),
+    0 3px 10px var(--liquid-depth);
+}
+/* Keep the primary action readable over both bright and dark wallpaper. */
+:root[data-material="liquid"] .app .btn.primary {
+  background: var(--accent);
+}
+:root[data-material="liquid"] .app .nav > button:not(.on) {
+  background: color-mix(in srgb, var(--surface) 8%, transparent);
+}
+:root[data-material="liquid"] .app .choice-popover[role="listbox"] {
+  background: var(--liquid-surface);
+  box-shadow:
+    inset 1px 1px 0 var(--liquid-edge),
+    0 12px 30px var(--liquid-depth);
+}
+:root[data-material="liquid"] .app .switch i,
+:root[data-material="liquid"] .app input[type="range"]::-webkit-slider-thumb {
+  box-shadow:
+    inset 0 1px 1px var(--liquid-rim),
+    0 2px 5px var(--liquid-depth);
+}
+:root[data-material="liquid"] .app .switch:not(:disabled):active i {
+  scale: 1.1 0.93;
+}
+:root[data-material="liquid"] .app .switch i {
+  transition:
+    transform 200ms var(--motion-emphasized),
+    scale 140ms var(--motion-emphasized);
+}
+:root[data-material="liquid"] .app .music-player-bar {
+  border-top-color: var(--liquid-edge);
+}
+:root[data-material="liquid"] .app .drop-overlay {
+  box-shadow:
+    inset 0 0 0 2px var(--liquid-edge),
+    inset 0 0 50px var(--accent-mid);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-material="liquid"] .app .switch:not(:disabled):active i {
+    scale: none;
+  }
+}
+@media (forced-colors: active) {
+  :root[data-material="liquid"]
+    .app
+    :is(.nav, .modal, .music-panel, .search, .card) {
+    background: Canvas;
+    border: 1px solid CanvasText;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+}
+
+.liquid-selection {
+  display: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-material="liquid"] .app .nav.motion-selection::after {
+    opacity: 0;
+  }
+  :root[data-material="liquid"] .liquid-selection {
+    display: block;
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 1;
+    opacity: var(--selection-ready, 0);
+    filter: url("#kynex-selection-fusion");
+  }
+  :root[data-material="liquid"] .liquid-selection i {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 24px;
+    height: 6px;
+    border-radius: 99px;
+    background: var(--accent);
+    transform: translate(
+      calc(var(--selection-x, 0px) + (var(--selection-width, 20px) - 24px) / 2),
+      calc(var(--selection-y, 0px) + var(--selection-height, 0px) - 5px)
+    );
+    transition: transform 230ms var(--motion-emphasized);
+  }
+  :root[data-material="liquid"] .liquid-selection i + i {
+    width: 12px;
+    transform: translate(
+      calc(var(--selection-x, 0px) + (var(--selection-width, 20px) - 12px) / 2),
+      calc(var(--selection-y, 0px) + var(--selection-height, 0px) - 5px)
+    );
+    transition-duration: 390ms;
+  }
+}

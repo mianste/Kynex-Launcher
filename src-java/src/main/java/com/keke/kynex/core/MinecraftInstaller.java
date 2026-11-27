@@ -28,7 +28,7 @@ final class MinecraftInstaller {
     private final LoaderCatalog loaders;
     private final ForgeInstall forge;
     private final OptiFineInstall optiFine;
-    private record FileEntry(String url, String path, String hash) {}
+    record FileEntry(String url, String path, String hash) {}
 
     @FunctionalInterface
     interface Publication { void write() throws IOException; }
@@ -157,7 +157,6 @@ final class MinecraftInstaller {
             libraries.add(new FileEntry(required(entry, "url"), "libraries/" + required(entry, "path"),
                 text(entry, "hash", "")));
         }
-        transfer(root, libraries, mirror, threads, progress, "校验与下载依赖库");
 
         if (version.get("assetIndex") instanceof JsonObject assetIndex) {
             String index = required(assetIndex, "id");
@@ -172,13 +171,14 @@ final class MinecraftInstaller {
                 assets.add(new FileEntry("https://resources.download.minecraft.net/" + location,
                     "assets/objects/" + location, hash));
             }
-            transfer(root, assets, mirror, threads, progress, "校验与下载游戏资源");
+            libraries.addAll(assets);
         }
         check(progress::stopped);
+        transfer(root, libraries, mirror, threads, progress, "校验与下载游戏文件");
         GameAssets.prepareInstalled(root, staging, version, platform);
     }
 
-    private void transfer(Path root, List<FileEntry> entries, boolean mirror, int threads, Progress progress, String stage)
+    void transfer(Path root, List<FileEntry> entries, boolean mirror, int threads, Progress progress, String stage)
         throws IOException, InterruptedException {
         var unique = new LinkedHashMap<String, FileEntry>();
         for (FileEntry entry : entries) {
@@ -243,12 +243,12 @@ final class MinecraftInstaller {
         throw new IOException("同名实例过多，请先清理旧实例");
     }
 
-    private static int threadCount(JsonObject settings) {
-        if (!settings.has("threads")) return 8;
+    static int threadCount(JsonObject settings) {
+        if (!settings.has("threads")) return 16;
         try {
-            return Math.clamp(Integer.parseInt(settings.get("threads").getAsString()), 2, 16);
+            return Math.clamp(Integer.parseInt(settings.get("threads").getAsString()), 1, 64);
         } catch (NumberFormatException | UnsupportedOperationException invalid) {
-            return 8;
+            return 16;
         }
     }
 

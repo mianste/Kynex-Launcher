@@ -48,8 +48,8 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 summary:focus-visible {
-  outline: 2px solid var(--cyan);
-  outline-offset: 3px;
+  outline: none;
+  
 }
 button {
   transition:
@@ -375,9 +375,6 @@ pre {
   width: 100%;
   font-size: 12px;
   min-width: 0;
-}
-.search:focus-within {
-  border-color: var(--accent);
 }
 .badge {
   display: inline-flex;
@@ -3076,8 +3073,7 @@ textarea {
   border-color: var(--text3);
 }
 .resource-filters select:focus-visible {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-low);
+  background: var(--control-hover);
 }
 .resource-search-summary {
   display: flex;
@@ -3928,8 +3924,8 @@ textarea {
 }
 .news-feature:focus-visible,
 .news-card:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
+  outline: none;
+  
 }
 .news-feature {
   display: grid;
@@ -4276,13 +4272,8 @@ body {
   border-radius: 10px 14px 10px 14px;
   background: color-mix(in srgb, var(--glass-thick) 86%, transparent);
 }
-.input:focus,
-.search:focus-within,
 .instance-select-trigger.open {
-  border-color: color-mix(in srgb, var(--accent) 72%, var(--line));
-  box-shadow:
-    inset 0 1px 0 var(--glass-highlight),
-    0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  background: var(--control-hover);
 }
 .chip,
 .badge {
@@ -4873,8 +4864,8 @@ body {
   white-space: nowrap;
 }
 .music-mode:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: none;
+  
 }
 .music-player-bar .music-controls .music-play {
   width: 42px;

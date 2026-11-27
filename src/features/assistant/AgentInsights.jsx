@@ -37,7 +37,7 @@ export function useInsights(ready, open, directoryId) {
     if (!ready || !desktop) return;
     void load();
     const check = () => void load(true);
-    const startup = setTimeout(check, 2000),
+    const startup = setTimeout(check, 15000),
       timer = setInterval(check, 6 * 3600000);
     return () => {
       clearTimeout(startup);

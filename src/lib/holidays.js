@@ -408,6 +408,7 @@ export function findNextHoliday(settings, date = new Date()) {
 }
 
 export function shouldUseHolidayWallpaper(wallpaper, settings, activeHoliday) {
+  if (settings?.holidayThemeEnabled === false) return false;
   if (!activeHoliday) return false;
   if (settings?.holidayWallpaper === false) return false;
   return !String(wallpaper || "").startsWith("video:");

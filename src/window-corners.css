@@ -23,9 +23,9 @@ body,
 #root {
   background: transparent;
 }
-.app > .wallpaper,
-.app > .holiday-live-wallpaper,
-.app > .wallpaper-video,
+.app .wallpaper,
+.app .holiday-live-wallpaper,
+.app .wallpaper-video,
 .app > .scrim,
 .app > .holiday-fx-canvas,
 .app > .overlay,

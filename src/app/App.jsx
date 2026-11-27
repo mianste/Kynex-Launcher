@@ -6,7 +6,7 @@ import { RELEASE } from "../lib/release";
 import {
   colorInk,
   normalizeHexColor,
-  normalizeUiOpacity,
+  effectiveUiOpacity,
 } from "../lib/appearance";
 import {
   msUntilNextLocalMidnight,
@@ -14,10 +14,13 @@ import {
   shouldUseHolidayWallpaper,
 } from "../lib/holidays";
 import { holidayWallpaperUrl } from "../lib/holidayAssets";
+import { LiquidGlass } from "../components/LiquidGlass";
 import { HolidayAtmosphere } from "../components/HolidayAtmosphere";
 import { HolidayIslandDecor } from "../components/HolidayIslandDecor";
-import { HolidayLiveWallpaper } from "../components/HolidayLiveWallpaper";
+import { Wallpaper } from "../components/Wallpaper";
+import { resolveWallpaper } from "../lib/wallpaper";
 import { useAdaptiveText } from "../lib/useAdaptiveText";
+import { useMotionFeedback } from "../lib/motionFeedback";
 import { ReleaseNotices } from "../features/updates/ReleaseNotices";
 import { HotfixStartup } from "../features/updates/Hotfix";
 import {
@@ -49,22 +52,16 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useStore, guarded } from "../store";
 import { api, assetUrl, desktop, onProgress, pickFile } from "../lib/bridge";
 import { Home } from "../features/launch/Home";
-import { Library, InstanceDetail } from "../features/library/Library";
 import { warmInstanceResources } from "../features/library/resourcePreviews";
-import { Download as Discover } from "../features/download/Download";
-import { News } from "../features/news/News";
-import { Accounts } from "../features/account/Accounts";
 const Skin = lazy(() =>
   import("../features/skin/Skin").then((module) => ({ default: module.Skin })),
 );
-import { useDiagnosis } from "../features/diagnose/AiDiagnosis";
+import { useDiagnosis, DiagnosisPopup } from "../features/diagnose/AiDiagnosis";
 import { Assistant } from "../features/assistant/Assistant";
 import {
   AgentPanel,
   useWorkshopEvents,
 } from "../features/assistant/AgentPanel";
-import { Settings } from "../features/settings/Settings";
-import { Help } from "../features/help/Help";
 import { Modals } from "./Modals";
 import { Splash, KxlMark } from "./Splash";
 import {
@@ -79,10 +76,40 @@ import {
   Tabs,
   Skeleton,
 } from "../components/ui";
-import wallpaper from "../assets/wallpaper-default.jpg";
 import brandIcon from "../assets/kxl-icon.png";
 import { MotionPage } from "../components/ui/Motion";
 import { useSelectionMotion } from "../lib/useSelectionMotion";
+const Library = lazy(() =>
+  import("../features/library/Library").then((module) => ({
+    default: module.Library,
+  })),
+);
+const InstanceDetail = lazy(() =>
+  import("../features/library/Library").then((module) => ({
+    default: module.InstanceDetail,
+  })),
+);
+const Discover = lazy(() =>
+  import("../features/download/Download").then((module) => ({
+    default: module.Download,
+  })),
+);
+const News = lazy(() =>
+  import("../features/news/News").then((module) => ({ default: module.News })),
+);
+const Accounts = lazy(() =>
+  import("../features/account/Accounts").then((module) => ({
+    default: module.Accounts,
+  })),
+);
+const Settings = lazy(() =>
+  import("../features/settings/Settings").then((module) => ({
+    default: module.Settings,
+  })),
+);
+const Help = lazy(() =>
+  import("../features/help/Help").then((module) => ({ default: module.Help })),
+);
 const navigation = [
   { id: "home", label: "启动", icon: <Rocket /> },
   { id: "library", label: "版本", icon: <Boxes /> },
@@ -99,7 +126,7 @@ export function App() {
   useWorkshopEvents();
   const [ready, R] = useState(false);
   useEffect(() => {
-    if (!ready || !desktop) return;
+    if (!ready || !desktop || !["library", "instance"].includes(s.page)) return;
     const id = s.selected || s.instances[0]?.id;
     if (!id) return;
     const timer = window.setTimeout(
@@ -109,6 +136,7 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [
     ready,
+    s.page,
     s.selected,
     s.instances[0]?.id,
     s.directoryId,
@@ -127,6 +155,8 @@ export function App() {
   const [tasksOpen, TasksOpen] = useState(false);
   const depth = useRef(0);
   const appRoot = useRef(null);
+  const [displayedWallpaper, setDisplayedWallpaper] = useState(null);
+  useMotionFeedback(appRoot);
   const [todayTick, setTodayTick] = useState(() => Date.now());
   useEffect(() => {
     let timer = 0;
@@ -187,13 +217,17 @@ export function App() {
               ) === "#000000"
               ? "light"
               : "dark"
-            : s.settings.theme;
+            : s.settings.theme === "liquid"
+              ? "dark"
+              : s.settings.theme;
       const accent = activeHolidayId
         ? (theme === "light"
             ? holidayAccentLight || holidayAccentDark
             : holidayAccentDark || holidayAccentLight) || everydayAccent
         : everydayAccent;
       root.dataset.theme = theme;
+      root.dataset.material =
+        s.settings.theme === "liquid" ? "liquid" : "standard";
       root.style.colorScheme = theme;
       if (activeHolidayId) {
         root.dataset.holiday = activeHolidayId;
@@ -231,8 +265,8 @@ export function App() {
   ]);
   useAdaptiveText(
     appRoot,
-    holidayArtUrl ?? s.settings.wallpaper,
-    normalizeUiOpacity(s.settings.uiOpacity),
+    displayedWallpaper?.key || holidayArtUrl || s.settings.wallpaper,
+    effectiveUiOpacity(s.settings),
     s.page,
     activeHolidayId
       ? `holiday:${activeHolidayId}:${s.settings.theme}`
@@ -283,10 +317,13 @@ export function App() {
             ["instance", "skin", "diagnose"].includes(page) ||
             !!document.querySelector(".assistant-body .diagnose-layout");
           const directPack =
-            payload.type === "drop" && /\.(mrpack|curseforge)$/i.test(payload.paths[0]);
-          window.dispatchEvent(new CustomEvent("kynex-native-drag", {
-            detail: directPack ? { type: "leave" } : payload,
-          }));
+            payload.type === "drop" &&
+            /\.(mrpack|curseforge)$/i.test(payload.paths[0]);
+          window.dispatchEvent(
+            new CustomEvent("kynex-native-drag", {
+              detail: directPack ? { type: "leave" } : payload,
+            }),
+          );
           if (payload.type === "leave" || payload.type === "drop") D(false);
           else if (!delegated) D(true);
           if (payload.type === "drop" && (!delegated || directPack)) {
@@ -311,6 +348,7 @@ export function App() {
   useEffect(() => {
     let cleanup;
     let modScanTimer;
+    let modStartupTimer;
     let live = true;
     const progress = progressBuffer((events) => {
       if (!live) return;
@@ -374,7 +412,7 @@ export function App() {
             void api("scan_installed_mod_updates", {
               curseforgeKey: useStore.getState().settings.curseforgeKey,
             }).catch(() => {});
-          prepareMods();
+          modStartupTimer = setTimeout(prepareMods, 10000);
           modScanTimer = setInterval(prepareMods, 30 * 60_000);
         } else f();
       });
@@ -391,6 +429,7 @@ export function App() {
       live = false;
       progress.dispose();
       if (modScanTimer) clearInterval(modScanTimer);
+      if (modStartupTimer) clearTimeout(modStartupTimer);
       cleanup?.();
       window.removeEventListener("hashchange", change);
     };
@@ -414,7 +453,8 @@ export function App() {
       body: f,
       headers: { "Content-Type": "application/octet-stream" },
     });
-    if (!response.ok) throw new Error("无法保存拖入的整合包，请检查磁盘空间后重试。");
+    if (!response.ok)
+      throw new Error("无法保存拖入的整合包，请检查磁盘空间后重试。");
     s.show("pack", upload.path);
   }
   const openDownloads = () => TasksOpen(true);
@@ -432,22 +472,28 @@ export function App() {
     help: <Help />,
     components: <Components />,
   };
-  const custom = s.settings.wallpaper.startsWith("data:");
-  const dynamicVideo = s.settings.wallpaper.startsWith("video:")
-    ? s.settings.wallpaper.slice("video:".length)
-    : "";
+  const requestedWallpaper = resolveWallpaper(s.settings, activeHoliday);
+  const background =
+    requestedWallpaper.kind === "video"
+      ? desktop
+        ? { ...requestedWallpaper, src: assetUrl(requestedWallpaper.src) }
+        : { key: "preview-video", kind: "plain", src: "" }
+      : requestedWallpaper;
   // 直接写在根节点上，切换页面/重渲染时不会出现某一帧还没拿到变量的情况。
-  const uiPercent = normalizeUiOpacity(s.settings.uiOpacity);
+  const uiPercent = effectiveUiOpacity(s.settings);
   const uiAlpha = `${uiPercent}%`;
   // 保持视频与静态壁纸的模糊层稳定，滑杆只更新面板色；0% 时完全透出壁纸。
   const uiBlur = uiPercent === 0 ? "0px" : "26px";
   return (
     <main
       ref={appRoot}
-      className={`app page-${s.page} ${splash ? "splash-active" : ""} ${dynamicVideo ? "video-wallpaper" : ""}`}
+      className={`app page-${s.page} ${splash ? "splash-active" : ""} ${displayedWallpaper?.kind === "video" ? "video-wallpaper" : ""}`}
       data-native-window={desktop ? "" : undefined}
       data-default-wallpaper={
-        !holidayArtUrl && s.settings.wallpaper === "island" ? "" : undefined
+        (displayedWallpaper?.default ??
+        (!holidayArtUrl && s.settings.wallpaper === "island"))
+          ? ""
+          : undefined
       }
       style={{ "--ui-alpha": uiAlpha, "--ui-blur": uiBlur }}
       onDragOverCapture={(e) => {
@@ -479,33 +525,14 @@ export function App() {
         if (f) void guarded(() => drop(f));
       }}
     >
-      <div
-        className={`wallpaper ${holidayArtUrl ? "holiday-wallpaper" : ""} ${!holidayArtUrl && s.settings.wallpaper === "dusk" ? "dusk" : ""} ${!holidayArtUrl && s.settings.wallpaper === "plain" ? "plain" : ""}`}
-        style={{
-          backgroundImage: `url(${holidayArtUrl ?? (custom ? s.settings.wallpaper : wallpaper)})`,
-        }}
+      <Wallpaper
+        value={background}
+        effects={holidayEffectsOn}
+        isHome={s.page === "home"}
+        appRoot={appRoot}
+        onActiveChange={setDisplayedWallpaper}
+        onError={s.notify}
       />
-      {holidayArtUrl && (
-        <HolidayLiveWallpaper
-          holidayId={activeHolidayId}
-          imageUrl={holidayArtUrl}
-          active={effectsOn}
-          isHome={s.page === "home"}
-          appRoot={appRoot}
-        />
-      )}
-      {dynamicVideo && desktop && (
-        <video
-          key={dynamicVideo}
-          className="wallpaper-video"
-          crossOrigin="anonymous"
-          src={assetUrl(dynamicVideo)}
-          autoPlay
-          muted
-          loop
-          playsInline
-        />
-      )}
       <div className="scrim" />
       <HolidayAtmosphere
         holidayId={activeHolidayId}
@@ -576,6 +603,10 @@ export function App() {
           aria-hidden={!navOpen}
           ref={navRoot}
         >
+          <span className="liquid-selection" aria-hidden="true">
+            <i />
+            <i />
+          </span>
           <HolidayIslandDecor
             holidayId={activeHolidayId}
             effectsOn={holidayEffectsOn}
@@ -611,7 +642,19 @@ export function App() {
         </nav>
       </div>
       <MotionPage id={s.page}>
-        <Suspense fallback={<div className="empty">正在加载…</div>}>
+        <Suspense
+          fallback={
+            <div
+              className="page-load-skeleton"
+              role="status"
+              aria-label="正在加载页面"
+            >
+              <Skeleton />
+              <Skeleton />
+              <Skeleton />
+            </div>
+          }
+        >
           {screen[s.page]}
         </Suspense>
       </MotionPage>
@@ -652,7 +695,9 @@ export function App() {
               s.setPage("settings");
               window.setTimeout(
                 () =>
-                  window.dispatchEvent(new Event("kynex-open-holiday-settings")),
+                  window.dispatchEvent(
+                    new Event("kynex-open-holiday-settings"),
+                  ),
                 30,
               );
             }}
@@ -685,6 +730,10 @@ export function App() {
         </div>
       )}
       <Modals />
+      <DiagnosisPopup />
+      {s.settings.theme === "liquid" && (
+        <LiquidGlass ready={ready && !splash} />
+      )}
       <Assistant ready={ready && !splash} />
       <Toast />
       <DownloadCompletions

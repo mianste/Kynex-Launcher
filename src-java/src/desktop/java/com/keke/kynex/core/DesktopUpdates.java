@@ -27,12 +27,21 @@ final class DesktopUpdates {
     final String version, channel;
     final ReleaseSignature signature;
     private volatile Candidate pending;
+    private final ManifestSource source;
+    private final long checkTimeoutMillis;
+    @FunctionalInterface interface ManifestSource { JsonObject read(URI url, long deadline) throws IOException, InterruptedException; }
     private final java.util.concurrent.atomic.AtomicBoolean installing = new java.util.concurrent.atomic.AtomicBoolean();
     private record Candidate(String version, URI url, String signature, JsonObject display) {}
     private record Response(Candidate update, boolean official) {}
 
     DesktopUpdates(Path root) throws IOException {
+        this(root, ReleaseDownload::manifest, 5000);
+    }
+
+    DesktopUpdates(Path root, ManifestSource source, long timeoutMillis) throws IOException {
         this.root = root;
+        this.source = source;
+        this.checkTimeoutMillis = timeoutMillis;
         var build = resource("build-channel.json");
         version = required(build, "version");
         channel = required(build, "channel");
@@ -58,22 +67,34 @@ final class DesktopUpdates {
         var pool = Executors.newVirtualThreadPerTaskExecutor();
         var tasks = new ExecutorCompletionService<Response>(pool);
         boolean current = false;
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(checkTimeoutMillis);
+        long responseDeadline = deadline;
+        var requests = new java.util.ArrayList<java.util.concurrent.Future<Response>>();
         try {
-            for (URI url : urls) tasks.submit(() -> {
-                if (url.equals(official)) Thread.sleep(350);
-                return new Response(read(ReleaseDownload.manifest(url)), url.equals(official));
-            });
+            for (URI url : urls) requests.add(tasks.submit(() ->
+                new Response(read(source.read(url, deadline)), url.equals(official))));
             for (int i = 0; i < urls.size(); i++) {
+                long remaining = responseDeadline - System.nanoTime();
+                if (remaining <= 0) break;
+                var completed = tasks.poll(remaining, java.util.concurrent.TimeUnit.NANOSECONDS);
+                if (completed == null) break;
                 try {
-                    Response result = tasks.take().get();
-                    if (result.update() != null && (pending == null || newer(result.update().version(), pending.version()))) {
+                    Response result = completed.get();
+                    if (result.update() != null) {
                         pending = result.update();
+                        break;
                     }
                     current = true;
                     if (result.official()) break;
-                } catch (java.util.concurrent.ExecutionException unavailable) { /* The other endpoint may still be reachable. */ }
+                    // Give the authoritative endpoint a brief chance to supersede a stale mirror.
+                    responseDeadline = Math.min(responseDeadline,
+                        System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(700));
+                } catch (java.util.concurrent.ExecutionException unavailable) { /* Keep racing other endpoints. */ }
             }
-        } finally { pool.shutdownNow(); }
+        } finally {
+            requests.forEach(request -> request.cancel(true));
+            pool.shutdownNow();
+        }
         if (pending != null) {
             var failure = root.resolve("launcher-updates").resolve(WindowsUpdateHandoff.FAILURE);
             boolean previousFailure = Files.isRegularFile(failure, java.nio.file.LinkOption.NOFOLLOW_LINKS) &&

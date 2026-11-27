@@ -97,7 +97,7 @@
   .pcl-resource-page .resource-drag-count,
   .pcl-resource-page[data-selecting="true"] .resource-drag-count { transform: translateX(-50%); }
 }
-.resource-selection-content:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:4px; }
+.resource-selection-content:focus-visible { outline: none;  border-radius:4px; }
 .app .pcl-resource-page .resource-monogram { width: 34px; height: 34px; border-radius: 4px; }
 .resource-mark {
   color: var(--text);

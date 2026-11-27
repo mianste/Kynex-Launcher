@@ -13,6 +13,10 @@ import "./window-corners.css";
 import "./workspace.css";
 import "./motion-ui.css";
 import "./holidays.css";
+import "./liquid-glass.css";
+import "./extra-motion.css";
+import "./focus-feedback.css";
+import "./appearance-transition.css";
 class ErrorBoundary extends React.Component {
   state = { error: "" };
   static getDerivedStateFromError(error) {

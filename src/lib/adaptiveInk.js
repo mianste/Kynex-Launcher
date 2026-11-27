@@ -1,5 +1,13 @@
 // Keep readable ink stable. A moving background must stay on the other side
 // of the threshold before a colour change is accepted.
+export function compositeInkBackground(samples, color, opacity = 1) {
+  const alpha = (color[3] / 255) * opacity;
+  if (!alpha) return;
+  for (const rgb of samples)
+    for (let channel = 0; channel < 3; channel++)
+      rgb[channel] = color[channel] * alpha + rgb[channel] * (1 - alpha);
+}
+
 export function chooseInk(previous, white, black, now) {
   const best = white > black ? "light" : "dark";
   if (!previous) return { ink: best, changedAt: now };

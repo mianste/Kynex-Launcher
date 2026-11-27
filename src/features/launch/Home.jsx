@@ -11,18 +11,30 @@ import {
   Play,
   UserRound,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui";
 import { external } from "../../lib/bridge";
 import { useStore, launch, guarded } from "../../store";
+import { useShallow } from "zustand/react/shallow";
 import { AccountAvatar } from "../account/AccountAvatar";
 const accountLabels = {
   offline: "离线账号",
   microsoft: "Microsoft 正版",
   external: "外置认证",
 };
-export function Home() {
-  const s = useStore();
+function HomeView() {
+  const s = useStore(
+    useShallow((state) => ({
+      accounts: state.accounts,
+      accountId: state.accountId,
+      instances: state.instances,
+      selected: state.selected,
+      busy: state.busy,
+      selectAccount: state.selectAccount,
+      setPage: state.setPage,
+      show: state.show,
+    })),
+  );
   const instance = s.instances.find((item) => item.id === s.selected);
   const account = s.accounts.find((item) => item.id === s.accountId);
   const [panel, setPanel] = useState(null);
@@ -240,3 +252,5 @@ export function Home() {
     </div>
   );
 }
+
+export const Home = memo(HomeView);

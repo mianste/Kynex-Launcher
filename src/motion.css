@@ -50,16 +50,16 @@ button:not(:disabled):active {
   animation: kxl-page-enter var(--motion-page) var(--motion-emphasized) backwards;
 }
 /* Smooth Home return transition: works in both holiday and everyday themes. */
-.app > .wallpaper,
-.app > .wallpaper-video {
+.app .wallpaper,
+.app .wallpaper-video {
   transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.app:not(.page-home) > .wallpaper,
-.app:not(.page-home) > .wallpaper-video {
+.app:not(.page-home) .wallpaper,
+.app:not(.page-home) .wallpaper-video {
   transform: scale(1.045);
 }
-.app.page-home > .wallpaper,
-.app.page-home > .wallpaper-video {
+.app.page-home .wallpaper,
+.app.page-home .wallpaper-video {
   transform: scale(1);
 }
 .app > .scrim {
