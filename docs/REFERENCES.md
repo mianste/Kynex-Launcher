@@ -7,6 +7,11 @@
 
 ## PCL
 
+### 多游戏启动（2026-11-28）
+
+- 按用户要求，参考 PCL 官方仓库的多开使用反馈：[多个游戏共用 DLL 导致占用](https://github.com/Meloong-Git/PCL/issues/2011)、[启动期间切换版本导致任务错乱](https://github.com/Meloong-Git/PCL/issues/1969)。署名龙腾猫跃及 PCL 贡献者；仅将公开问题场景与用户操作流程用于回归验证。
+- KXL 使用 Java 与 React 独立实现：按游戏目录与实例记录准备状态，每次启动捕获自己的版本和账号参数；同一版本启动完成后可继续启动，已有进程保持运行；每次启动使用独立的原生库目录及输出日志，退出时清理对应临时文件。本次未复制 PCL 源码、控件或品牌资产。
+
 - 原地址：https://github.com/Hex-Dragon/PCL2 （检索时跳转到 https://github.com/Meloong-Git/PCL）
 - 检查提交：`93ede5d9e638c99fcec853a9ba1eecd91ceee7f5`
 - 源文件：https://github.com/Meloong-Git/PCL/blob/main/Plain%20Craft%20Launcher%202/Modules/Minecraft/ModLaunch.vb
