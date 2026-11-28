@@ -709,8 +709,10 @@ public final class JavaDesktop {
 
     private JsonObject launchWithModUpdates(Path root, JsonObject request, DesktopInstallTask task,
                                             java.util.function.Consumer<JsonObject> event) throws Exception {
-        JsonObject info = LocalGameFiles.configuration(LocalGameFiles.instance(root, request));
-        if ("auto".equals(text(info, "modUpdateMode", "manual")) && modUpdates.hasFiles(modUpdates.folder(root, dataRoot, request))) {
+        Path instancePath = LocalGameFiles.instance(root, request).toRealPath();
+        JsonObject info = LocalGameFiles.configuration(instancePath);
+        if (!LaunchWorkspace.running(instancePath) && "auto".equals(text(info, "modUpdateMode", "manual"))
+            && modUpdates.hasFiles(modUpdates.folder(root, dataRoot, request))) {
             JsonObject scan = request.deepCopy();
             if (!scan.has("curseforgeKey")) scan.addProperty("curseforgeKey", text(object(scan.get("settings")), "curseforgeKey", ""));
             modUpdates.apply(root, dataRoot, scan, new MinecraftInstaller.Progress() {
@@ -729,7 +731,7 @@ public final class JavaDesktop {
     private void gameExited(Path root, String instance, Path log, Path game, java.time.Instant started, int status,
                             java.util.function.Consumer<JsonObject> event) {
         var details = new StringBuilder();
-        for (Path file : java.util.List.of(log, game.resolve("logs/latest.log"))) {
+        for (Path file : java.util.List.of(log)) {
             try {
                 if (Files.isRegularFile(file) && file.equals(file.toRealPath()) && !Files.getLastModifiedTime(file).toInstant().isBefore(started))
                     details.append(WorkshopVerification.tail(file, 128 * 1024)).append('\n');

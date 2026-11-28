@@ -87,75 +87,74 @@ final class InstalledGameLauncher {
         }
         if (runtime == null) throw new IOException("没有找到 Java " + major + "，请在设置中指定 Java 路径");
 
-        Path natives = Files.createDirectories(instance.resolve("natives")).toRealPath();
-        if (!natives.startsWith(instance)) throw new IOException("原生库目录位于实例之外");
-        var classpath = new ArrayList<String>();
-        var archives = new JsonArray();
-        for (JsonElement item : LaunchManifest.launchLibraries(version, platform)) {
-            JsonObject library = object(item);
-            Path path = within(root.resolve("libraries"), required(library, "path"));
-            if (Files.exists(path)) {
-                classpath.add(path.toString());
-                if (LaunchManifest.is(library.get("extract"), true)) archives.add(path.toString());
+        try (var workspace = LaunchWorkspace.create(instance)) {
+            Path natives = workspace.natives;
+            var classpath = new ArrayList<String>();
+            var archives = new JsonArray();
+            for (JsonElement item : LaunchManifest.launchLibraries(version, platform)) {
+                JsonObject library = object(item);
+                Path path = within(root.resolve("libraries"), required(library, "path"));
+                if (Files.exists(path)) {
+                    classpath.add(path.toString());
+                    if (LaunchManifest.is(library.get("extract"), true)) archives.add(path.toString());
+                }
+                String classifier = text(library, "classifier", null);
+                if (classifier != null) archives.add(within(root.resolve("libraries"), classifier).toString());
             }
-            String classifier = text(library, "classifier", null);
-            if (classifier != null) archives.add(within(root.resolve("libraries"), classifier).toString());
-        }
-        NativeLibraries.unpack(natives, archives);
-        classpath.add(instance.resolve("client.jar").toString());
-        try {
-            GameOptions.applyLanguage(gameDir, game, text(global, "gameLanguage", "zh_cn"));
-        } catch (IOException ignored) {
-            // A read-only options file does not prevent the game from starting.
-        }
-        var effectiveSettings = settings.deepCopy();
-        if (text(effectiveSettings, "jvmArgs", "").isBlank()) {
-            String globalJvmArgs = text(global, "jvmArgs", "");
-            if (!globalJvmArgs.isBlank()) effectiveSettings.addProperty("jvmArgs", globalJvmArgs);
-        }
-        if (text(effectiveSettings, "gameArgs", "").isBlank()) {
-            String globalGameArgs = text(global, "gameArgs", "");
-            if (!globalGameArgs.isBlank()) effectiveSettings.addProperty("gameArgs", globalGameArgs);
-        }
-        for (String key : List.of("fullscreen", "customInfo")) {
-            if (!effectiveSettings.has(key) && global.has(key)) effectiveSettings.add(key, global.get(key));
-        }
-        var request = new JsonObject();
-        request.add("version", version);
-        request.add("settings", effectiveSettings);
-        request.addProperty("loader", text(config, "loader", "vanilla"));
-        if (authAgent != null) request.addProperty("authAgent", authAgent);
-        JsonObject launchVariables = variables(root, gameDir, natives, game, classpath, version, global, account, session);
-        launchVariables.addProperty("instance_name", id);
-        launchVariables.addProperty("minecraft_directory", root + File.separator);
-        launchVariables.addProperty("instance_directory", instance + File.separator);
-        launchVariables.addProperty("isolated_directory", gameDir + File.separator);
-        request.add("variables", launchVariables);
-        String windowTitle = LaunchManifest.windowTitle(effectiveSettings, launchVariables);
-        var command = new ArrayList<String>();
-        command.add(runtime);
-        for (JsonElement argument : LaunchManifest.arguments(request, platform)) command.add(argument.getAsString());
+            NativeLibraries.unpack(natives, archives);
+            classpath.add(instance.resolve("client.jar").toString());
+            try {
+                GameOptions.applyLanguage(gameDir, game, text(global, "gameLanguage", "zh_cn"));
+            } catch (IOException ignored) {
+                // A read-only options file does not prevent the game from starting.
+            }
+            var effectiveSettings = settings.deepCopy();
+            if (text(effectiveSettings, "jvmArgs", "").isBlank()) {
+                String globalJvmArgs = text(global, "jvmArgs", "");
+                if (!globalJvmArgs.isBlank()) effectiveSettings.addProperty("jvmArgs", globalJvmArgs);
+            }
+            if (text(effectiveSettings, "gameArgs", "").isBlank()) {
+                String globalGameArgs = text(global, "gameArgs", "");
+                if (!globalGameArgs.isBlank()) effectiveSettings.addProperty("gameArgs", globalGameArgs);
+            }
+            for (String key : List.of("fullscreen", "customInfo")) {
+                if (!effectiveSettings.has(key) && global.has(key)) effectiveSettings.add(key, global.get(key));
+            }
+            var request = new JsonObject();
+            request.add("version", version);
+            request.add("settings", effectiveSettings);
+            request.addProperty("loader", text(config, "loader", "vanilla"));
+            if (authAgent != null) request.addProperty("authAgent", authAgent);
+            JsonObject launchVariables = variables(root, gameDir, natives, game, classpath, version, global, account, session);
+            launchVariables.addProperty("instance_name", id);
+            launchVariables.addProperty("minecraft_directory", root + File.separator);
+            launchVariables.addProperty("instance_directory", instance + File.separator);
+            launchVariables.addProperty("isolated_directory", gameDir + File.separator);
+            request.add("variables", launchVariables);
+            String windowTitle = LaunchManifest.windowTitle(effectiveSettings, launchVariables);
+            var command = new ArrayList<String>();
+            command.add(runtime);
+            for (JsonElement argument : LaunchManifest.arguments(request, platform)) command.add(argument.getAsString());
 
-        Path logs = Files.createDirectories(instance.resolve("logs")).toRealPath();
-        if (!logs.startsWith(instance)) throw new IOException("日志目录位于实例之外");
-        Path log = logs.resolve("kxl-launch.log");
-        if (Files.exists(log) && !log.toRealPath().startsWith(logs)) throw new IOException("日志路径无效");
-        GameDownloads.check(progress::stopped);
-        Process process = new ProcessBuilder(command).directory(gameDir.toFile())
-            .redirectErrorStream(true).redirectOutput(log.toFile()).start();
-        try {
-            process.getOutputStream().close();
-            config.addProperty("lastPlayed", Long.toString(Instant.now().getEpochSecond()));
-            JsonFiles.write(configPath, config);
-        } catch (IOException error) {
-            process.destroyForcibly();
-            throw error;
+            Path log = workspace.log;
+            GameDownloads.check(progress::stopped);
+            Process process = new ProcessBuilder(command).directory(gameDir.toFile())
+                .redirectErrorStream(true).redirectOutput(log.toFile()).start();
+            workspace.retainUntilExit(process);
+            try {
+                process.getOutputStream().close();
+                config.addProperty("lastPlayed", Long.toString(Instant.now().getEpochSecond()));
+                JsonFiles.write(configPath, config);
+            } catch (IOException error) {
+                process.destroyForcibly();
+                throw error;
+            }
+            observer.started(process, log, gameDir, windowTitle);
+            var reply = new JsonObject();
+            reply.addProperty("pid", process.pid());
+            reply.addProperty("log", log.toString());
+            return reply;
         }
-        observer.started(process, log, gameDir, windowTitle);
-        var reply = new JsonObject();
-        reply.addProperty("pid", process.pid());
-        reply.addProperty("log", log.toString());
-        return reply;
     }
 
     static Path gameDirectory(Path root, Path dataRoot, Path instance, JsonObject config) {

@@ -20,7 +20,7 @@ import {
   Badge,
   Empty,
 } from "../components/ui";
-import { useStore, guarded, launch } from "../store";
+import { useStore, guarded, launch, launchPreparing } from "../store";
 import { api, desktop, external, pickFile } from "../lib/bridge";
 import { parseInstallTarget } from "../lib/installTarget";
 import { requestGuideSection } from "../lib/guideNavigation";

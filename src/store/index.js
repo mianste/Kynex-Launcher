@@ -111,6 +111,7 @@ export const useStore = create()(
           completions: completions.filter((item) => item.id !== id),
         })),
       busy: false,
+      launching: {},
       modal: null,
       skin: "",
       skinAccountId: "",
@@ -289,9 +290,14 @@ export async function guarded(fn) {
     useStore.getState().notify(String(e).replace(/^Error: /, ""));
   }
 }
+export function launchKey(directoryId, id) {
+  return JSON.stringify([directoryId || "default", id]);
+}
+export function launchPreparing(state) {
+  return !!state.launching?.[launchKey(state.directoryId, state.selected)];
+}
 export async function launch(target) {
   const s = useStore.getState();
-  if (s.busy) return;
   if (!s.selected) {
     s.show("versions");
     return;
@@ -300,21 +306,31 @@ export async function launch(target) {
     s.show("login");
     return;
   }
+  const request = {
+    id: s.selected,
+    accountId: s.accountId,
+    directoryId: s.directoryId || "default",
+    settings: s.settings,
+    name: s.instances.find((item) => item.id === s.selected)?.name,
+    ...target,
+  };
+  const key = launchKey(request.directoryId, request.id);
+  if (s.launching[key]) return;
   useStore.setState({
+    launching: { ...s.launching, [key]: true },
     busy: true,
     task: { stage: "检查环境", done: 0, total: 4 },
   });
   try {
-    await api("launch", {
-      id: s.selected,
-      accountId: s.accountId,
-      settings: s.settings,
-      ...target,
-    });
+    await api("launch", request);
     s.notify("游戏进程已启动");
   } catch (e) {
     s.notify(String(e));
   } finally {
-    useStore.setState({ busy: false });
+    useStore.setState((current) => {
+      const launching = { ...current.launching };
+      delete launching[key];
+      return { launching, busy: Object.keys(launching).length > 0 };
+    });
   }
 }

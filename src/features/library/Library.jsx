@@ -46,7 +46,7 @@ import {
   Card,
   OptionSelect,
 } from "../../components/ui";
-import { useStore, guarded, launch } from "../../store";
+import { useStore, guarded, launch, launchPreparing } from "../../store";
 import {
   api,
   desktop,
@@ -1024,7 +1024,7 @@ export function InstanceDetail() {
           <PackageOpen size={15} />
           导出整合包
         </Button>
-        <Button primary busy={s.busy} onClick={() => void launch()}>
+        <Button primary busy={launchPreparing(s)} onClick={() => void launch()}>
           <Play size={15} />
           启动
         </Button>

@@ -2,13 +2,13 @@
 
 Kynex 是一个给 Windows 用的 Minecraft Java 版启动器。可以在这里装游戏、下模组和整合包，也可以让不同版本各用各的游戏文件夹。
 
-[下载 Windows 安装器](https://github.com/mianste/Kynex-Launcher/releases/download/v2.2.2/Kynex.Launcher.v2.2.2.Setup.exe) · [看这版改了什么](CHANGELOG.md) · [下载 v2.2.2 公开源码](https://github.com/mianste/Kynex-Launcher/releases/download/v2.2.2/Kynex.Launcher.v2.2.2.Open.Source.zip) · [浏览源码](https://github.com/mianste/Kynex-Launcher) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
+[下载 Windows 安装器](https://github.com/mianste/Kynex-Launcher/releases/download/v2.2.3/Kynex.Launcher.v2.2.3.Setup.exe) · [看这版改了什么](CHANGELOG.md) · [下载 v2.2.3 公开源码](https://github.com/mianste/Kynex-Launcher/releases/download/v2.2.3/Kynex.Launcher.v2.2.3.Open.Source.zip) · [浏览源码](https://github.com/mianste/Kynex-Launcher) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
 
 ## 怎么装
 
 用 Windows 10 或 11 的 64 位电脑下载安装器，双击打开，按提示装好就能用。已经在用 Kynex 的玩家，可以在启动器里检查更新，也可以下载新版安装器直接覆盖安装。很早的版本请先手动覆盖安装一次。
 
-v2.2.2 移除无法预览和下载的内置黑曜石农场投影。正式版安装器自带启动器所需的 Java。
+v2.2.3 支持同时启动不同版本和重复启动同一版本，改进多开时的稳定性与错误分析。正式版安装器自带启动器所需的 Java。
 
 ## 能做什么
 
@@ -22,11 +22,13 @@ v2.2.2 移除无法预览和下载的内置黑曜石农场投影。正式版安�
 - 首页保持简单的启动布局：左边账号，中间启动，右边音乐。v1.6.0 起不再提供自定义组件。
 - 在「下载 → 投影」找建筑。可以先旋转、缩放看看，再把投影文件存到选中的游戏版本。在「版本设置 → 投影文件管理」也能打开自己已有的投影文件。
 
-## 最新版本 v2.2.2
+## 最新版本 v2.2.3
 
-- 移除无法预览和下载的内置“黑曜石农场”投影。
+- 修复准备启动一个版本时，无法启动另一个版本的问题。
+- 修复同一版本重复启动时的文件占用问题，支持同时打开多个游戏窗口。
+- 改进多开时的启动日志和错误分析，避免不同窗口的记录互相覆盖。
 
-源码下载请使用上方标明 v2.2.2 的公开源码包；历史版本发布页保留当时的源码。
+源码下载请使用上方标明 v2.2.3 的公开源码包；历史版本发布页保留当时的源码。
 
 ## 投影预览
 

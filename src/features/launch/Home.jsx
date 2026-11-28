@@ -14,7 +14,7 @@ import {
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui";
 import { external } from "../../lib/bridge";
-import { useStore, launch, guarded } from "../../store";
+import { useStore, launch, launchPreparing, guarded } from "../../store";
 import { useShallow } from "zustand/react/shallow";
 import { AccountAvatar } from "../account/AccountAvatar";
 const accountLabels = {
@@ -29,7 +29,7 @@ function HomeView() {
       accountId: state.accountId,
       instances: state.instances,
       selected: state.selected,
-      busy: state.busy,
+      busy: launchPreparing(state),
       selectAccount: state.selectAccount,
       setPage: state.setPage,
       show: state.show,
