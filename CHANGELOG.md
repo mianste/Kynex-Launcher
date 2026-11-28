@@ -1,3 +1,9 @@
+# v2.2.2
+
+- 移除无法预览和下载的内置“黑曜石农场”投影。
+
+[下载 v2.2.2](https://github.com/mianste/Kynex-Launcher/releases/tag/v2.2.2)
+
 # v2.2.1
 
 - 修复切换主题时窗口变透明、露出桌面的问题。

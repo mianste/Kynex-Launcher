@@ -1,18 +1,5 @@
 [
   {
-    "id": "scorpio-obsidian-farm",
-    "name": "黑曜石农场",
-    "originalName": "128.8k Safe Obsidian Farm (Normal)",
-    "description": "DuskScorpio 发布的普通版黑曜石农场。",
-    "author": "DuskScorpio",
-    "license": "CC0-1.0",
-    "format": "litematic",
-    "sourceUrl": "https://github.com/DuskScorpio/Scorpio-File-Downloads/tree/c3956162182bbef0413c601ef1c26691f7783a36/Files/128.8k%20Safe%20Obsidian%20Farm",
-    "licenseUrl": "https://github.com/DuskScorpio/Scorpio-File-Downloads/blob/c3956162182bbef0413c601ef1c26691f7783a36/LICENSE",
-    "fileName": "128.8k Safe Obsidian Farm (Normal).litematic",
-    "sha256": "c0cb2e1b91e340d255f499cdeb94834a9dc2f66b8b1f955a04b4728deb5a377d"
-  },
-  {
     "id": "block-library-cabin",
     "name": "云杉山间小屋",
     "originalName": "Alpine cabin shell",
