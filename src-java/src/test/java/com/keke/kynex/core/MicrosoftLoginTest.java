@@ -18,6 +18,27 @@ import static org.junit.jupiter.api.Assertions.*;
 
 final class MicrosoftLoginTest {
     @Test
+    void launchesWithAnUnexpiredGameTokenWithoutRequiringTheNetwork(@TempDir Path root) throws Exception {
+        var vault = new CredentialVault(new MemoryCredentials());
+        var secret = json("{\"minecraftToken\":\"cached-token\",\"refresh\":\"refresh-token\"}");
+        secret.addProperty("minecraftExpiresAt", java.time.Instant.now().getEpochSecond() + 3600);
+        vault.save("account", secret);
+        var calls = new AtomicInteger();
+        var login = new MicrosoftLogin(new AccountStore(root), vault, (url, body, mime, bearer) -> {
+            calls.incrementAndGet();
+            throw new java.net.UnknownHostException("account.test.invalid");
+        }, System::nanoTime);
+        var account = json("{\"id\":\"account\",\"kind\":\"microsoft\"}");
+        assertEquals("cached-token", login.session(account).token());
+        assertEquals(0, calls.get());
+        secret.addProperty("minecraftExpiresAt", java.time.Instant.now().getEpochSecond() + 20);
+        vault.save("account", secret);
+        assertThrows(java.net.UnknownHostException.class, () -> login.session(account));
+        assertEquals(2, calls.get());
+        assertEquals(secret, vault.load("account"));
+    }
+
+    @Test
     void preservesLegacyWindowsCredentialsAndAnUninterruptedExistingSession() throws Exception {
         var backing = new MemoryCredentials();
         var vault = new CredentialVault(backing);

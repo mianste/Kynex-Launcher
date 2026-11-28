@@ -246,6 +246,8 @@ export function App() {
         root.style.removeProperty("--custom-surface");
         root.style.removeProperty("--custom-ink");
       }
+      // Commit theme colours while transitions are disabled, before restoring them.
+      if (app) getComputedStyle(app).backgroundColor;
       requestAnimationFrame(() => {
         if (app) delete app.dataset.appearanceChanging;
       });

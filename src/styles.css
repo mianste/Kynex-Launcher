@@ -5343,15 +5343,15 @@ body {
 
 /* 应用底与纯色壁纸仍然使用不透明的应用底色。 */
 .app {
-  background: var(--glass);
+  background: var(--bg);
 }
 .wallpaper.plain {
-  background: var(--glass) !important;
+  background: var(--bg) !important;
 }
 
 
 /* 弹窗打开时隐藏底层页面文字：半透明面板下两层内容会重叠，参考音乐模块做法。 */
-.app:has(> .overlay) > :not(.overlay):not(.wallpaper):not(.wallpaper-video):not(.scrim):not(.chrome):not(.ui-tint):not(.choice-popover) {
+.app:has(> .overlay) > :not(.overlay):not(.wallpaper-frame):not(.wallpaper):not(.wallpaper-video):not(.scrim):not(.chrome):not(.ui-tint):not(.choice-popover) {
   visibility: hidden;
 }
 

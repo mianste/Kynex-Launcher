@@ -2,13 +2,13 @@
 
 Kynex 是一个给 Windows 用的 Minecraft Java 版启动器。可以在这里装游戏、下模组和整合包，也可以让不同版本各用各的游戏文件夹。
 
-[下载 Windows 安装器](https://github.com/mianste/Kynex-Launcher/releases/download/v2.2.0/Kynex.Launcher.v2.2.0.Setup.exe) · [看这版改了什么](CHANGELOG.md) · [下载 v2.2.0 公开源码](https://github.com/mianste/Kynex-Launcher/releases/download/v2.2.0/Kynex.Launcher.v2.2.0.Open.Source.zip) · [浏览源码](https://github.com/mianste/Kynex-Launcher) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
+[下载 Windows 安装器](https://github.com/mianste/Kynex-Launcher/releases/download/v2.2.1/Kynex.Launcher.v2.2.1.Setup.exe) · [看这版改了什么](CHANGELOG.md) · [下载 v2.2.1 公开源码](https://github.com/mianste/Kynex-Launcher/releases/download/v2.2.1/Kynex.Launcher.v2.2.1.Open.Source.zip) · [浏览源码](https://github.com/mianste/Kynex-Launcher) · [反馈问题](https://github.com/mianste/Kynex-Launcher/issues)
 
 ## 怎么装
 
 用 Windows 10 或 11 的 64 位电脑下载安装器，双击打开，按提示装好就能用。已经在用 Kynex 的玩家，可以在启动器里检查更新，也可以下载新版安装器直接覆盖安装。很早的版本请先手动覆盖安装一次。
 
-v2.2.0 新增玻璃主题和更多启动设置，优化性能，提高下载速度和检查更新速度。正式版安装器自带启动器所需的 Java。
+v2.2.1 修复主题切换和弹窗背景透明问题，兼容全部节日主题，改进启动游戏时的账号验证和网络错误提示。正式版安装器自带启动器所需的 Java。
 
 ## 能做什么
 
@@ -22,14 +22,14 @@ v2.2.0 新增玻璃主题和更多启动设置，优化性能，提高下载速�
 - 首页保持简单的启动布局：左边账号，中间启动，右边音乐。v1.6.0 起不再提供自定义组件。
 - 在「下载 → 投影」找建筑。可以先旋转、缩放看看，再把投影文件存到选中的游戏版本。在「版本设置 → 投影文件管理」也能打开自己已有的投影文件。
 
-## 最新版本 v2.2.0
+## 最新版本 v2.2.1
 
-- 新增玻璃主题。
-- 启动设置增加更多设置。
-- 优化性能。
-- 提高下载速度和检查更新速度。
+- 修复切换主题时窗口变透明、露出桌面的问题。
+- 修复更新日志等弹窗打开后背景消失的问题，兼容全部节日主题。
+- 改进首次启动游戏时的账号验证，减少网络波动导致的启动失败。
+- 网络连接失败时显示更清楚的中文提示。
 
-源码下载请使用上方标明 v2.2.0 的公开源码包；历史版本发布页保留当时的源码。
+源码下载请使用上方标明 v2.2.1 的公开源码包；历史版本发布页保留当时的源码。
 
 ## 投影预览
 

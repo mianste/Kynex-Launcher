@@ -17,12 +17,10 @@ export function changesAppearance(patch) {
 let revision = 0;
 let pending = {};
 let active;
-let fallback;
 export async function transitionAppearance(settings, patch, apply) {
   const request = ++revision;
   pending = { ...pending, ...patch };
   active?.skipTransition();
-  fallback?.cancel();
   let applied = false;
   const commit = () => {
     if (request !== revision || applied) return;
@@ -48,12 +46,6 @@ export async function transitionAppearance(settings, patch, apply) {
   }
   if (!document.startViewTransition) {
     commit();
-    fallback = document
-      .querySelector(".app")
-      ?.animate?.([{ opacity: 0.8 }, { opacity: 1 }], {
-        duration: 280,
-        easing: "ease-out",
-      });
     return;
   }
   try {

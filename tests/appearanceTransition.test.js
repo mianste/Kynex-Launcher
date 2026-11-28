@@ -77,7 +77,7 @@ describe("外观过渡", () => {
     expect(snapshots[0].skipTransition).toHaveBeenCalledOnce();
     expect(apply).toHaveBeenCalledExactlyOnceWith({ theme: "liquid" });
   });
-  it("uses a short fallback without delaying the saved preference on older browsers", async () => {
+  it("keeps the whole window opaque when snapshot transitions are unavailable", async () => {
     vi.stubGlobal("matchMedia", () => ({ matches: false }));
     const animate = vi.fn();
     document.querySelector = () => ({ animate });
@@ -85,6 +85,6 @@ describe("外观过渡", () => {
       await import("../src/lib/appearanceTransition");
     await transitionAppearance(settings, { theme: "dark" }, apply);
     expect(apply).toHaveBeenCalledExactlyOnceWith({ theme: "dark" });
-    expect(animate).toHaveBeenCalledOnce();
+    expect(animate).not.toHaveBeenCalled();
   });
 });

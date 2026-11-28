@@ -78,7 +78,8 @@ final class MicrosoftLogin {
     MicrosoftLogin(AccountStore accounts, CredentialVault vault, Network network, LongSupplier nanos) {
         this.accounts = accounts;
         this.vault = vault;
-        this.network = network;
+        this.network = (url, body, mime, bearer) ->
+            NetworkFailure.retryDns(() -> network.request(url, body, mime, bearer));
         this.nanos = nanos;
     }
 
@@ -183,6 +184,10 @@ final class MicrosoftLogin {
         String key = required(current, "id");
         if (!"microsoft".equals(text(current, "kind", ""))) throw new IOException("此入口需要微软账号");
         JsonObject stored = vault.load(key);
+        String cached = text(stored, "minecraftToken", "");
+        if (!cached.isBlank() && ResourceCatalog.number(stored, "minecraftExpiresAt", 0) > Instant.now().getEpochSecond() + 60) {
+            return new Session(cached, "msa");
+        }
         String client = text(stored, "clientId", client());
         String refresh = required(stored, "refresh");
         Map<String, String> input = Map.of("client_id", client, "grant_type", "refresh_token", "refresh_token", refresh, "scope", SCOPE);

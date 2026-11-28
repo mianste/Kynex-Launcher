@@ -323,6 +323,7 @@ public final class JavaDesktop {
                                     }
                                     return value;
                                 } catch (Exception error) {
+                                    if ("launch".equals(action)) recordLaunchFailure(error);
                                     task.finish("", errorMessage(error));
                                     throw error;
                                 } finally {
@@ -439,7 +440,17 @@ public final class JavaDesktop {
     }
 
     private static String errorMessage(Exception error) {
-        return error.getMessage() == null ? "桌面操作失败" : error.getMessage();
+        return NetworkFailure.userMessage(error);
+    }
+
+    private void recordLaunchFailure(Exception error) {
+        try {
+            var trace = new java.io.StringWriter();
+            error.printStackTrace(new java.io.PrintWriter(trace));
+            Path log = GameFiles.target(dataRoot, "logs/last-launch-failure.log");
+            JsonFiles.atomicWrite(log, (java.time.Instant.now() + "\n" + AssistantService.redact(trace.toString(), ""))
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (IOException ignored) { /* Keep the original launch error. */ }
     }
 
     private static void reply(Browser browser, DesktopFrontend frontend, JsonObject request, Command command) {

@@ -6,17 +6,15 @@
   animation-duration: 420ms;
 }
 ::view-transition-old(root) {
-  animation: kxl-appearance-out 420ms ease-out both;
+  /* Keep a solid old frame under the incoming one. Fading both snapshots
+     exposes the desktop through a transparent WebView halfway through. */
+  animation: none;
+  opacity: 1;
   mix-blend-mode: normal;
 }
 ::view-transition-new(root) {
   animation: kxl-appearance-in 420ms var(--motion-emphasized) both;
   mix-blend-mode: normal;
-}
-@keyframes kxl-appearance-out {
-  to {
-    opacity: 0;
-  }
 }
 @keyframes kxl-appearance-in {
   from {

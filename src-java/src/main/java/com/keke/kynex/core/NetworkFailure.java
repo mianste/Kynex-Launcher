@@ -11,6 +11,45 @@ import javax.net.ssl.SSLException;
 final class NetworkFailure {
     private NetworkFailure() {}
 
+    @FunctionalInterface
+    interface Request<T> { T run() throws IOException; }
+
+    static <T> T retryDns(Request<T> request) throws IOException {
+        try {
+            return request.run();
+        } catch (UnknownHostException first) {
+            // DNS failed before a connection could send credentials. Do not
+            // replay timeouts/HTTP failures, which may have consumed a token.
+            try {
+                // Allow the bundled JDK's ten-second negative DNS cache to expire.
+                Thread.sleep(11000);
+            } catch (InterruptedException cancelled) {
+                Thread.currentThread().interrupt();
+                throw new java.io.InterruptedIOException("账号验证已取消");
+            }
+            try {
+                return request.run();
+            } catch (IOException last) {
+                last.addSuppressed(first);
+                throw last;
+            }
+        }
+    }
+
+    static String userMessage(Exception error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof UnknownHostException)
+                return "无法解析服务器域名（DNS），请检查网络或代理后重试。";
+            if (cause instanceof NoRouteToHostException)
+                return "当前网络无法连接到服务器，请检查网络、代理或防火墙后重试。";
+            if (cause instanceof SocketTimeoutException)
+                return "连接服务器超时，请检查网络后重试。";
+            if (cause instanceof ConnectException)
+                return "无法连接到服务器，请检查网络或代理后重试。";
+        }
+        return error.getMessage() == null ? "桌面操作失败" : error.getMessage();
+    }
+
     static String describe(IOException error) {
         return switch (error) {
             case GameDownloads.HttpError http when http.status == 429 -> "请求过于频繁（HTTP 429）";

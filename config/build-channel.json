@@ -1,18 +1,18 @@
 {
   "channel": "stable",
-  "version": "2.2.0",
-  "displayVersion": "v2.2.0",
-  "label": "正式版 v2.2.0",
+  "version": "2.2.1",
+  "displayVersion": "v2.2.1",
+  "label": "正式版 v2.2.1",
   "repositoryUrl": "https://github.com/mianste/Kynex-Launcher",
   "supportUrl": "https://afdian.com/a/keke_657",
   "changes": [
-    "新增玻璃主题。",
-    "启动设置增加更多设置。",
-    "优化性能。",
-    "提高下载速度和检查更新速度。"
+    "修复切换主题时窗口变透明、露出桌面的问题。",
+    "修复更新日志等弹窗打开后背景消失的问题，兼容全部节日主题。",
+    "改进首次启动游戏时的账号验证，减少网络波动导致的启动失败。",
+    "网络连接失败时显示更清楚的中文提示。"
   ],
   "productName": "Kynex Launcher Source",
   "identifier": "com.keke.kynex.source",
   "mainBinaryName": "Kynex Launcher Source",
-  "releaseTag": "v2.2.0"
+  "releaseTag": "v2.2.1"
 }
