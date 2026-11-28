@@ -63,7 +63,10 @@ final class DesktopFileDrop {
 
             private JsonObject position(DropTargetEvent event) {
                 var point = browser.toControl(event.x, event.y);
-                return json("x", point.x, "y", point.y);
+                // Tauri drag positions use physical pixels; React divides by
+                // devicePixelRatio, which includes both Windows DPI and WebView zoom.
+                double dpi = browser.getMonitor().getZoom() / 100.0;
+                return json("x", point.x * dpi, "y", point.y * dpi);
             }
         });
     }

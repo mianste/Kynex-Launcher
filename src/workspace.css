@@ -197,6 +197,8 @@
   justify-content: flex-end;
   height: auto;
   min-height: 100%;
+  /* The dock owns its inset; legacy screen breakpoints must not add another. */
+  padding: 0;
 }
 
 .home-dock {

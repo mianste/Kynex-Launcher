@@ -1,17 +1,17 @@
 {
   "channel": "stable",
-  "version": "2.2.3",
-  "displayVersion": "v2.2.3",
-  "label": "正式版 v2.2.3",
+  "version": "2.2.4",
+  "displayVersion": "v2.2.4",
+  "label": "正式版 v2.2.4",
   "repositoryUrl": "https://github.com/mianste/Kynex-Launcher",
   "supportUrl": "https://afdian.com/a/keke_657",
   "changes": [
-    "修复准备启动一个版本时，无法启动另一个版本的问题。",
-    "修复同一版本重复启动时的文件占用问题，支持同时打开多个游戏窗口。",
-    "改进多开时的启动日志和错误分析，避免不同窗口的记录互相覆盖。"
+    "笔记本和台式机统一使用相同的界面布局，小屏幕按比例适配，功能入口与内容保持一致。",
+    "修复高缩放或小屏幕下，启动器窗口超出可用屏幕的问题。",
+    "修复首页启动按钮周围留白随屏幕尺寸变化的问题。"
   ],
   "productName": "Kynex Launcher Source",
   "identifier": "com.keke.kynex.source",
   "mainBinaryName": "Kynex Launcher Source",
-  "releaseTag": "v2.2.3"
+  "releaseTag": "v2.2.4"
 }

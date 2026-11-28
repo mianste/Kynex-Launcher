@@ -153,13 +153,10 @@ public final class JavaDesktop {
             shell.setLayout(new FillLayout());
             shell.setText("Kynex Launcher");
             WindowsShell.applyIcon(shell);
-            shell.setSize(1080, 720);
+            shell.setBounds(DesktopViewport.initialBounds(shell.getMonitor().getClientArea()));
             if (verify) shell.setLocation(-20000, -20000);
-            else {
-                var area = display.getPrimaryMonitor().getClientArea();
-                shell.setLocation(area.x + Math.max(0, (area.width - 1080) / 2), area.y + Math.max(0, (area.height - 720) / 2));
-            }
             var browser = new Browser(shell, SWT.EDGE);
+            DesktopViewport.attach(browser);
             browser.setBackground(display.getSystemColor(SWT.COLOR_BLACK));
             DesktopFileDrop.attach(browser, (event, details) -> {
                 if (!browser.isDisposed() && frontend.owns(browser.getUrl())) {
